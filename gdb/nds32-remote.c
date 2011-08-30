@@ -465,6 +465,84 @@ nds32_reset_perfmeter_command (char *args, int from_tty)
   nds32_execute_command (cmd, NULL, from_tty);
 }
 
+static void
+nds32_remote_info_init (void)
+{
+  nds32_remote_info.type = nds32_rt_unknown;
+  nds32_remote_info.endian = BFD_ENDIAN_UNKNOWN;
+  strcpy (nds32_remote_info.cpu, "cpu");
+}
+
+/* Query target information.  */
+
+static void
+nds32_query_target_command (char *arg, int from_tty)
+{
+  char *buf;
+  long size = 32;
+  struct cleanup *back_to;
+  char *cpu = nds32_remote_info.cpu;
+  int cpu_size = ARRAY_SIZE (nds32_remote_info.cpu);
+
+  nds32_remote_info_init ();
+
+  buf = xmalloc (size);
+  back_to = make_cleanup (free_current_contents, &buf);
+
+  /* NDS32_Q_TARGET, "qPart:nds32:ask:target"
+     Query target type, "SID" or "ICE"
+
+     NDS32_Q_CPU, "qPart:nds32:ask:cpu"
+     Query CPU name, e.g., "core00"
+     Prompt is changed accordingly. e.g., "core00(gdb) "
+
+     NDS32_Q_ENDIAN, "qPart:nds32:ask:de"
+     Query target default endian, "LE" or "BE" */
+
+  putpkt (nds32_qparts[NDS32_Q_TARGET]);
+  getpkt (&buf, &size, 0);
+  if (strcmp (buf, "SID") == 0)
+    nds32_remote_info.type = nds32_rt_sid;
+  else if (strcmp (buf, "ICE") == 0)
+    nds32_remote_info.type = nds32_rt_ice;
+  else
+    {
+      nds32_remote_info.type = nds32_rt_unknown;
+      goto end_query;
+    }
+
+  putpkt (nds32_qparts[NDS32_Q_CPU]);
+  getpkt (&buf, &size, 0);
+  if (strnlen (buf, size) > 0 && buf[0] != 'E')
+    {
+      memset (cpu, 0, cpu_size);
+      strncpy (cpu, buf, cpu_size - 1);
+    }
+
+  putpkt (nds32_qparts[NDS32_Q_ENDIAN]);
+  getpkt (&buf, &size, 0);
+  if (strcmp (buf, "LE") == 0)
+    nds32_remote_info.endian = BFD_ENDIAN_LITTLE;
+  else if (strcmp (buf, "BE") == 0)
+    nds32_remote_info.endian = BFD_ENDIAN_BIG;
+  else
+    nds32_remote_info.endian = BFD_ENDIAN_UNKNOWN;
+
+end_query:
+  /* Set cpu name if ICE and CPU!="cpu".  */
+  if (nds32_remote_info.type == nds32_rt_ice && strcmp ("cpu", cpu) != 0)
+    {
+      snprintf (buf, size, "%s(gdb) ", cpu);
+      set_prompt (buf);
+    }
+  else
+    {
+      set_prompt ("(gdb) ");
+    }
+
+  do_cleanups (back_to);
+}
+
 /* Callback for elf-check.  */
 
 static unsigned int
@@ -474,9 +552,13 @@ nds32_elf_check_get_register (unsigned int regno)
   struct regcache *regcache = get_current_regcache ();
   struct gdbarch *gdbarch = get_regcache_arch (regcache);
   unsigned int regnum = -1;
+  gdb_byte regbuf[4] = { 0 };
 
-  /* FIXME: Using target-endian instead of elf-endian.  */
-  warning ("FIXME: using target-endian instead of elf-endian.");
+  if (nds32_remote_info.endian == BFD_ENDIAN_UNKNOWN)
+    nds32_query_target_command (NULL, 0);
+
+  if (nds32_remote_info.endian == BFD_ENDIAN_UNKNOWN)
+    error (_("Cannot get target endian."));
 
   switch ((INDEX_HW_MASK & regno))
     {
@@ -508,9 +590,12 @@ nds32_elf_check_get_register (unsigned int regno)
 	  return -1;
 	}
 
-      if (regcache_cooked_read (regcache, regnum, (gdb_byte*)&regval)
-	  == REG_VALID)
-	return regval;
+      /* Use target-endian instead of gdbarch-endian.  */
+      if (regcache_cooked_read (regcache, regnum, regbuf) != REG_VALID)
+	return -1;
+      regval = extract_unsigned_integer (regbuf, 4, nds32_remote_info.endian);
+
+      return regval;
     }
 
   return -1;
@@ -586,65 +671,6 @@ nds32_elf_check_command (char *arg, int from_tty)
 
   if (err)
     error ("%s", check_msg);
-}
-
-/* Query target information.  */
-
-static void
-nds32_query_target_command (char *arg, int from_tty)
-{
-  char *buf;
-  long size = 32;
-  struct cleanup *back_to;
-  char *cpu = nds32_remote_info.cpu;
-  int cpu_size = ARRAY_SIZE (nds32_remote_info.cpu);
-
-  buf = xmalloc (size);
-  back_to = make_cleanup (free_current_contents, &buf);
-
-  /* NDS32_Q_TARGET, "qPart:nds32:ask:target"
-     Query target type, "SID" or "ICE"
-
-     NDS32_Q_CPU, "qPart:nds32:ask:cpu"
-     Query CPU name, e.g., "core00"
-     Prompt is changed accordingly. e.g., "core00(gdb) "
-
-     NDS32_Q_ENDIAN, "qPart:nds32:ask:de"
-     Query target default endian, "LE" or "BE" */
-
-  putpkt (nds32_qparts[NDS32_Q_TARGET]);
-  getpkt (&buf, &size, 0);
-  if (strcmp (buf, "SID") == 0)
-    nds32_remote_info.type = nds32_rt_sid;
-  else if (strcmp (buf, "ICE") == 0)
-    nds32_remote_info.type = nds32_rt_ice;
-  else
-    nds32_remote_info.type = nds32_rt_unknown;
-
-  putpkt (nds32_qparts[NDS32_Q_CPU]);
-  getpkt (&buf, &size, 0);
-  memset (cpu, 0, cpu_size);
-  if (strnlen (buf, size) > 0 && buf[0] != 'E')
-    strncpy (cpu, buf, cpu_size - 1);
-  else
-    strncpy (cpu, "cpu", cpu_size - 1);
-
-  if (nds32_remote_info.type == nds32_rt_ice)
-    {
-      snprintf (buf, size, "%s(gdb) ", cpu);
-      set_prompt (buf);
-    }
-
-  putpkt (nds32_qparts[NDS32_Q_ENDIAN]);
-  getpkt (&buf, &size, 0);
-  if (strcmp (buf, "LE") == 0)
-    nds32_remote_info.endian = BFD_ENDIAN_LITTLE;
-  else if (strcmp (buf, "BE") == 0)
-    nds32_remote_info.endian = BFD_ENDIAN_BIG;
-  else
-    nds32_remote_info.endian = BFD_ENDIAN_UNKNOWN;
-
-  do_cleanups (back_to);
 }
 
 /* This is only used for SID.  Set command-line string.  */
@@ -725,9 +751,7 @@ static struct cmd_list_element *nds32_maint_cmdlist;
 void
 nds32_init_remote_cmds (void)
 {
-  nds32_remote_info.type = nds32_rt_unknown;
-  nds32_remote_info.endian = BFD_ENDIAN_UNKNOWN;
-  strcpy (nds32_remote_info.cpu, "cpu");
+  nds32_remote_info_init ();
 
   /* nds32 elf-check */
   add_cmd ("elf-check", class_files, nds32_elf_check_command,
