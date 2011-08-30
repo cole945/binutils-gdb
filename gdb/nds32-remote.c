@@ -663,6 +663,13 @@ nds32_elf_check_command (char *arg, int from_tty)
     error (_("Cannot check ELF without executable.\n"
 	     "Use the \"file\" or \"exec-file\" command."));
 
+  if (nds32_remote_info.type == nds32_rt_unknown)
+    nds32_query_target_command (NULL, 0);
+
+  /* elf-check with SID/ICE only. */
+  if (nds32_remote_info.type == nds32_rt_unknown)
+    return;
+
   i_ehdrp = elf_elfheader (exec_bfd);
   elf_swap_ehdr_out (exec_bfd, i_ehdrp, &x_ehdr);
 
@@ -687,6 +694,13 @@ nds32_set_gloss_command (char *arg, int from_tty)
   struct cleanup *back_to;
   asection *s = NULL;
   const char *sectnames[] = { ".text", "code", ".bss", "bss" };
+
+  if (nds32_remote_info.type == nds32_rt_unknown)
+    nds32_query_target_command (NULL, 0);
+
+  /* set gloss for SID only. */
+  if (nds32_remote_info.type != nds32_rt_sid)
+    return;
 
   back_to = make_cleanup (null_cleanup, 0);
   if (exec_bfd == NULL)
