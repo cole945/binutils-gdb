@@ -110,6 +110,31 @@ struct
   enum bfd_endian endian;
 } nds32_remote_info;
 
+void
+nds32_remote_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr,
+				 int *kindptr)
+{
+  if ((*pcptr) & 1)
+    error (_("bad address %p for inserting breakpoint"), (void *) *pcptr);
+
+  /* SID use KINDPTR for software breakpoints,
+      but ICEman, linux-gdbserver doesn't use it. */
+  if (nds32_remote_info.type == nds32_rt_ice)
+    {
+      /* ICEman/AICE have trouble on reading memory when the pcptr is P/A,
+	 but CPU is in V/A mode.  This code prevent GDB from reading memory.
+	 ICEman will read memory itself if needed.  The kind is set to 3,
+	 so target knows GDB doesn't actually read the memory.
+
+	 See: Bug 7430 - GDB can't set a hardware break point with PA
+	      if IT/DT is on.  */
+
+      *kindptr = 3;
+    }
+  else
+    gdbarch_breakpoint_from_pc (gdbarch, pcptr, kindptr);
+}
+
 /* Wrapper for execute a GDB CLI command.  */
 
 static void
@@ -555,9 +580,6 @@ nds32_elf_check_get_register (unsigned int regno)
   gdb_byte regbuf[4] = { 0 };
 
   if (nds32_remote_info.endian == BFD_ENDIAN_UNKNOWN)
-    nds32_query_target_command (NULL, 0);
-
-  if (nds32_remote_info.endian == BFD_ENDIAN_UNKNOWN)
     error (_("Cannot get target endian."));
 
   switch ((INDEX_HW_MASK & regno))
@@ -663,9 +685,6 @@ nds32_elf_check_command (char *arg, int from_tty)
     error (_("Cannot check ELF without executable.\n"
 	     "Use the \"file\" or \"exec-file\" command."));
 
-  if (nds32_remote_info.type == nds32_rt_unknown)
-    nds32_query_target_command (NULL, 0);
-
   /* elf-check with SID/ICE only. */
   if (nds32_remote_info.type == nds32_rt_unknown)
     return;
@@ -694,9 +713,6 @@ nds32_set_gloss_command (char *arg, int from_tty)
   struct cleanup *back_to;
   asection *s = NULL;
   const char *sectnames[] = { ".text", "code", ".bss", "bss" };
-
-  if (nds32_remote_info.type == nds32_rt_unknown)
-    nds32_query_target_command (NULL, 0);
 
   /* set gloss for SID only. */
   if (nds32_remote_info.type != nds32_rt_sid)
@@ -757,6 +773,12 @@ nds32_set_gloss_command (char *arg, int from_tty)
   do_cleanups (back_to);
 }
 
+static void
+nds32_remote_inferior_created_observer (struct target_ops *ops, int from_tty)
+{
+  nds32_query_target_command (NULL, 0);
+}
+
 static struct cmd_list_element *nds32_pipeline_cmdlist;
 static struct cmd_list_element *nds32_query_cmdlist;
 static struct cmd_list_element *nds32_reset_cmdlist;
@@ -765,6 +787,8 @@ static struct cmd_list_element *nds32_maint_cmdlist;
 void
 nds32_init_remote_cmds (void)
 {
+  /* Hook for query remote target information.  */
+  observer_attach_inferior_created (nds32_remote_inferior_created_observer);
   nds32_remote_info_init ();
 
   /* nds32 elf-check */
