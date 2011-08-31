@@ -2688,6 +2688,8 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_skip_prologue (gdbarch, nds32_skip_prologue);
   set_gdbarch_inner_than (gdbarch, core_addr_lessthan);
   set_gdbarch_breakpoint_from_pc (gdbarch, nds32_breakpoint_from_pc);
+  set_gdbarch_remote_breakpoint_from_pc (gdbarch,
+					 nds32_remote_breakpoint_from_pc);
 
   set_gdbarch_frame_align (gdbarch, nds32_frame_align);
 

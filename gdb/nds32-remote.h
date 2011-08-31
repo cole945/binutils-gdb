@@ -22,5 +22,7 @@
 #define NDS32_REMOTE_H
 
 void nds32_init_remote_cmds (void);
+void nds32_remote_breakpoint_from_pc (struct gdbarch *gdbarch,
+				      CORE_ADDR *pcptr, int *kindptr);
 
 #endif
