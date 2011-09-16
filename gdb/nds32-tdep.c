@@ -685,6 +685,8 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
       nds32_append_flag (type, 16, "NOD");
       nds32_append_flag (type, 17, "IMV");
       nds32_append_flag (type, 18, "IMR");
+      nds32_append_flag (type, 19, "IFC");
+      nds32_append_flag (type, 20, "MCU");
       nds32_list_insert (&tdep->nds32_types, reg_name, type);
       return type;
     }
