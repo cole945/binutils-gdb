@@ -96,7 +96,7 @@
   <reg name="dr45" bitsize="32" group="dr" type="data_ptr"/>
   <reg name="dr46" bitsize="32" group="dr" type="data_ptr"/>
   <reg name="dr47" bitsize="32" group="dr" type="data_ptr"/>
-  <reg name="dr48" bitsize="32" group="dr" regnum="172"/>
+  <reg name="dr48" bitsize="32" group="dr" type="data_ptr" regnum="172"/>
 
   <reg name="pfr0" bitsize="32" group="pfr" type="data_ptr" regnum="119"/>
   <reg name="pfr1" bitsize="32" group="pfr" type="data_ptr"/>
