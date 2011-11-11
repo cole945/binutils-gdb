@@ -63,6 +63,8 @@ enum nds32_regnum
   NDS32_D0HI_REGNUM = 34,
   NDS32_D1LO_REGNUM = 35,
   NDS32_D1HI_REGNUM = 36,
+  NDS32_IFCLP_REGNUM = 37,
+  NDS32_PSW_REGNUM = 44,
 
   /* for linux */
   NDS32_LINUX_ORIG_R0_REGNUM = 37,
@@ -115,7 +117,9 @@ struct gdbarch_tdep
   enum nds32_abi nds32_abi;
   int nds32_fpu_sp_num;
   int nds32_fpu_dp_num;
-  int nds32_fpu_pseudo;		/* Whether FPU is implemented using Rcmd.  */
+  int nds32_fpu_pseudo;		/* Whether fpu is implemented using Rcmd.  */
+  int nds32_ifc;		/* Whether ifc_lp exists?  */
+  int nds32_psw;		/* Whether PSW.IFCON is on?  */
   int use_fpr;			/* Set if sp_num + dp_num > 0.  */
   int use_spill;		/* V2/FP do not allow arg spilling out of stack.  */
 
@@ -148,6 +152,7 @@ struct gdbarch_tdep
 struct nds32_gdb_config
 {
   int use_cfi;			/* default false */
+  int use_ifcret;		/* default true */
   int use_fp;			/* default true  */
   int use_abi;			/* default AUTO  */
   int use_stop_zfp;		/* default false */

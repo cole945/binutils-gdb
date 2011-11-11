@@ -380,6 +380,7 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
       nds32_append_flag (type, 12, "DRBE");
       nds32_append_flag (type, 13, "AEN");
       nds32_append_flag (type, 14, "WBNA");
+      nds32_append_flag (type, 15, "IFCON");
       nds32_list_insert (&tdep->nds32_types, "ir0", type);
       nds32_list_insert (&tdep->nds32_types, "ir1", type);
       nds32_list_insert (&tdep->nds32_types, "ir2", type);
@@ -2394,6 +2395,54 @@ static const struct frame_unwind nds32_sigtramp_frame_unwind =
   nds32_sigtramp_frame_sniffer
 };
 
+static void
+nds32_ifc_frame_this_id (struct frame_info *this_frame,
+			 void **this_cache, struct frame_id *this_id)
+{
+  LONGEST base;
+
+  base = get_frame_register_unsigned (this_frame, NDS32_SP_REGNUM);;
+  (*this_id) = frame_id_build (base, get_frame_pc (this_frame));
+}
+
+static struct value *
+nds32_ifc_frame_prev_register (struct frame_info *this_frame,
+			       void **this_cache, int regnum)
+{
+  struct value *value;
+
+  if (regnum == NDS32_PC_REGNUM)
+    value = value_of_register (NDS32_IFCLP_REGNUM, this_frame);
+  else
+    value = value_of_register (regnum, this_frame);
+  return value;
+}
+
+static int
+nds32_ifc_frame_sniffer (const struct frame_unwind *self,
+			 struct frame_info *this_frame,
+			 void **this_prologue_cache)
+{
+  LONGEST psw;
+  struct gdbarch_tdep *tdep;
+
+  if (frame_relative_level (this_frame) != 0)
+    return 0;
+
+  tdep = gdbarch_tdep (get_frame_arch (this_frame));
+  psw = get_frame_register_unsigned (this_frame, NDS32_PSW_REGNUM);
+  return psw & (1 << 15);
+}
+
+static const struct frame_unwind nds32_ifc_frame_unwind = {
+  NORMAL_FRAME,
+  default_frame_unwind_stop_reason,
+  nds32_ifc_frame_this_id,
+  nds32_ifc_frame_prev_register,
+  NULL /* unwind_data */,
+  nds32_ifc_frame_sniffer
+};
+
 static CORE_ADDR
 nds32_frame_base_address (struct frame_info *this_frame, void **this_cache)
 {
@@ -2418,7 +2467,7 @@ nds32_validate_tdesc_p (struct gdbarch_tdep *tdep,
 {
   int i;
   const struct tdesc_feature *feature_core;
-  const struct tdesc_feature *feature_fpu;
+  const struct tdesc_feature *feature_fpu, *feature_system;
   const struct target_desc *tdesc = tdep->tdesc;
   unsigned int eflags = tdep->eflags;
   int valid_p;
@@ -2443,6 +2492,23 @@ nds32_validate_tdesc_p (struct gdbarch_tdep *tdep,
     {
       valid_p = tdesc_numbered_register (feature_core, tdesc_data, i,
 					 nds32_regnames[i]);
+    }
+
+  tdep->nds32_ifc = tdesc_numbered_register
+      (feature_core, tdesc_data, NDS32_IFCLP_REGNUM, "ifc_lp");
+  if (!tdep->nds32_ifc)
+    tdep->nds32_ifc = tdesc_numbered_register
+      (feature_core, tdesc_data, NDS32_IFCLP_REGNUM, "ifclp");
+
+
+  feature_system = tdesc_find_feature (tdesc, "org.gnu.gdb.nds32.system");
+  if (feature_core)
+    {
+	tdep->nds32_psw = tdesc_numbered_register (feature_system, tdesc_data,
+						   NDS32_PSW_REGNUM, "ir0");
+	if (!tdep->nds32_psw)
+	  tdep->nds32_psw = tdesc_numbered_register (feature_system, tdesc_data,
+						     NDS32_PSW_REGNUM, "psw");
     }
 
   feature_fpu = tdesc_find_feature (tdesc, "org.gnu.gdb.nds32.fpu");
@@ -2586,7 +2652,8 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   /* Allocate space for the new architecture.  */
   tdep = XCALLOC (1, struct gdbarch_tdep);
   gdbarch = gdbarch_alloc (&info, tdep);
-  set_gdbarch_num_regs (gdbarch, NDS32_NUM_GR + NDS32_NUM_SPR);
+  /* set_gdbarch_num_regs (gdbarch, NDS32_NUM_GR + NDS32_NUM_SPR); */
+  set_gdbarch_num_regs (gdbarch, NDS32_PSW_REGNUM + 1);
 
   tdep->tdesc = tdesc;
   tdep->nds32_abi = nds32_abi;
@@ -2727,6 +2794,8 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
     }
 
   /* The order of appending is the order it check frame.  */
+  if (nds32_config.use_ifcret)
+    frame_unwind_append_unwinder (gdbarch, &nds32_ifc_frame_unwind);
   dwarf2_frame_set_init_reg (gdbarch, nds32_dwarf2_frame_init_reg);
   if (nds32_config.use_cfi)
     dwarf2_append_unwinders (gdbarch);
@@ -2796,6 +2865,7 @@ static void
 nds32_load_config (struct nds32_gdb_config *config)
 {
   config->use_cfi = nds32_config_int ("USE_CFI", 1);
+  config->use_ifcret = nds32_config_int ("USE_IFC_RET", 1);
   config->use_fp = nds32_config_int ("USE_FP", 1);
   config->use_abi = nds32_config_int ("USE_ABI", NDS32_ABI_AUTO);
   config->use_stop_zfp = nds32_config_int ("USE_STOP_ZFP", 0);

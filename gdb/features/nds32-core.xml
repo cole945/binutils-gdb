@@ -47,4 +47,5 @@
   <reg name="d0hi" bitsize="32"/>
   <reg name="d1lo" bitsize="32"/>
   <reg name="d1hi" bitsize="32"/>
+  <reg name="ifc_lp" bitsize="32" type="code_ptr" regnum="175"/>
 </feature>
