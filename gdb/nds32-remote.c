@@ -511,6 +511,10 @@ nds32_query_target_command (char *arg, int from_tty)
 
   nds32_remote_info_init ();
 
+  if (strcmp (current_target.to_shortname, "remote") != 0)
+    return;
+  /* FIXME if we don't know, use ELF. */
+
   buf = xmalloc (size);
   back_to = make_cleanup (free_current_contents, &buf);
 
