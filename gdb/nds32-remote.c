@@ -504,7 +504,7 @@ static void
 nds32_query_target_command (char *arg, int from_tty)
 {
   char *buf;
-  long size = 32;
+  long size = 64;
   struct cleanup *back_to;
   char *cpu = nds32_remote_info.cpu;
   int cpu_size = ARRAY_SIZE (nds32_remote_info.cpu);
@@ -542,7 +542,7 @@ nds32_query_target_command (char *arg, int from_tty)
 
   putpkt (nds32_qparts[NDS32_Q_CPU]);
   getpkt (&buf, &size, 0);
-  if (strnlen (buf, size) > 0 && buf[0] != 'E')
+  if (strlen (buf) > 0 && buf[0] != 'E')
     {
       memset (cpu, 0, cpu_size);
       strncpy (cpu, buf, cpu_size - 1);
