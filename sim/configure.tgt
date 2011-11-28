@@ -90,6 +90,10 @@ case "${target}" in
        SIM_ARCH(msp430)
        sim_testsuite=yes
        ;;
+   nds32*)
+       SIM_ARCH(nds32)
+       sim_testsuite=yes
+       ;;
    rl78-*-*)
        SIM_ARCH(rl78)
        ;;
