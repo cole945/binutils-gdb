@@ -24,7 +24,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-typedef uint32_t reg_t;
+typedef uint32_t ureg_t;
+typedef int32_t reg_t;
 
 struct nds32_cpu_state
 {
