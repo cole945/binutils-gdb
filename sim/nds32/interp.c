@@ -367,11 +367,11 @@ nds32_decode32_alu1 (SIM_DESC sd, const uint32_t insn)
       return;
     case 0x6:			/* slt */
       nds32_gpr[rt] =
-	((ulongest_t) nds32_gpr[ra] < (ulongest_t) nds32_gpr[rb]) ? 1 : 0;
+	((ureg_t) nds32_gpr[ra] < (ureg_t) nds32_gpr[rb]) ? 1 : 0;
       return;
     case 0x7:			/* slts */
       nds32_gpr[rt] =
-	((longest_t) nds32_gpr[ra] < (longest_t) nds32_gpr[rb]) ? 1 : 0;
+	((reg_t) nds32_gpr[ra] < (reg_t) nds32_gpr[rb]) ? 1 : 0;
       return;
 
 #if 0
@@ -673,8 +673,12 @@ nds32_decode32 (SIM_DESC sd, const uint32_t insn)
     case 0x2c:			/* ori */
       nds32_gpr[rt] = nds32_gpr[rt] | imm15u;
       return;
-    case 0x2e:			/* stli */
+    case 0x2e:			/* slti */
+      nds32_gpr[rt] = ((ureg_t) nds32_gpr[ra] < imm15s) ? 1 : 0;
+      return;
     case 0x2f:			/* sltsi */
+      nds32_gpr[rt] = ((reg_t) nds32_gpr[ra] < imm15s) ? 1 : 0;
+      return;
     case 0x32:			/* misc */
       nds32_decode32_misc (sd, insn);
       return;
@@ -741,19 +745,19 @@ nds32_decode16 (SIM_DESC sd, uint32_t insn)
       return;
     case 0x30:			/* slts45 */
       nds32_gpr[NDS32_TA_REGNUM] =
-	((longest_t) nds32_gpr[rt4] < (longest_t) nds32_gpr[ra5]) ? 1 : 0;
+	((reg_t) nds32_gpr[rt4] < (reg_t) nds32_gpr[ra5]) ? 1 : 0;
       return;
     case 0x31:			/* slt45 */
       nds32_gpr[NDS32_TA_REGNUM] =
-	((ulongest_t) nds32_gpr[rt4] < (ulongest_t) nds32_gpr[ra5]) ? 1 : 0;
+	((ureg_t) nds32_gpr[rt4] < (ureg_t) nds32_gpr[ra5]) ? 1 : 0;
       return;
     case 0x32:			/* sltsi45 */
       nds32_gpr[NDS32_TA_REGNUM] =
-	((longest_t) nds32_gpr[rt4] < imm5s) ? 1 : 0;
+	((reg_t) nds32_gpr[rt4] < imm5s) ? 1 : 0;
       return;
     case 0x33:			/* slti45 */
       nds32_gpr[NDS32_TA_REGNUM] =
-	((longest_t) nds32_gpr[rt4] < imm5u) ? 1 : 0;
+	((reg_t) nds32_gpr[rt4] < imm5u) ? 1 : 0;
       return;
 
     case 0xa:			/* slli333 */
