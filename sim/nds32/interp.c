@@ -186,6 +186,29 @@ nds32_bad_op (SIM_DESC sd, uint32_t pc, uint32_t insn, char *tag)
 		 tag, pc, insn);
 }
 
+static void
+nds32_syscall (SIM_DESC sd, int swid)
+{
+  switch (swid)
+    {
+    case 5: /* write */
+      if (nds32_gpr[0] == 1)
+	  nds32_gpr[0] = sim_io_write_stdout (sd, (char *) nds32_gpr[1], nds32_gpr[2]);
+      else if (nds32_gpr[0] == 2)
+	  nds32_gpr[0] = sim_io_write_stderr (sd, (char *) nds32_gpr[1], nds32_gpr[2]);
+      else
+	  nds32_gpr[0] = sim_io_write (sd, nds32_gpr[0], (char *) nds32_gpr[1], nds32_gpr[2]);
+      break;
+    case 6: /* seek */
+      nds32_gpr[0] = sim_io_lseek (sd, nds32_gpr[0], nds32_gpr[1], nds32_gpr[2]);
+      break;
+    default:
+      nds32_bad_op (sd, *nds32_pc - 4, swid, "syscall");
+      break;
+    }
+}
+
+
 static longest_t
 nds32_ld_sext (SIM_DESC sd, SIM_ADDR addr, int size)
 {
@@ -344,6 +367,7 @@ nds32_decode32_alu1 (SIM_DESC sd, const uint32_t insn)
   int rt = N32_RT5 (insn);
   int ra = N32_RA5 (insn);
   int rb = N32_RB5 (insn);
+  const int imm5u = rb;
 
   switch (insn & 0x1f)
     {
@@ -374,24 +398,35 @@ nds32_decode32_alu1 (SIM_DESC sd, const uint32_t insn)
 	((reg_t) nds32_gpr[ra] < (reg_t) nds32_gpr[rb]) ? 1 : 0;
       return;
 
-#if 0
     case 0x8:			/* slli */
+      nds32_gpr[rt] = nds32_gpr[ra] << imm5u;
       return;
     case 0x9:			/* srli */
+      nds32_gpr[rt] = (ureg_t)nds32_gpr[ra] >> imm5u;
       return;
     case 0xa:			/* srai */
-      return;
-    case 0xb:			/* rotri */
+      nds32_gpr[rt] = (reg_t)nds32_gpr[ra] >> imm5u;
       return;
     case 0xc:			/* sll */
+      nds32_gpr[rt] = (ureg_t)nds32_gpr[ra] << (ureg_t)nds32_gpr[rb];
       return;
     case 0xd:			/* srl */
+      nds32_gpr[rt] = (ureg_t)nds32_gpr[ra] >> (ureg_t)nds32_gpr[rb];
       return;
     case 0xe:			/* sra */
+      nds32_gpr[rt] = (reg_t)nds32_gpr[ra] >> (ureg_t)nds32_gpr[rb];
       return;
+    case 0xb:			/* rotri */
     case 0xf:			/* rotr */
+      {
+	uint32_t shift = ((insn & 0x1f) == 0xb)? imm5u : nds32_gpr[rb];
+	uint32_t m = (ureg_t)nds32_gpr[ra] & ((1 << shift) - 1);
+	nds32_gpr[rt] = (ureg_t)nds32_gpr[ra] >> shift;
+	nds32_gpr[rt] |= m << (32 - shift);
+      }
       return;
 
+#if 0
     case 0x10:			/* seb */
       return;
     case 0x11:			/* seh */
@@ -411,14 +446,36 @@ nds32_decode32_alu1 (SIM_DESC sd, const uint32_t insn)
       return;
     case 0x19:			/* svs */
       return;
-    case 0x1a:			/* comvz */
-      return;
-    case 0x1b:			/* vomvn */
-      return;
 #endif
-    default:
-      nds32_bad_op (sd, *nds32_pc - 4, insn, "ALU1");
+    case 0x1a:			/* comvz */
+      if (nds32_gpr[rb] == 0)
+	nds32_gpr[rt] = nds32_gpr[ra];
+      return;
+    case 0x1b:			/* comvn */
+      if (nds32_gpr[rb] != 0)
+	nds32_gpr[rt] = nds32_gpr[ra];
+      return;
     }
+
+  nds32_bad_op (sd, *nds32_pc - 4, insn, "ALU1");
+}
+
+static void
+nds32_decode32_alu2 (SIM_DESC sd, const uint32_t insn)
+{
+  int rt = N32_RT5 (insn);
+  int ra = N32_RA5 (insn);
+  int rb = N32_RB5 (insn);
+  int imm5u = rb;
+
+  switch (insn & 0x1f)
+    {
+    case 0x9: /* bclr */
+      nds32_gpr[rt] = nds32_gpr[ra] & ~(1 << imm5u);
+      return;
+    }
+
+  nds32_bad_op (sd, *nds32_pc - 4, insn, "ALU2");
 }
 
 static void
@@ -540,8 +597,10 @@ nds32_decode32_misc (SIM_DESC sd, const uint32_t insn)
     case 0x3:			/* mtsr */
       nds32_sr[__GF (insn, 10, 10)] = nds32_gpr[rt];
       return;
-    case 0x4:			/* iret */
     case 0xb:			/* syscall */
+      nds32_syscall (sd, __GF (insn, 5, 15));
+      return;
+    case 0x4:			/* iret */
     default:
       nds32_bad_op (sd, *nds32_pc - 4, insn, "MISC");
     }
@@ -637,11 +696,9 @@ nds32_decode32 (SIM_DESC sd, const uint32_t insn)
     case 0x20:			/* alu_1 */
       nds32_decode32_alu1 (sd, insn);
       return;
-#if 0
     case 0x21:			/* alu_2 */
       nds32_decode32_alu2 (sd, insn);
       return;
-#endif
     case 0x22:			/* movi */
       nds32_gpr[rt] = N32_IMM20S (insn);
       return;
@@ -666,7 +723,11 @@ nds32_decode32 (SIM_DESC sd, const uint32_t insn)
       nds32_gpr[rt] = nds32_gpr[ra] + imm15s;
       return;
     case 0x29:			/* subri */
+      nds32_gpr[rt] = imm15s - nds32_gpr[ra];
+      return;
     case 0x2a:			/* andi */
+      nds32_gpr[rt] = nds32_gpr[ra] & imm15u;
+      return;
     case 0x2b:			/* xori */
       nds32_gpr[rt] = nds32_gpr[ra] ^ imm15u;
       return;
