@@ -64,18 +64,28 @@ static SIM_OPEN_KIND sim_kind;
 static char *myname;
 static host_callback *callback;
 
-enum nds32_regnum
+enum nds32_gdb_regnum
 {
-  NDS32_TA_REGNUM = 15,
-  NDS32_FP_REGNUM = 28,
-  NDS32_GP_REGNUM = 29,
-  NDS32_LP_REGNUM = 30,
-  NDS32_SP_REGNUM = 31,
-  NDS32_PC_REGNUM = 32,
-  NDS32_D0LO_REGNUM = 33,
-  NDS32_D0HI_REGNUM = 34,
-  NDS32_D1LO_REGNUM = 35,
-  NDS32_D1HI_REGNUM = 36,
+  NG_TA = 15,
+  NG_FP = 28,
+  NG_GP = 29,
+  NG_LP = 30,
+  NG_SP = 31,
+  NG_PC = 32,
+
+  NG_D0LO = 33,
+  NG_D0HI = 34,
+  NG_D1LO = 35,
+  NG_D1HI = 36,
+};
+
+enum nds32_cpu_regnum
+{
+  NC_D0LO = 0,
+  NC_D0HI = 1,
+  NC_D1LO = 2,
+  NC_D1HI = 3,
+  NC_PC = 4,
 };
 
 enum nds32_syscall_num
@@ -228,7 +238,20 @@ nds32_syscall (SIM_DESC sd, int swid)
 
   switch (swid)
     {
-    case SYS_write:			/* write */
+    case SYS_read:
+      {
+	int fd = nds32_gpr[0];
+	SIM_ADDR addr = nds32_gpr[1];
+	int nr = nds32_gpr[2];
+	char *buf = zalloc (nr);
+
+	r = sim_io_read (sd, fd, buf, nr);
+	if (r > 0)
+	  sim_write (sd, addr, buf, r);
+	/* SIM_IO_DPRINTF (sd, "sys_read () = %s\n", buf); */
+      }
+      break;
+    case SYS_write:
       {
 	int fd = nds32_gpr[0];
 	SIM_ADDR addr = nds32_gpr[1];
@@ -243,11 +266,12 @@ nds32_syscall (SIM_DESC sd, int swid)
 	  r = sim_io_write_stderr (sd, buf, nr);
 	else
 #endif
+	/* SIM_IO_DPRINTF (sd, "sys_write (%s)\n", buf); */
 	  r = sim_io_write (sd, fd, buf, nr);
 
 	break;
       }
-    case SYS_lseek:			/* seek */
+    case SYS_lseek:
       r = sim_io_lseek (sd, nds32_gpr[0], nds32_gpr[1], nds32_gpr[2]);
       break;
     case SYS_fstat:
@@ -258,9 +282,27 @@ nds32_syscall (SIM_DESC sd, int swid)
 
 	SIM_ASSERT (sizeof (struct nds32_stat) == 60);
 	r = sim_io_fstat (sd, nds32_gpr[0], &stat);
-	sim_write (sd, addr, (unsigned char *) &stat,
-		   sizeof (struct nds32_stat));
+	if (r >= 0)
+	  {
+	    memset (&nstat, 0, sizeof (nstat));
+	    nstat.st_dev = stat.st_dev;
+	    nstat.st_ino = stat.st_ino;
+	    nstat.st_mode = stat.st_mode;
+	    nstat.st_nlink = stat.st_nlink;
+	    nstat.st_uid = stat.st_uid;
+	    nstat.st_gid = stat.st_gid;
+	    nstat.st_rdev = stat.st_rdev;
+	    nstat.st_size = stat.st_size;
+	    nstat.st_atime_ = stat.st_atime;
+	    nstat.st_mtime_ = stat.st_mtime;
+	    nstat.st_ctime_ = stat.st_ctime;
+	    sim_write (sd, addr, (unsigned char *) &nstat,
+		       sizeof (struct nds32_stat));
+	  }
       }
+      break;
+    case SYS_isatty:
+      r = sim_io_isatty (sd, nds32_gpr[0]);
       break;
     default:
       nds32_bad_op (sd, *nds32_pc - 4, swid, "syscall");
@@ -359,8 +401,15 @@ nds32_decode32_mem (SIM_DESC sd, const uint32_t insn)
     case 0x8:			/* sb */
     case 0x9:			/* sh */
     case 0xa:			/* sw */
-      nds32_st (sd, nds32_gpr[ra] + (nds32_gpr[rb] << sv), (1 << (op - 0x8)),
+      nds32_st (sd, nds32_gpr[ra] + (nds32_gpr[rb] << sv), (1 << (op & 0x3)),
 		nds32_gpr[rt]);
+      return;
+    case 0x10:			/* lbs */
+    case 0x11:			/* lhs */
+    case 0x12:			/* lws */
+      nds32_gpr[rt] =
+	nds32_ld (sd, nds32_gpr[ra] + (nds32_gpr[rb] << sv), (1 << (op & 0x3)));
+      nds32_gpr[rt] = __SEXT (nds32_gpr[rt], (8 << (op & 0x3)));
       return;
     }
 
@@ -391,7 +440,7 @@ nds32_decode32_lsmw (SIM_DESC sd, const uint32_t insn)
   m += (enable4 & 0x2) ? 1 : 0;
   m += (enable4 & 0x4) ? 1 : 0;
   m += (enable4 & 0x8) ? 1 : 0;
-  if (rb < NDS32_FP_REGNUM && re < NDS32_FP_REGNUM)
+  if (rb < NG_FP && re < NG_FP)
     {
       /* Reg-list should not include fp, gp, lp and sp,
 	 i.e., the rb == re == sp case, anyway... */
@@ -419,13 +468,13 @@ nds32_decode32_lsmw (SIM_DESC sd, const uint32_t insn)
 	    {
 	      sim_write (sd, base, reg, 4);
 	      nds32_st (sd, base, 4,
-			nds32_gpr[NDS32_SP_REGNUM - (enb4map[aligned][i])]);
+			nds32_gpr[NG_SP - (enb4map[aligned][i])]);
 	      base -= 4;
 	    }
 	}
 
       /* Skip if re == rb == sp > fp.  */
-      for (i = re; i >= rb && rb < NDS32_FP_REGNUM; i--)
+      for (i = re; i >= rb && rb < NG_FP; i--)
 	{
 	  nds32_st (sd, base, 4, nds32_gpr[i]);
 	  base -= 4;
@@ -442,14 +491,14 @@ nds32_decode32_lsmw (SIM_DESC sd, const uint32_t insn)
 	{
 	  if (enable4 & (1 << enb4map[aligned][i]))
 	    {
-	      nds32_gpr[NDS32_SP_REGNUM - (enb4map[aligned][i])]
+	      nds32_gpr[NG_SP - (enb4map[aligned][i])]
 		= nds32_ld (sd, base, 4);
 	      base -= 4;
 	    }
 	}
 
       /* Skip if re == rb == sp > fp.  */
-      for (i = re; i >= rb && rb < NDS32_FP_REGNUM; i--)
+      for (i = re; i >= rb && rb < NG_FP; i--)
 	{
 	  nds32_gpr[i] = nds32_ld (sd, base, 4);
 	  base -= 4;
@@ -529,14 +578,17 @@ nds32_decode32_alu1 (SIM_DESC sd, const uint32_t insn)
       }
       return;
 
-#if 0
     case 0x10:			/* seb */
+      nds32_gpr[rt] = __SEXT (nds32_gpr[ra], 8);
       return;
     case 0x11:			/* seh */
+      nds32_gpr[rt] = __SEXT (nds32_gpr[ra], 16);
       return;
 
     case 0x13:			/* zeh */
+      nds32_gpr[rt] = nds32_gpr[ra] & 0xffff;
       return;
+#if 0
     case 0x14:			/* wsbh */
       return;
 
@@ -572,10 +624,49 @@ nds32_decode32_alu2 (SIM_DESC sd, const uint32_t insn)
   int rb = N32_RB5 (insn);
   int imm5u = rb;
 
-  switch (insn & 0x1f)
+  switch (insn & 0x3ff)
     {
+    case 0x0:			/* max */
+      nds32_gpr[rt] = ((reg_t)nds32_gpr[ra] > (reg_t)nds32_gpr[rb]) ? nds32_gpr[ra]: nds32_gpr[rb];
+      return;
+    case 0x1:			/* min */
+      nds32_gpr[rt] = ((reg_t)nds32_gpr[ra] < (reg_t)nds32_gpr[rb]) ? nds32_gpr[ra]: nds32_gpr[rb];
+      return;
+#if 0
+    case 0x2:			/* ave */
+      return;
+    case 0x3:			/* abs */
+      return;
+#endif
     case 0x9:			/* bclr */
       nds32_gpr[rt] = nds32_gpr[ra] & ~(1 << imm5u);
+      return;
+    case 0x24:			/* mul */
+      nds32_gpr[rt] = nds32_gpr[ra] * nds32_gpr[rb];
+      return;
+    case 0x20:			/* mfusr */
+      nds32_gpr[rt] = nds32_usr[rb << 5 | ra];
+      return;
+    case 0x21:			/* mtusr */
+      nds32_usr[rb << 5 | ra] = nds32_gpr[rt];
+      return;
+    case 0x2f:			/* div */
+      {
+	unsigned int q;
+	unsigned int r;
+	q = (ureg_t)nds32_gpr[ra] / (ureg_t)nds32_gpr[rb];
+	r = (ureg_t)nds32_gpr[ra] % (ureg_t)nds32_gpr[rb];
+	if (insn & (1 << 21))
+	  {
+	    nds32_usr[NC_D1LO] = q;
+	    nds32_usr[NC_D1HI] = r;
+	  }
+	else
+	  {
+	    nds32_usr[NC_D0LO] = q;
+	    nds32_usr[NC_D0HI] = r;
+	  }
+      }
       return;
     }
 
@@ -668,12 +759,12 @@ nds32_decode32_br2 (SIM_DESC sd, const uint32_t insn)
 	*nds32_pc += -4 + (imm16s << 1);
       return;
     case 0x1c:			/* bgezal */
-      nds32_gpr[NDS32_LP_REGNUM] = *nds32_pc;
+      nds32_gpr[NG_LP] = *nds32_pc;
       if (nds32_gpr[rt] >= 0)
 	*nds32_pc += -4 + (imm16s << 1);
       return;
     case 0x1d:			/* bltzal */
-      nds32_gpr[NDS32_LP_REGNUM] = *nds32_pc;
+      nds32_gpr[NG_LP] = *nds32_pc;
       if (nds32_gpr[rt] < 0)
 	*nds32_pc += -4 + (imm16s << 1);
       return;
@@ -812,7 +903,7 @@ nds32_decode32 (SIM_DESC sd, const uint32_t insn)
       return;
     case 0x24:			/* ji */
       if (insn & (1 << 24))
-	nds32_gpr[NDS32_LP_REGNUM] = *nds32_pc;
+	nds32_gpr[NG_LP] = *nds32_pc;
       *nds32_pc = *nds32_pc - 4 + (N32_IMM24S (insn) << 1);
       return;
     case 0x25:			/* jreg */
@@ -879,7 +970,7 @@ nds32_decode16 (SIM_DESC sd, uint32_t insn)
       nds32_gpr[rt5] = imm5s;
       return;
     case 0x1b:			/* addi10s (V2) */
-      nds32_gpr[NDS32_SP_REGNUM] += N16_IMM10S (insn);
+      nds32_gpr[NG_SP] += N16_IMM10S (insn);
       return;
     }
 
@@ -910,18 +1001,18 @@ nds32_decode16 (SIM_DESC sd, uint32_t insn)
       nds32_st (sd, nds32_gpr[ra5], 4, nds32_gpr[rt4]);
       return;
     case 0x30:			/* slts45 */
-      nds32_gpr[NDS32_TA_REGNUM] =
+      nds32_gpr[NG_TA] =
 	((reg_t) nds32_gpr[rt4] < (reg_t) nds32_gpr[ra5]) ? 1 : 0;
       return;
     case 0x31:			/* slt45 */
-      nds32_gpr[NDS32_TA_REGNUM] =
+      nds32_gpr[NG_TA] =
 	((ureg_t) nds32_gpr[rt4] < (ureg_t) nds32_gpr[ra5]) ? 1 : 0;
       return;
     case 0x32:			/* sltsi45 */
-      nds32_gpr[NDS32_TA_REGNUM] = ((reg_t) nds32_gpr[rt4] < imm5s) ? 1 : 0;
+      nds32_gpr[NG_TA] = ((reg_t) nds32_gpr[rt4] < imm5s) ? 1 : 0;
       return;
     case 0x33:			/* slti45 */
-      nds32_gpr[NDS32_TA_REGNUM] = ((reg_t) nds32_gpr[rt4] < imm5u) ? 1 : 0;
+      nds32_gpr[NG_TA] = ((reg_t) nds32_gpr[rt4] < imm5u) ? 1 : 0;
       return;
 
     case 0xa:			/* slli333 */
@@ -970,7 +1061,7 @@ nds32_decode16 (SIM_DESC sd, uint32_t insn)
       nds32_gpr[ra3] += imm3u << 2;
       return;
     case 0x34:			/* beqzs8, bnezs8 */
-      if (((insn & (1 << 8)) == 0) ^ (nds32_gpr[NDS32_TA_REGNUM] != 0))
+      if (((insn & (1 << 8)) == 0) ^ (nds32_gpr[NG_TA] != 0))
 	*nds32_pc += -2 + (N16_IMM8S (insn) << 1);
       return;
     case 0x35:			/* break16 */
@@ -1029,7 +1120,7 @@ nds32_decode16 (SIM_DESC sd, uint32_t insn)
 	      *nds32_pc = nds32_gpr[ra5];
 	      return;
 	    case 1:		/* jral5 */
-	      nds32_gpr[NDS32_LP_REGNUM] = *nds32_pc;
+	      nds32_gpr[NG_LP] = *nds32_pc;
 	      *nds32_pc = nds32_gpr[ra5];
 	      return;
 	    default:
@@ -1106,16 +1197,16 @@ sim_store_register (SIM_DESC sd, int rn, unsigned char *memory, int length)
   /* Special user registers.  */
   switch (rn)
     {
-    case NDS32_PC_REGNUM:
+    case NG_PC:
       *nds32_pc = extract_unsigned_integer_by_psw (memory, length);
       return 4;
-    case NDS32_D0LO_REGNUM:
+    case NG_D0LO:
       return 4;
-    case NDS32_D0HI_REGNUM:
+    case NG_D0HI:
       return 4;
-    case NDS32_D1LO_REGNUM:
+    case NG_D1LO:
       return 4;
-    case NDS32_D1HI_REGNUM:
+    case NG_D1HI:
       return 4;
     default:
       return 0;
@@ -1138,16 +1229,16 @@ sim_fetch_register (SIM_DESC sd, int rn, unsigned char *memory, int length)
   /* Special user registers.  */
   switch (rn)
     {
-    case NDS32_PC_REGNUM:
+    case NG_PC:
       store_unsigned_integer_by_psw (memory, length, *nds32_pc);
       return 4;
-    case NDS32_D0LO_REGNUM:
+    case NG_D0LO:
       return 4;
-    case NDS32_D0HI_REGNUM:
+    case NG_D0HI:
       return 4;
-    case NDS32_D1LO_REGNUM:
+    case NG_D1LO:
       return 4;
-    case NDS32_D1HI_REGNUM:
+    case NG_D1HI:
       return 4;
     default:
       return 0;
