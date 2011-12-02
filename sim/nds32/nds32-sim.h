@@ -24,8 +24,11 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-typedef uint32_t ureg_t;
-typedef int32_t reg_t;
+typedef union {
+  uint32_t u;
+  int32_t s;
+} reg_t;
+
 
 struct nds32_cpu_state
 {
