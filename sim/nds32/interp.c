@@ -204,6 +204,23 @@ store_unsigned_integer_by_psw (unsigned char *addr, int len, ulongest_t val)
   store_unsigned_integer (addr, len, order, val);
 }
 
+/* Read a null terminated string from memory, return in a buffer */
+
+static char *
+fetch_str (SIM_DESC sd, address_word addr)
+{
+  char *buf;
+  int nr = 0;
+  char null;
+
+  while (sim_read (sd, addr + nr, &null, 1) == 1 && null != 0)
+    nr++;
+  buf = NZALLOC (char, nr + 1);
+  sim_read (sd, addr, buf, nr);
+
+  return buf;
+}
+
 enum nds32_exceptions
 {
   EXP_RESET = 0,
@@ -242,10 +259,18 @@ nds32_syscall (SIM_DESC sd, int swid)
     case SYS_exit:
       cpu_exception = sim_exited;
       cpu_signal = nds32_gpr[0].s;
-      return;
+      break;
+    case SYS_open:
+      {
+	char *path = fetch_str (sd, nds32_gpr[0].u);
+
+	r = sim_io_open (sd, path, nds32_gpr[1].u);
+	free (path);
+      }
+      break;
     case SYS_close:
       r = sim_io_close (sd, nds32_gpr[0].u);
-      return;
+      break;
     case SYS_read:
       {
 	int fd = nds32_gpr[0].s;
@@ -315,6 +340,12 @@ nds32_syscall (SIM_DESC sd, int swid)
     case SYS_getcmdline:
       r = nds32_gpr[0].u;
       sim_write (sd, nds32_gpr[0].u, sd->cmdline, strlen (sd->cmdline) + 1);
+      break;
+    case SYS_errno:
+      break;
+    case SYS_time:
+      break;
+    case SYS_gettimeofday:
       break;
     default:
       nds32_bad_op (sd, *nds32_pc - 4, swid, "syscall");
@@ -781,11 +812,20 @@ nds32_decode32_alu2 (SIM_DESC sd, const uint32_t insn)
     case 0x2c:			/* msubs64 */
     case 0x2d:			/* msub64 */
     case 0x2e:			/* divs */
-	goto bad_op;
+      {
+	int32_t q;
+	int32_t r;
+
+	q = nds32_gpr[ra].s / nds32_gpr[rb].s;
+	r = nds32_gpr[ra].s % nds32_gpr[rb].s;
+	nds32_usr[dt].s = q;
+	nds32_usr[dt + 1].s = r;
+      }
+      return;
     case 0x2f:			/* div */
       {
-	unsigned int q;
-	unsigned int r;
+	uint32_t q;
+	uint32_t r;
 
 	q = nds32_gpr[ra].u / nds32_gpr[rb].u;
 	r = nds32_gpr[ra].u % nds32_gpr[rb].u;
@@ -966,6 +1006,12 @@ bad_op:
 }
 
 static void
+nds32_decode32_cop (SIM_DESC sd, const uint32_t insn)
+{
+
+}
+
+static void
 nds32_decode32 (SIM_DESC sd, const uint32_t insn)
 {
   int op = N32_OP6 (insn);
@@ -1141,10 +1187,12 @@ nds32_decode32 (SIM_DESC sd, const uint32_t insn)
     case 0x32:			/* misc */
       nds32_decode32_misc (sd, insn);
       return;
-    default:
-    bad_op:
-      nds32_bad_op (sd, *nds32_pc - 4, insn, "32-bit");
+    case 0x35:			/* COP */
+      nds32_decode32_cop (sd, insn);
     }
+
+bad_op:
+  nds32_bad_op (sd, *nds32_pc - 4, insn, "32-bit");
 }
 
 static void
