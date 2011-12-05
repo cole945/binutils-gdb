@@ -688,6 +688,7 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
       nds32_append_flag (type, 18, "IMR");
       nds32_append_flag (type, 19, "IFC");
       nds32_append_flag (type, 20, "MCU");
+      nds32_append_field (type, bt->builtin_uint8, 21, 23, "SHADOW");
       nds32_list_insert (&tdep->nds32_types, reg_name, type);
       return type;
     }
@@ -2864,7 +2865,7 @@ nds32_config_int (const char *str, int def)
 static void
 nds32_load_config (struct nds32_gdb_config *config)
 {
-  config->use_cfi = nds32_config_int ("USE_CFI", 1);
+  config->use_cfi = nds32_config_int ("USE_CFI", 0); /* relax make cfi borken. */
   config->use_ifcret = nds32_config_int ("USE_IFC_RET", 1);
   config->use_fp = nds32_config_int ("USE_FP", 1);
   config->use_abi = nds32_config_int ("USE_ABI", NDS32_ABI_AUTO);
