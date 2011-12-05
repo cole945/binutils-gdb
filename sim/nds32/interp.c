@@ -312,6 +312,10 @@ nds32_syscall (SIM_DESC sd, int swid)
     case SYS_isatty:
       r = sim_io_isatty (sd, nds32_gpr[0].s);
       break;
+    case SYS_getcmdline:
+      r = nds32_gpr[0].u;
+      sim_write (sd, nds32_gpr[0].u, sd->cmdline, strlen (sd->cmdline) + 1);
+      break;
     default:
       nds32_bad_op (sd, *nds32_pc - 4, swid, "syscall");
       break;
@@ -1564,11 +1568,29 @@ SIM_RC
 sim_create_inferior (SIM_DESC sd, struct bfd *prog_bfd, char **argv,
 		     char **env)
 {
+  int len;
+  int mlen;
+  int i;
   /* Set the initial register set.  */
   if (prog_bfd != NULL)
     *nds32_pc = bfd_get_start_address (prog_bfd);
   else
     *nds32_pc = 0;
+
+  memset (sd->cmdline, 0, sizeof (sd->cmdline));
+  mlen = sizeof (sd->cmdline) - 1;
+  len = 0;
+  for (i = 0; argv[i]; i++)
+    {
+      int l = strlen (argv[i]) + 1;
+      if (l + len >= mlen)
+	break;
+
+      len += sprintf (sd->cmdline + len, "%s ",
+		argv[i]);
+    }
+  if (len > 0)
+    sd->cmdline[len] = '\0'; /* Eat the last space. */
 
   return SIM_RC_OK;
 }
