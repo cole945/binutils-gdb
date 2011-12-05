@@ -48,6 +48,9 @@ struct sim_state {
 #define STATE_CPU(sd,n) ((sd)->cpu[0])
 #endif
 #define STATE_BOARD_DATA(sd) (&(sd)->board)
+
+  char cmdline[256];	/* cmdline buffer */
+
   sim_state_base base;
 };
 
