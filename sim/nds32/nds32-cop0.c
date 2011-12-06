@@ -36,6 +36,21 @@
 #include "opcode/nds32.h"
 #include "nds32-libc.h"
 
+static inline uint64_t
+nds32_fd_to_64 (SIM_DESC sd, int fd)
+{
+  fd <<= 1;
+  return ((uint64_t)nds32_fpr[fd].u << 32) | (uint64_t)nds32_fpr[fd + 1].u;
+}
+
+static inline void
+nds32_fd_from_64 (SIM_DESC sd, int fd, uint64_t d)
+{
+  fd <<= 1;
+  nds32_fpr[fd + 1].u = d & 0xFFFFFFFF;
+  nds32_fpr[fd].u = (d >> 32) & 0xFFFFFFFF ;
+}
+
 void
 nds32_decode32_lwc (SIM_DESC sd, const uint32_t insn)
 {
@@ -79,7 +94,7 @@ void
 nds32_decode32_ldc (SIM_DESC sd, const uint32_t insn)
 {
   const int cop = __GF (insn, 13, 2);
-  const int fdt = N32_RT5 (insn) << 1;
+  const int fdt = N32_RT5 (insn);
   const int ra = N32_RA5 (insn);
   const int imm12s = N32_IMM12S (insn);
   uint64_t d;
@@ -94,20 +109,19 @@ nds32_decode32_ldc (SIM_DESC sd, const uint32_t insn)
       d = nds32_ld (sd, nds32_gpr[ra].u + (imm12s << 2), 8);
     }
 
-  nds32_fpr[fdt + 1].u = d & 0xFFFFFFFF;
-  nds32_fpr[fdt].u = (d >> 32) & 0xFFFFFFFF;
+  nds32_fd_from_64 (sd, fdt, d);
 }
 
 void
 nds32_decode32_sdc (SIM_DESC sd, const uint32_t insn)
 {
   const int cop = __GF (insn, 13, 2);
-  const int fdt = N32_RT5 (insn) << 1;
+  const int fdt = N32_RT5 (insn);
   const int ra = N32_RA5 (insn);
   const int imm12s = N32_IMM12S (insn);
   uint64_t d;
 
-  d = ((uint64_t) nds32_fpr[fdt].u << 32) | (uint64_t) nds32_fpr[fdt + 1].u;
+  d = nds32_fd_to_64 (sd, fdt);
 
   if (insn & (1 << 12))
     {
@@ -130,23 +144,44 @@ nds32_decode32_cop (SIM_DESC sd, const uint32_t insn)
   int rt = N32_RT5 (insn);
   const int ra = N32_RA5 (insn);
   const int rb = N32_RB5 (insn);
-  const int fdt = N32_RT5 (insn) << 1;
-  const int fda = N32_RA5 (insn) << 1;
-  const int fdb = N32_RB5 (insn) << 1;
-  int fcmp;
+  const int fdt_ = N32_RT5 (insn) << 1;	/* I use fdX_ as shifted fdX. */
+  const int fda_ = N32_RA5 (insn) << 1;
+  const int fdb_ = N32_RB5 (insn) << 1;
+  int fcmp = SIM_FPU_IS_SNAN;
   uint64_t d;
-  sim_fpu sfst;
-  sim_fpu sfsa;
-  sim_fpu sfsb;
+  sim_fpu sft;
+  sim_fpu sfa;
+  sim_fpu sfb;
 
-  sim_fpu_32to (&sfsa, nds32_fpr[fsa].u);
-  sim_fpu_32to (&sfsb, nds32_fpr[fsb].u);
-  fcmp = sim_fpu_cmp (&sfsa, &sfsb);
+  /* Prepare operand for F[SD][12]. */
+  if ((insn & 0xb) == 0)
+    {
+      /* FS1,  FS2 */
+      sim_fpu_32to (&sfa, nds32_fpr[fsa].u);
+      sim_fpu_32to (&sfb, nds32_fpr[fsb].u);
+    }
+  else if ((insn & 0xb) == 8)
+    {
+      /* FD1, FD2 */
+      d = nds32_fd_to_64 (sd, fda_ >> 1);
+      sim_fpu_64to (&sfa, d);
+      d = nds32_fd_to_64 (sd, fdb_ >> 1);
+      sim_fpu_64to (&sfb, d);
+    }
+
+  if ((insn & 0x7) == 4)
+    fcmp = sim_fpu_cmp (&sfa, &sfb);
+
 
   switch (insn & 0x3ff)
     {
     case 0x1:		/* fmfsr */
       nds32_gpr[rt].u = nds32_fpr[fsa].u;
+      return;
+    case 0x8:		/* faddd */
+      sim_fpu_add (&sft, &sfa, &sfb);
+      sim_fpu_to64 (&d, &sft);
+      nds32_fd_from_64 (sd, fdt_ >> 1, d);
       return;
     case 0x9:		/* fmtsr */
       nds32_fpr[fst].u = nds32_gpr[ra].u;
@@ -155,54 +190,75 @@ nds32_decode32_cop (SIM_DESC sd, const uint32_t insn)
       rt &= ~1;
       if (nds32_psw_be ())
 	{
-	  nds32_gpr[rt] = nds32_fpr[fda];
-	  nds32_gpr[rt + 1] = nds32_fpr[fda + 1];
+	  nds32_gpr[rt] = nds32_fpr[fda_];
+	  nds32_gpr[rt + 1] = nds32_fpr[fda_ + 1];
 	}
       else
 	{
-	  nds32_gpr[rt + 1] = nds32_fpr[fda];
-	  nds32_gpr[rt] = nds32_fpr[fda + 1];
+	  nds32_gpr[rt + 1] = nds32_fpr[fda_];
+	  nds32_gpr[rt] = nds32_fpr[fda_ + 1];
 	}
+      return;
+    case 0x48:		/* fsubd */
+      sim_fpu_sub (&sft, &sfa, &sfb);
+      sim_fpu_to64 (&d, &sft);
+      nds32_fd_from_64 (sd, fdt_ >> 1, d);
       return;
     case 0x49:		/* fmtdr */
       rt &= ~1;
       if (nds32_psw_be ())
 	{
-	  nds32_fpr[fdt] = nds32_gpr[ra];
-	  nds32_fpr[fdt + 1] = nds32_gpr[ra + 1];
+	  nds32_fpr[fdt_] = nds32_gpr[ra];
+	  nds32_fpr[fdt_ + 1] = nds32_gpr[ra + 1];
 	}
       else
 	{
-	  nds32_fpr[fdt + 1] = nds32_gpr[ra];
-	  nds32_fpr[fdt] = nds32_gpr[ra + 1];
+	  nds32_fpr[fdt_ + 1] = nds32_gpr[ra];
+	  nds32_fpr[fdt_] = nds32_gpr[ra + 1];
 	}
       return;
     case 0xc8:		/* fcpysd */
-      nds32_fpr[fdt].u = nds32_fpr[fda].u & 0x7fffffff;
-      nds32_fpr[fdt].u |= nds32_fpr[fdb].u & 0x80000000;
+      nds32_fpr[fdt_].u = nds32_fpr[fda_].u & 0x7fffffff;
+      nds32_fpr[fdt_].u |= nds32_fpr[fdb_].u & 0x80000000;
       return;
     case 0x300:		/* fmuls */
-      sim_fpu_mul (&sfst, &sfsa, &sfsb);
-      sim_fpu_to32 ((unsigned32*)(nds32_fpr + fst), &sfst);
+      sim_fpu_mul (&sft, &sfa, &sfb);
+      sim_fpu_to32 ((unsigned32*)(nds32_fpr + fst), &sft);
+      return;
+    case 0x308:		/* fmuld */
+      sim_fpu_mul (&sft, &sfa, &sfb);
+      sim_fpu_to64 (&d, &sft);
+      nds32_fd_from_64 (sd, fdt_ >> 1, d);
       return;
     case 0x3c0:		/* fs2d */
-      sim_fpu_32to (&sfst, nds32_fpr[fsa].u);
-      sim_fpu_to64 (&d, &sfst);
-      nds32_fpr[fdt].u = (d >> 32) & 0xFFFFFFFF;
-      nds32_fpr[fdt + 1].u = d & 0xFFFFFFFF;
+      sim_fpu_to64 (&d, &sfa);
+      nds32_fd_from_64 (sd, fdt_ >> 1, d);
       return;
     case 0x3c8:		/* fsi2d */
+      sim_fpu_i32to (&sft, nds32_fpr[fsa].u, sim_fpu_round_near);
+      sim_fpu_to64 (&d, &sft);
+      nds32_fd_from_64 (sd, fdt_ >> 1, d);
+      return;
     case 0x0c:		/* fcmpeqd */
-#if 0
       if (fcmp == SIM_FPU_IS_NZERO || fcmp == SIM_FPU_IS_NZERO)
 	sim_fpu_to64 (&d, &sim_fpu_one);
       else
 	sim_fpu_to64 (&d, &sim_fpu_zero);
-      nds32_fpr[fdt].u = (d >> 32) & 0xFFFFFFFF;
-      nds32_fpr[fdt + 1].u = d & 0xFFFFFFFF;
+      nds32_fd_from_64 (sd, fdt_ >> 1, d);
       return;
-#endif
     case 0x8c:		/* fcmpltd */
+      switch (fcmp)
+	{
+	case SIM_FPU_IS_PINF:
+	case SIM_FPU_IS_PNUMBER:
+	case SIM_FPU_IS_PDENORM:
+	  sim_fpu_to64 (&d, &sim_fpu_one);
+	  break;
+	default:
+	  sim_fpu_to64 (&d, &sim_fpu_zero);
+	}
+      nds32_fd_from_64 (sd, fdt_ >> 1, d);
+      return;
     case 0x10c:		/* fcmpled */
     case 0x18c:		/* fcmpund */
 	goto bad_op;
