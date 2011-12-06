@@ -381,6 +381,7 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
       nds32_append_flag (type, 13, "AEN");
       nds32_append_flag (type, 14, "WBNA");
       nds32_append_flag (type, 15, "IFCON");
+      nds32_append_field (type, bt->builtin_uint8, 16, 18, "CPL");
       nds32_list_insert (&tdep->nds32_types, "ir0", type);
       nds32_list_insert (&tdep->nds32_types, "ir1", type);
       nds32_list_insert (&tdep->nds32_types, "ir2", type);
@@ -429,6 +430,7 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
       append_flags_type_flag (type, 3, "H3IM");
       append_flags_type_flag (type, 4, "H4IM");
       append_flags_type_flag (type, 5, "H5IM");
+      nds32_append_field (type, bt->builtin_uint16, 6, 15, "H15IM_H6IM");
       append_flags_type_flag (type, 16, "SIM");
       append_flags_type_flag (type, 29, "ALZ");
       append_flags_type_flag (type, 30, "IDIVZE");
@@ -688,6 +690,7 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
       nds32_append_flag (type, 18, "IMR");
       nds32_append_flag (type, 19, "IFC");
       nds32_append_flag (type, 20, "MCU");
+      nds32_append_flag (type, 24, "RM_SWID");
       nds32_append_field (type, bt->builtin_uint8, 21, 23, "SHADOW");
       nds32_list_insert (&tdep->nds32_types, reg_name, type);
       return type;
