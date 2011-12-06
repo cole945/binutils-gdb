@@ -31,6 +31,7 @@
 #include "dis-asm.h"
 #include "sim-main.h"
 #include "sim-utils.h"
+#include "sim-fpu.h"
 
 #include "opcode/nds32.h"
 #include "nds32-libc.h"
@@ -129,6 +130,7 @@ enum nds32_syscall_num
 reg_t nds32_gpr[32];		/* 32 GPR */
 reg_t nds32_usr[32 * 32];	/* Group, Usr */
 reg_t nds32_sr[8 * 16 * 8];	/* Major, Minor, Ext */
+reg_t nds32_fpr[64];
 
 uint32_t *nds32_pc = (uint32_t *) (nds32_usr + UXIDX (0, 31));
 
@@ -1006,9 +1008,85 @@ bad_op:
 }
 
 static void
+nds32_decode32_lwc (SIM_DESC sd, const uint32_t insn)
+{
+  const int cop = __GF (insn, 13, 2);
+  const int fst = N32_RT5 (insn);
+  const int ra = N32_RA5 (insn);
+  const int imm12s = N32_IMM12S (insn);
+  sim_fpu sf;
+
+  if (insn & (1 << 12))
+    {
+      nds32_fpr[fst].u = nds32_ld (sd, nds32_gpr[ra].u, 4);
+      nds32_fpr[ra].u += (imm12s << 2);
+    }
+  else
+    {
+      nds32_fpr[fst].u = nds32_ld (sd, nds32_gpr[ra].u + (imm12s << 2), 4);
+    }
+}
+
+static void
+nds32_decode32_swc (SIM_DESC sd, const uint32_t insn)
+{
+  const int cop = __GF (insn, 13, 2);
+  const int fst = N32_RT5 (insn);
+  const int ra = N32_RA5 (insn);
+  const int imm12s = N32_IMM12S (insn);
+
+  if (insn & (1 << 12))
+    {
+      nds32_st (sd, nds32_gpr[ra].u, 4, nds32_fpr[fst].u);
+      nds32_fpr[ra].u += (imm12s << 2);
+    }
+  else
+    {
+      nds32_st (sd, nds32_gpr[ra].u + (imm12s << 2), 4, nds32_fpr[fst].u);
+    }
+}
+
+static void
 nds32_decode32_cop (SIM_DESC sd, const uint32_t insn)
 {
+  const int cop = __GF (insn, 4, 2);
+  const int fst = N32_RT5 (insn);
+  const int fsa = N32_RA5 (insn);
+  const int fsb = N32_RB5 (insn);
+  sim_fpu sfst;
+  sim_fpu sfsa;
+  sim_fpu sfsb;
 
+  sim_fpu_32to (&sfsa, nds32_fpr[fsa].u);
+  sim_fpu_32to (&sfsb, nds32_fpr[fsb].u);
+
+  switch (insn & 0xF)
+    {
+    case 0x0:		/* FS1 */
+      switch (__GF (insn, 6, 4))
+	{
+	case 0xc:	/* fmuls */
+	  sim_fpu_mul (&sfst, &sfsa, &sfsb);
+	  break;
+	}
+      return;
+    case 0x1:		/* MFCP */
+    case 0x2:		/* FLS(.bi) */
+    case 0x3:		/* FLD(.bi) */
+    case 0x4:		/* FS2 */
+    case 0x8:		/* FD1 */
+    case 0x9:		/* MTCP */
+    case 0xa:		/* FSS(.bi) */
+    case 0xb:		/* FSD(.bi) */
+    case 0xc:		/* FD2 */
+	goto bad_op;
+    }
+
+  sim_fpu_to32 (&nds32_fpr[fst].u, &sfst);
+  return;
+
+bad_op:
+  nds32_bad_op (sd, *nds32_pc - 4, insn, "COP");
 }
 
 static void
@@ -1102,6 +1180,12 @@ nds32_decode32 (SIM_DESC sd, const uint32_t insn)
       else			/* lbi.gp */
 	nds32_gpr[rt].u = nds32_ld (sd, nds32_gpr[NG_GP].u + N32_IMMS (insn, 19), 1);
       return;
+    case 0x18:			/* LWC */
+      nds32_decode32_lwc (sd, insn);
+      return;
+    case 0x19:			/* SWC */
+      nds32_decode32_swc (sd, insn);
+      return;
     case 0x1c:			/* MEM */
       nds32_decode32_mem (sd, insn);
       return;
@@ -1189,6 +1273,7 @@ nds32_decode32 (SIM_DESC sd, const uint32_t insn)
       return;
     case 0x35:			/* COP */
       nds32_decode32_cop (sd, insn);
+      return;
     }
 
 bad_op:
