@@ -1053,6 +1053,9 @@ nds32_decode32_cop (SIM_DESC sd, const uint32_t insn)
   const int fst = N32_RT5 (insn);
   const int fsa = N32_RA5 (insn);
   const int fsb = N32_RB5 (insn);
+  const int rt = N32_RT5 (insn);
+  const int ra = N32_RA5 (insn);
+  const int rb = N32_RB5 (insn);
   sim_fpu sfst;
   sim_fpu sfsa;
   sim_fpu sfsb;
@@ -1068,21 +1071,37 @@ nds32_decode32_cop (SIM_DESC sd, const uint32_t insn)
 	case 0xc:	/* fmuls */
 	  sim_fpu_mul (&sfst, &sfsa, &sfsb);
 	  break;
+	default:
+	  goto bad_op;
 	}
-      break;
+      sim_fpu_to32 (&nds32_fpr[fst].u, &sfst);
+      return;
     case 0x1:		/* MFCP */
+      switch (__GF (insn, 6, 4))
+	{
+	case 0x0:	/* fmfsr */
+	  nds32_gpr[rt].u = nds32_fpr[fsa].u;
+	  return;
+	}
+      goto bad_op;
     case 0x2:		/* FLS(.bi) */
     case 0x3:		/* FLD(.bi) */
     case 0x4:		/* FS2 */
     case 0x8:		/* FD1 */
     case 0x9:		/* MTCP */
+      switch (__GF (insn, 6, 4))
+	{
+	case 0x0:	/* fmtsr */
+	  nds32_fpr[fst].u = nds32_gpr[ra].u;
+	  return;
+	}
+      goto bad_op;
     case 0xa:		/* FSS(.bi) */
     case 0xb:		/* FSD(.bi) */
     case 0xc:		/* FD2 */
 	goto bad_op;
     }
 
-  sim_fpu_to32 (&nds32_fpr[fst].u, &sfst);
   return;
 
 bad_op:
