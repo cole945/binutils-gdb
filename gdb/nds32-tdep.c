@@ -649,6 +649,7 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
       append_flags_type_flag (type, 2, "PERF_EXT2");
       append_flags_type_flag (type, 3, "COP_EXT");
       append_flags_type_flag (type, 4, "STR_EXT");
+      append_flags_type_flag (type, 5, "SAT_EXT");
       stype1 = type;
 
       type = nds32_init_enum (gdbarch, "builtin_type_nds32_cpuver_cpuid");
