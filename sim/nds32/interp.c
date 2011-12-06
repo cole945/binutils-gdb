@@ -36,15 +36,6 @@
 #include "opcode/nds32.h"
 #include "nds32-libc.h"
 
-#if 1
-#define SIM_IO_DPRINTF(sd, fmt, args...)   sim_io_printf (sd, fmt, ## args)
-#else
-#define SIM_IO_DPRINTF(...)            do { } while (0)
-#endif
-
-typedef unsigned long long ulongest_t;
-typedef signed long long longest_t;
-
 /* Debug flag to display instructions and registers.  */
 static int tracing = 0;
 static int lock_step = 0;
@@ -65,80 +56,12 @@ static SIM_OPEN_KIND sim_kind;
 static char *myname;
 static host_callback *callback;
 
-enum nds32_gdb_regnum
-{
-  NG_TA = 15,
-  NG_FP = 28,
-  NG_GP = 29,
-  NG_LP = 30,
-  NG_SP = 31,
-  NG_PC = 32,
-
-  NG_D0LO = 33,
-  NG_D0HI = 34,
-  NG_D1LO = 35,
-  NG_D1HI = 36,
-};
-
-enum nds32_cpu_regnum
-{
-  NC_D0LO = 0,
-  NC_D0HI = 1,
-  NC_D1LO = 2,
-  NC_D1HI = 3,
-  NC_PC = 4,
-};
-
-enum nds32_syscall_num
-{
-  SYS_exit = 1,
-  SYS_open = 2,
-  SYS_close = 3,
-  SYS_read = 4,
-  SYS_write = 5,
-  SYS_lseek = 6,
-  SYS_unlink = 7,
-  SYS_getpid = 8,
-  SYS_kill = 9,
-  SYS_fstat = 10,
-/* ARGV support. */
-  SYS_argvlen = 12,
-  SYS_argv = 13,
-  SYS_chdir = 14,
-  SYS_stat = 15,
-  SYS_chmod = 16,
-  SYS_utime = 17,
-  SYS_time = 18,
-  SYS_gettimeofday = 19,
-  SYS_times = 20,
-  SYS_argc = 172,
-  SYS_argnlen = 173,
-  SYS_argn = 174,
-/* RedBoot. */
-  SYS_rename = 3001,
-  SYS_isatty = 3002,
-  SYS_system = 3003,
-/* NDS32 specific */
-  SYS_errno = 6001,
-  SYS_getcmdline = 6002
-};
-
-/* Define some frequently used registers.  */
-#define SRIDX(M,m,e)  ((M << 7) | (m << 3) | e)
-#define UXIDX(g,u)    ((g << 5) | u)
-
 reg_t nds32_gpr[32];		/* 32 GPR */
 reg_t nds32_usr[32 * 32];	/* Group, Usr */
 reg_t nds32_sr[8 * 16 * 8];	/* Major, Minor, Ext */
 reg_t nds32_fpr[64];
 
 uint32_t *nds32_pc = (uint32_t *) (nds32_usr + UXIDX (0, 31));
-
-static inline int
-nds32_psw_be ()
-{
-  return nds32_sr[SRIDX (1, 0, 0)].u & (1 << 5);
-}
 
 static ulongest_t
 extract_unsigned_integer (unsigned char *addr, int len, int byte_order)
@@ -358,7 +281,7 @@ nds32_syscall (SIM_DESC sd, int swid)
 }
 
 
-static longest_t
+longest_t
 nds32_ld_sext (SIM_DESC sd, SIM_ADDR addr, int size)
 {
   int r;
@@ -380,7 +303,7 @@ nds32_ld_sext (SIM_DESC sd, SIM_ADDR addr, int size)
   return val;
 }
 
-static ulongest_t
+ulongest_t
 nds32_ld (SIM_DESC sd, SIM_ADDR addr, int size)
 {
   int r;
@@ -401,7 +324,7 @@ nds32_ld (SIM_DESC sd, SIM_ADDR addr, int size)
   return val;
 }
 
-static void
+void
 nds32_st (SIM_DESC sd, SIM_ADDR addr, int size, ulongest_t val)
 {
   int r;
@@ -774,6 +697,9 @@ nds32_decode32_alu2 (SIM_DESC sd, const uint32_t insn)
     case 0x9:			/* bclr */
       nds32_gpr[rt].u = nds32_gpr[ra].u & ~(1 << imm5u);
       return;
+    case 0xb:			/* btst */
+      nds32_gpr[rt].u = (nds32_gpr[ra].u & (1 << imm5u)) != 0;
+      return;
     case 0x24:			/* mul */
       nds32_gpr[rt].u = nds32_gpr[ra].u * nds32_gpr[rb].u;
       return;
@@ -1005,162 +931,6 @@ nds32_decode32_misc (SIM_DESC sd, const uint32_t insn)
 
 bad_op:
   nds32_bad_op (sd, *nds32_pc - 4, insn, "MISC");
-}
-
-static void
-nds32_decode32_lwc (SIM_DESC sd, const uint32_t insn)
-{
-  const int cop = __GF (insn, 13, 2);
-  const int fst = N32_RT5 (insn);
-  const int ra = N32_RA5 (insn);
-  const int imm12s = N32_IMM12S (insn);
-  sim_fpu sf;
-
-  if (insn & (1 << 12))
-    {
-      nds32_fpr[fst].u = nds32_ld (sd, nds32_gpr[ra].u, 4);
-      nds32_gpr[ra].u += (imm12s << 2);
-    }
-  else
-    {
-      nds32_fpr[fst].u = nds32_ld (sd, nds32_gpr[ra].u + (imm12s << 2), 4);
-    }
-}
-
-static void
-nds32_decode32_swc (SIM_DESC sd, const uint32_t insn)
-{
-  const int cop = __GF (insn, 13, 2);
-  const int fst = N32_RT5 (insn);
-  const int ra = N32_RA5 (insn);
-  const int imm12s = N32_IMM12S (insn);
-
-  if (insn & (1 << 12))	/* fssi.bi */
-    {
-      nds32_st (sd, nds32_gpr[ra].u, 4, nds32_fpr[fst].u);
-      nds32_gpr[ra].u += (imm12s << 2);
-    }
-  else	/* fssi */
-    {
-      nds32_st (sd, nds32_gpr[ra].u + (imm12s << 2), 4, nds32_fpr[fst].u);
-    }
-}
-
-static void
-nds32_decode32_ldc (SIM_DESC sd, const uint32_t insn)
-{
-  const int cop = __GF (insn, 13, 2);
-  const int fdt = N32_RT5 (insn) << 1;
-  const int ra = N32_RA5 (insn);
-  const int imm12s = N32_IMM12S (insn);
-  uint64_t d;
-
-  if (insn & (1 << 12)) /* fldi.bi */
-    {
-      d = nds32_ld (sd, nds32_gpr[ra].u, 8);
-      nds32_gpr[ra].u += (imm12s << 2);
-    }
-  else	/* fldi */
-    {
-      d = nds32_ld (sd, nds32_gpr[ra].u + (imm12s << 2), 8);
-    }
-
-  nds32_fpr[fdt + 1].u = d & 0xFFFFFFFF;
-  nds32_fpr[fdt].u = (d >> 32) & 0xFFFFFFFF ;
-}
-
-static void
-nds32_decode32_sdc (SIM_DESC sd, const uint32_t insn)
-{
-  const int cop = __GF (insn, 13, 2);
-  const int fdt = N32_RT5 (insn) << 1;
-  const int ra = N32_RA5 (insn);
-  const int imm12s = N32_IMM12S (insn);
-  uint64_t d;
-
-  d = ((uint64_t)nds32_fpr[fdt].u << 32) | (uint64_t)nds32_fpr[fdt + 1].u;
-
-  if (insn & (1 << 12))
-    {
-      nds32_st (sd, nds32_gpr[ra].u, 8, d);
-      nds32_gpr[ra].u += (imm12s << 2);
-    }
-  else
-    {
-      nds32_st (sd, nds32_gpr[ra].u + (imm12s << 2), 8, d);
-    }
-}
-
-static void
-nds32_decode32_cop (SIM_DESC sd, const uint32_t insn)
-{
-  const int cop = __GF (insn, 4, 2);
-  const int fst = N32_RT5 (insn);
-  const int fsa = N32_RA5 (insn);
-  const int fsb = N32_RB5 (insn);
-  int rt = N32_RT5 (insn);
-  const int ra = N32_RA5 (insn);
-  const int rb = N32_RB5 (insn);
-  const int fdt = N32_RT5 (insn) << 1;
-  const int fda = N32_RA5 (insn) << 1;
-  const int fdb = N32_RB5 (insn) << 1;
-  uint64_t d;
-  sim_fpu sfst;
-  sim_fpu sfsa;
-  sim_fpu sfsb;
-
-  sim_fpu_32to (&sfsa, nds32_fpr[fsa].u);
-  sim_fpu_32to (&sfsb, nds32_fpr[fsb].u);
-
-  switch (insn & 0x3ff)
-    {
-    case 0x1:		/* fmfsr */
-      nds32_gpr[rt].u = nds32_fpr[fsa].u;
-      return;
-    case 0x5:		/* fmtsr */
-      nds32_fpr[fst].u = nds32_gpr[ra].u;
-      return;
-    case 0x41:		/* fmfdr */
-      rt &= ~1;
-      if (nds32_psw_be ())
-	{
-	  nds32_gpr[rt] = nds32_fpr[fda];
-	  nds32_gpr[rt + 1] = nds32_fpr[fda + 1];
-	}
-      else
-	{
-	  nds32_gpr[rt + 1] = nds32_fpr[fda];
-	  nds32_gpr[rt] = nds32_fpr[fda + 1];
-	}
-      return;
-    case 0x49:		/* fmtdr */
-      rt &= ~1;
-      if (nds32_psw_be ())
-	{
-	  nds32_fpr[fdt] = nds32_gpr[ra];
-	  nds32_fpr[fdt + 1] = nds32_gpr[ra + 1];
-	}
-      else
-	{
-	  nds32_fpr[fdt + 1] = nds32_gpr[ra];
-	  nds32_fpr[fdt] = nds32_gpr[ra + 1];
-	}
-      return;
-      return;
-    case 0x300:		/* fmuls */
-      sim_fpu_mul (&sfst, &sfsa, &sfsb);
-      sim_fpu_to32 ((unsigned32*)(nds32_fpr + fst), &sfst);
-      return;
-    case 0x3c0:		/* fs2d */
-      sim_fpu_32to (&sfst, nds32_fpr[fsa].u);
-      sim_fpu_to64 (&d, &sfst);
-      nds32_fpr[fdt].u = (d >> 32) & 0xFFFFFFFF;
-      nds32_fpr[fdt + 1].u = d & 0xFFFFFFFF;
-      return;
-    }
-
-bad_op:
-  nds32_bad_op (sd, *nds32_pc - 4, insn, "COP");
 }
 
 static void
