@@ -423,18 +423,18 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
   /* ir14 - Interruption Masking Register */
   if (strcmp (reg_name, "ir14") == 0)
     {
-      type = arch_flags_type (gdbarch, "builtin_type_nds32_int_mask", 4);
-      append_flags_type_flag (type, 0, "H0IM");
-      append_flags_type_flag (type, 1, "H1IM");
-      append_flags_type_flag (type, 2, "H2IM");
-      append_flags_type_flag (type, 3, "H3IM");
-      append_flags_type_flag (type, 4, "H4IM");
-      append_flags_type_flag (type, 5, "H5IM");
+      type = nds32_init_type (gdbarch, "builtin_type_nds32_int_mask", 4);
+      nds32_append_flag (type, 0, "H0IM");
+      nds32_append_flag (type, 1, "H1IM");
+      nds32_append_flag (type, 2, "H2IM");
+      nds32_append_flag (type, 3, "H3IM");
+      nds32_append_flag (type, 4, "H4IM");
+      nds32_append_flag (type, 5, "H5IM");
       nds32_append_field (type, bt->builtin_uint16, 6, 15, "H15IM_H6IM");
-      append_flags_type_flag (type, 16, "SIM");
-      append_flags_type_flag (type, 29, "ALZ");
-      append_flags_type_flag (type, 30, "IDIVZE");
-      append_flags_type_flag (type, 31, "DSSIM");
+      nds32_append_flag (type, 16, "SIM");
+      nds32_append_flag (type, 29, "ALZ");
+      nds32_append_flag (type, 30, "IDIVZE");
+      nds32_append_flag (type, 31, "DSSIM");
       nds32_list_insert (&tdep->nds32_types, reg_name, type);
       return type;
     }
