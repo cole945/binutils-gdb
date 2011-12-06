@@ -1069,7 +1069,7 @@ nds32_decode32_cop (SIM_DESC sd, const uint32_t insn)
 	  sim_fpu_mul (&sfst, &sfsa, &sfsb);
 	  break;
 	}
-      return;
+      break;
     case 0x1:		/* MFCP */
     case 0x2:		/* FLS(.bi) */
     case 0x3:		/* FLD(.bi) */
