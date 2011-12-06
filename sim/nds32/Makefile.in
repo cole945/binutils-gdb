@@ -23,6 +23,7 @@ SIM_RUN_OBJS = nrun.o
 SIM_OBJS = \
 	$(SIM_NEW_COMMON_OBJS) \
 	interp.o \
+	nds32-cop0.o \
 	sim-cpu.o \
 	sim-engine.o \
 	sim-hrw.o \

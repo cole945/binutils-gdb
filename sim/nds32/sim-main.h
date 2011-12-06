@@ -21,6 +21,8 @@
 #ifndef _NDS32_MAIN_SIM_H_
 #define _NDS32_MAIN_SIM_H_
 
+#include <stdint.h>
+
 #include "sim-basics.h"
 #include "sim-signal.h"
 #include "nds32-sim.h"
