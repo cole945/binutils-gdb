@@ -373,7 +373,7 @@ nds32_ld_sext (SIM_DESC sd, SIM_ADDR addr, int size)
 
   if (r != size)
     {
-      sim_io_eprintf (sd, "access violation at 0x%x\n", addr);
+      sim_io_eprintf (sd, "access violation at 0x%x. pc=0x%x\n", addr, *nds32_pc);
       cpu_exception = sim_stopped;
     }
 
@@ -394,7 +394,7 @@ nds32_ld (SIM_DESC sd, SIM_ADDR addr, int size)
 
   if (r != size)
     {
-      sim_io_eprintf (sd, "access violation at 0x%x\n", addr);
+      sim_io_eprintf (sd, "access violation at 0x%x. pc=0x%x\n", addr, *nds32_pc);
       cpu_exception = sim_stopped;
     }
 
@@ -414,7 +414,7 @@ nds32_st (SIM_DESC sd, SIM_ADDR addr, int size, ulongest_t val)
 
   if (r != size)
     {
-      sim_io_eprintf (sd, "access violation at 0x%x\n", addr);
+      sim_io_eprintf (sd, "access violation at 0x%x. pc=0x%x\n", addr, *nds32_pc);
       cpu_exception = sim_stopped;
     }
 
@@ -1019,7 +1019,7 @@ nds32_decode32_lwc (SIM_DESC sd, const uint32_t insn)
   if (insn & (1 << 12))
     {
       nds32_fpr[fst].u = nds32_ld (sd, nds32_gpr[ra].u, 4);
-      nds32_fpr[ra].u += (imm12s << 2);
+      nds32_gpr[ra].u += (imm12s << 2);
     }
   else
     {
@@ -1035,14 +1035,59 @@ nds32_decode32_swc (SIM_DESC sd, const uint32_t insn)
   const int ra = N32_RA5 (insn);
   const int imm12s = N32_IMM12S (insn);
 
-  if (insn & (1 << 12))
+  if (insn & (1 << 12))	/* fssi.bi */
     {
       nds32_st (sd, nds32_gpr[ra].u, 4, nds32_fpr[fst].u);
-      nds32_fpr[ra].u += (imm12s << 2);
+      nds32_gpr[ra].u += (imm12s << 2);
+    }
+  else	/* fssi */
+    {
+      nds32_st (sd, nds32_gpr[ra].u + (imm12s << 2), 4, nds32_fpr[fst].u);
+    }
+}
+
+static void
+nds32_decode32_ldc (SIM_DESC sd, const uint32_t insn)
+{
+  const int cop = __GF (insn, 13, 2);
+  const int fdt = N32_RT5 (insn) << 1;
+  const int ra = N32_RA5 (insn);
+  const int imm12s = N32_IMM12S (insn);
+  uint64_t d;
+
+  if (insn & (1 << 12)) /* fldi.bi */
+    {
+      d = nds32_ld (sd, nds32_gpr[ra].u, 8);
+      nds32_gpr[ra].u += (imm12s << 2);
+    }
+  else	/* fldi */
+    {
+      d = nds32_ld (sd, nds32_gpr[ra].u + (imm12s << 2), 8);
+    }
+
+  nds32_fpr[fdt + 1].u = d & 0xFFFFFFFF;
+  nds32_fpr[fdt].u = (d >> 32) & 0xFFFFFFFF ;
+}
+
+static void
+nds32_decode32_sdc (SIM_DESC sd, const uint32_t insn)
+{
+  const int cop = __GF (insn, 13, 2);
+  const int fdt = N32_RT5 (insn) << 1;
+  const int ra = N32_RA5 (insn);
+  const int imm12s = N32_IMM12S (insn);
+  uint64_t d;
+
+  d = ((uint64_t)nds32_fpr[fdt].u << 32) | (uint64_t)nds32_fpr[fdt + 1].u;
+
+  if (insn & (1 << 12))
+    {
+      nds32_st (sd, nds32_gpr[ra].u, 8, d);
+      nds32_gpr[ra].u += (imm12s << 2);
     }
   else
     {
-      nds32_st (sd, nds32_gpr[ra].u + (imm12s << 2), 4, nds32_fpr[fst].u);
+      nds32_st (sd, nds32_gpr[ra].u + (imm12s << 2), 8, d);
     }
 }
 
@@ -1053,9 +1098,13 @@ nds32_decode32_cop (SIM_DESC sd, const uint32_t insn)
   const int fst = N32_RT5 (insn);
   const int fsa = N32_RA5 (insn);
   const int fsb = N32_RB5 (insn);
-  const int rt = N32_RT5 (insn);
+  int rt = N32_RT5 (insn);
   const int ra = N32_RA5 (insn);
   const int rb = N32_RB5 (insn);
+  const int fdt = N32_RT5 (insn) << 1;
+  const int fda = N32_RA5 (insn) << 1;
+  const int fdb = N32_RB5 (insn) << 1;
+  uint64_t d;
   sim_fpu sfst;
   sim_fpu sfsa;
   sim_fpu sfsb;
@@ -1063,46 +1112,52 @@ nds32_decode32_cop (SIM_DESC sd, const uint32_t insn)
   sim_fpu_32to (&sfsa, nds32_fpr[fsa].u);
   sim_fpu_32to (&sfsb, nds32_fpr[fsb].u);
 
-  switch (insn & 0xF)
+  switch (insn & 0x3ff)
     {
-    case 0x0:		/* FS1 */
-      switch (__GF (insn, 6, 4))
-	{
-	case 0xc:	/* fmuls */
-	  sim_fpu_mul (&sfst, &sfsa, &sfsb);
-	  break;
-	default:
-	  goto bad_op;
-	}
-      sim_fpu_to32 (&nds32_fpr[fst].u, &sfst);
+    case 0x1:		/* fmfsr */
+      nds32_gpr[rt].u = nds32_fpr[fsa].u;
       return;
-    case 0x1:		/* MFCP */
-      switch (__GF (insn, 6, 4))
+    case 0x5:		/* fmtsr */
+      nds32_fpr[fst].u = nds32_gpr[ra].u;
+      return;
+    case 0x41:		/* fmfdr */
+      rt &= ~1;
+      if (nds32_psw_be ())
 	{
-	case 0x0:	/* fmfsr */
-	  nds32_gpr[rt].u = nds32_fpr[fsa].u;
-	  return;
+	  nds32_gpr[rt] = nds32_fpr[fda];
+	  nds32_gpr[rt + 1] = nds32_fpr[fda + 1];
 	}
-      goto bad_op;
-    case 0x2:		/* FLS(.bi) */
-    case 0x3:		/* FLD(.bi) */
-    case 0x4:		/* FS2 */
-    case 0x8:		/* FD1 */
-    case 0x9:		/* MTCP */
-      switch (__GF (insn, 6, 4))
+      else
 	{
-	case 0x0:	/* fmtsr */
-	  nds32_fpr[fst].u = nds32_gpr[ra].u;
-	  return;
+	  nds32_gpr[rt + 1] = nds32_fpr[fda];
+	  nds32_gpr[rt] = nds32_fpr[fda + 1];
 	}
-      goto bad_op;
-    case 0xa:		/* FSS(.bi) */
-    case 0xb:		/* FSD(.bi) */
-    case 0xc:		/* FD2 */
-	goto bad_op;
+      return;
+    case 0x49:		/* fmtdr */
+      rt &= ~1;
+      if (nds32_psw_be ())
+	{
+	  nds32_fpr[fdt] = nds32_gpr[ra];
+	  nds32_fpr[fdt + 1] = nds32_gpr[ra + 1];
+	}
+      else
+	{
+	  nds32_fpr[fdt + 1] = nds32_gpr[ra];
+	  nds32_fpr[fdt] = nds32_gpr[ra + 1];
+	}
+      return;
+      return;
+    case 0x300:		/* fmuls */
+      sim_fpu_mul (&sfst, &sfsa, &sfsb);
+      sim_fpu_to32 ((unsigned32*)(nds32_fpr + fst), &sfst);
+      return;
+    case 0x3c0:		/* fs2d */
+      sim_fpu_32to (&sfst, nds32_fpr[fsa].u);
+      sim_fpu_to64 (&d, &sfst);
+      nds32_fpr[fdt].u = (d >> 32) & 0xFFFFFFFF;
+      nds32_fpr[fdt + 1].u = d & 0xFFFFFFFF;
+      return;
     }
-
-  return;
 
 bad_op:
   nds32_bad_op (sd, *nds32_pc - 4, insn, "COP");
@@ -1204,6 +1259,12 @@ nds32_decode32 (SIM_DESC sd, const uint32_t insn)
       return;
     case 0x19:			/* SWC */
       nds32_decode32_swc (sd, insn);
+      return;
+    case 0x1a:			/* LDC */
+      nds32_decode32_ldc (sd, insn);
+      return;
+    case 0x1b:			/* SDC */
+      nds32_decode32_sdc (sd, insn);
       return;
     case 0x1c:			/* MEM */
       nds32_decode32_mem (sd, insn);
