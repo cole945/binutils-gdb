@@ -2507,7 +2507,7 @@ nds32_validate_tdesc_p (struct gdbarch_tdep *tdep,
 
 
   feature_system = tdesc_find_feature (tdesc, "org.gnu.gdb.nds32.system");
-  if (feature_core)
+  if (feature_system)
     {
 	tdep->nds32_psw = tdesc_numbered_register (feature_system, tdesc_data,
 						   NDS32_PSW_REGNUM, "ir0");
