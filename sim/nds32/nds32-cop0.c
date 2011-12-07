@@ -137,6 +137,7 @@ nds32_decode32_sdc (SIM_DESC sd, const uint32_t insn)
 void
 nds32_decode32_cop (SIM_DESC sd, const uint32_t insn)
 {
+  const int sv = __GF (insn, 8, 2);
   const int cop = __GF (insn, 4, 2);
   const int fst = N32_RT5 (insn);
   const int fsa = N32_RA5 (insn);
@@ -261,6 +262,16 @@ nds32_decode32_cop (SIM_DESC sd, const uint32_t insn)
       return;
     case 0x10c:		/* fcmpled */
     case 0x18c:		/* fcmpund */
+	goto bad_op;
+    }
+
+  switch (insn & 0xFF)
+    {
+    case 0x3:		/* fld */
+      d = nds32_ld (sd, nds32_gpr[ra].u + (nds32_gpr[rb].u << sv), 8);
+      nds32_fd_from_64 (sd, fdt_ >> 1, d);
+      return;
+    case 0x83:		/* fld.bi */
 	goto bad_op;
     }
 
