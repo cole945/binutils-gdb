@@ -54,6 +54,7 @@
 #include "elf/nds32.h"
 #include "opcode/nds32.h"
 #include "features/nds32.c"
+#include "features/nds32-sim.c"
 
 /* Simple macro for chop LSB immediate bits from an instruction.  */
 #define CHOP_BITS(insn, n)	(insn & ~__MASK (n))
@@ -381,7 +382,6 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
       nds32_append_flag (type, 13, "AEN");
       nds32_append_flag (type, 14, "WBNA");
       nds32_append_flag (type, 15, "IFCON");
-      nds32_append_field (type, bt->builtin_uint8, 16, 18, "CPL");
       nds32_list_insert (&tdep->nds32_types, "ir0", type);
       nds32_list_insert (&tdep->nds32_types, "ir1", type);
       nds32_list_insert (&tdep->nds32_types, "ir2", type);
@@ -423,18 +423,17 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
   /* ir14 - Interruption Masking Register */
   if (strcmp (reg_name, "ir14") == 0)
     {
-      type = nds32_init_type (gdbarch, "builtin_type_nds32_int_mask", 4);
-      nds32_append_flag (type, 0, "H0IM");
-      nds32_append_flag (type, 1, "H1IM");
-      nds32_append_flag (type, 2, "H2IM");
-      nds32_append_flag (type, 3, "H3IM");
-      nds32_append_flag (type, 4, "H4IM");
-      nds32_append_flag (type, 5, "H5IM");
-      nds32_append_field (type, bt->builtin_uint16, 6, 15, "H15IM_H6IM");
-      nds32_append_flag (type, 16, "SIM");
-      nds32_append_flag (type, 29, "ALZ");
-      nds32_append_flag (type, 30, "IDIVZE");
-      nds32_append_flag (type, 31, "DSSIM");
+      type = arch_flags_type (gdbarch, "builtin_type_nds32_int_mask", 4);
+      append_flags_type_flag (type, 0, "H0IM");
+      append_flags_type_flag (type, 1, "H1IM");
+      append_flags_type_flag (type, 2, "H2IM");
+      append_flags_type_flag (type, 3, "H3IM");
+      append_flags_type_flag (type, 4, "H4IM");
+      append_flags_type_flag (type, 5, "H5IM");
+      append_flags_type_flag (type, 16, "SIM");
+      append_flags_type_flag (type, 29, "ALZ");
+      append_flags_type_flag (type, 30, "IDIVZE");
+      append_flags_type_flag (type, 31, "DSSIM");
       nds32_list_insert (&tdep->nds32_types, reg_name, type);
       return type;
     }
@@ -649,7 +648,6 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
       append_flags_type_flag (type, 2, "PERF_EXT2");
       append_flags_type_flag (type, 3, "COP_EXT");
       append_flags_type_flag (type, 4, "STR_EXT");
-      append_flags_type_flag (type, 5, "SAT_EXT");
       stype1 = type;
 
       type = nds32_init_enum (gdbarch, "builtin_type_nds32_cpuver_cpuid");
@@ -691,8 +689,6 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
       nds32_append_flag (type, 18, "IMR");
       nds32_append_flag (type, 19, "IFC");
       nds32_append_flag (type, 20, "MCU");
-      nds32_append_flag (type, 24, "RM_SWID");
-      nds32_append_field (type, bt->builtin_uint8, 21, 23, "SHADOW");
       nds32_list_insert (&tdep->nds32_types, reg_name, type);
       return type;
     }
@@ -2651,6 +2647,8 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   if (!tdesc_has_registers (info.target_desc))
     tdesc = tdesc_nds32;
+  else if (strcmp (target_shortname, "sim") == 0)
+    tdesc = tdesc_nds32_sim;
   else
     tdesc = info.target_desc;
 
@@ -2701,10 +2699,12 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   }
   tdesc = tdep->tdesc;
 
-  tdesc_use_registers (gdbarch, tdesc, tdesc_data);
-
   if (tdesc == tdesc_nds32)
       nds32_init_pseudo_registers (gdbarch);
+  else
+      set_gdbarch_num_regs (gdbarch, NDS32_FD0_REGNUM + 32);
+
+  tdesc_use_registers (gdbarch, tdesc, tdesc_data);
 
   /* If there is already a candidate, use it.  */
   for (best_arch = gdbarch_list_lookup_by_info (arches, &info);
@@ -2869,7 +2869,7 @@ nds32_config_int (const char *str, int def)
 static void
 nds32_load_config (struct nds32_gdb_config *config)
 {
-  config->use_cfi = nds32_config_int ("USE_CFI", 0); /* relax make cfi borken. */
+  config->use_cfi = nds32_config_int ("USE_CFI", 1);
   config->use_ifcret = nds32_config_int ("USE_IFC_RET", 1);
   config->use_fp = nds32_config_int ("USE_FP", 1);
   config->use_abi = nds32_config_int ("USE_ABI", NDS32_ABI_AUTO);
@@ -2909,5 +2909,6 @@ _initialize_nds32_tdep (void)
 
   nds32_init_reggroups ();
   initialize_tdesc_nds32 ();
+  initialize_tdesc_nds32_sim ();
   register_remote_support_xml ("nds32");
 }

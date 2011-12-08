@@ -142,7 +142,7 @@ nds32_decode32_cop (SIM_DESC sd, const uint32_t insn)
   const int fst = N32_RT5 (insn);
   const int fsa = N32_RA5 (insn);
   const int fsb = N32_RB5 (insn);
-  int rt = N32_RT5 (insn);
+  const int rt = N32_RT5 (insn);
   const int ra = N32_RA5 (insn);
   const int rb = N32_RB5 (insn);
   const int fdt_ = N32_RT5 (insn) << 1;	/* I use fdX_ as shifted fdX. */
@@ -188,17 +188,19 @@ nds32_decode32_cop (SIM_DESC sd, const uint32_t insn)
       nds32_fpr[fst].u = nds32_gpr[ra].u;
       return;
     case 0x41:		/* fmfdr */
-      rt &= ~1;
-      if (nds32_psw_be ())
-	{
-	  nds32_gpr[rt] = nds32_fpr[fda_];
-	  nds32_gpr[rt + 1] = nds32_fpr[fda_ + 1];
-	}
-      else
-	{
-	  nds32_gpr[rt + 1] = nds32_fpr[fda_];
-	  nds32_gpr[rt] = nds32_fpr[fda_ + 1];
-	}
+      {
+	int rt_ = rt & ~1;
+	if (nds32_psw_be ())
+	  {
+	    nds32_gpr[rt_] = nds32_fpr[fda_ + 1];
+	    nds32_gpr[rt_ + 1] = nds32_fpr[fda_];
+	  }
+	else
+	  {
+	    nds32_gpr[rt_] = nds32_fpr[fda_];
+	    nds32_gpr[rt_ + 1] = nds32_fpr[fda_ + 1];
+	  }
+      }
       return;
     case 0x48:		/* fsubd */
       sim_fpu_sub (&sft, &sfa, &sfb);
@@ -206,21 +208,24 @@ nds32_decode32_cop (SIM_DESC sd, const uint32_t insn)
       nds32_fd_from_64 (sd, fdt_ >> 1, d);
       return;
     case 0x49:		/* fmtdr */
-      rt &= ~1;
-      if (nds32_psw_be ())
-	{
-	  nds32_fpr[fdt_] = nds32_gpr[ra];
-	  nds32_fpr[fdt_ + 1] = nds32_gpr[ra + 1];
-	}
-      else
-	{
-	  nds32_fpr[fdt_ + 1] = nds32_gpr[ra];
-	  nds32_fpr[fdt_] = nds32_gpr[ra + 1];
-	}
+      {
+	int rt_ = rt & ~1;
+	if (nds32_psw_be ())
+	  {
+	    nds32_fpr[fda_ + 1] = nds32_gpr[rt_];
+	    nds32_fpr[fda_] = nds32_gpr[rt_ + 1];
+	  }
+	else
+	  {
+	    nds32_fpr[fda_ + 1] = nds32_gpr[rt_ + 1];
+	    nds32_fpr[fda_] = nds32_gpr[rt_];
+	  }
+      }
       return;
     case 0xc8:		/* fcpysd */
       nds32_fpr[fdt_].u = nds32_fpr[fda_].u & 0x7fffffff;
       nds32_fpr[fdt_].u |= nds32_fpr[fdb_].u & 0x80000000;
+      nds32_fpr[fdt_ + 1].u = nds32_fpr[fda_ + 1].u;
       return;
     case 0x300:		/* fmuls */
       sim_fpu_mul (&sft, &sfa, &sfb);
