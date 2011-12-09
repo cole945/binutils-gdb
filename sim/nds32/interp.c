@@ -1150,6 +1150,34 @@ nds32_decode16 (SIM_DESC sd, uint32_t insn)
 
   *nds32_pc += 2;
 
+  switch (__GF (insn, 7, 8))
+    {
+    case 0xf8:			/* push25 */
+      {
+	uint32_t smw_adm = 0x3A6F83BC;
+	uint32_t res[] = { 6, 8, 10, 14 };
+	uint32_t re = __GF (insn, 5, 2);
+
+	smw_adm |= res[re] << 10;
+	nds32_decode32_lsmw (sd, smw_adm);
+	nds32_gpr[NG_SP].u -= (imm5u << 3);
+	if (re >= 1)
+	  nds32_gpr[8].u = (*nds32_pc - 2) & 0xFFFFFFFC;
+      }
+      return;
+    case 0xf9:			/* pop25 */
+      {
+	uint32_t lmw_bim = 0x3A6F8384;
+	uint32_t res[] = { 6, 8, 10, 14 };
+	uint32_t re = __GF (insn, 5, 2);
+
+	lmw_bim |= res[re] << 10;
+	nds32_gpr[NG_SP].u += (imm5u << 3);
+	nds32_decode32_lsmw (sd, lmw_bim);
+      }
+      return;
+    }
+
   switch (__GF (insn, 10, 5))
     {
     case 0x0:			/* mov55 */
