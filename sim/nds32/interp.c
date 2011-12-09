@@ -272,6 +272,8 @@ nds32_syscall (SIM_DESC sd, int swid)
       break;
     case SYS_gettimeofday:
       break;
+    case SYS_times:
+      break;
     default:
       nds32_bad_op (sd, *nds32_pc - 4, swid, "syscall");
       break;
@@ -619,13 +621,15 @@ nds32_decode32_alu1 (SIM_DESC sd, const uint32_t insn)
 	  nds32_gpr[rd].u = r;
       }
       return;
-
-#if 0
     case 0x18:			/* sva */
+      {
+	uint64_t s = (uint64_t)nds32_gpr[ra].u + (uint64_t)nds32_gpr[rb].u;
+	s = (s >> 31) & 0x3;
+	nds32_gpr[rt].u = (s == 0 || s == 3);
+      }
       return;
     case 0x19:			/* svs */
       return;
-#endif
     case 0x1a:			/* comvz */
       if (nds32_gpr[rb].u == 0)
 	nds32_gpr[rt].u = nds32_gpr[ra].u;
