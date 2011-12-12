@@ -2463,10 +2463,11 @@ static const struct frame_base nds32_frame_base =
 };
 
 static int
-nds32_validate_tdesc_p (struct gdbarch_tdep *tdep,
+nds32_validate_tdesc_p (struct gdbarch *gdbarch,
 			struct tdesc_arch_data *tdesc_data)
 {
   int i;
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   const struct tdesc_feature *feature_core;
   const struct tdesc_feature *feature_fpu, *feature_system;
   const struct target_desc *tdesc = tdep->tdesc;
@@ -2540,6 +2541,8 @@ nds32_validate_tdesc_p (struct gdbarch_tdep *tdep,
 	  if (valid_p)
 	    tdep->nds32_fpu_dp_num++;
 	}
+
+      set_gdbarch_num_regs (gdbarch, NDS32_FD0_REGNUM + 32);
     }
 
   return 1;
@@ -2647,8 +2650,6 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   if (!tdesc_has_registers (info.target_desc))
     tdesc = tdesc_nds32;
-  else if (strcmp (target_shortname, "sim") == 0)
-    tdesc = tdesc_nds32_sim;
   else
     tdesc = info.target_desc;
 
@@ -2690,7 +2691,7 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   /* Initialize osabi before tdesc_use_reg.  */
   info.tdep_info = (void *) tdesc_data;
   gdbarch_init_osabi (info, gdbarch);
-  if (!nds32_validate_tdesc_p (tdep, tdesc_data))
+  if (!nds32_validate_tdesc_p (gdbarch, tdesc_data))
   {
     tdesc_data_cleanup (tdesc_data);
     xfree (tdep);
@@ -2699,12 +2700,10 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   }
   tdesc = tdep->tdesc;
 
+  tdesc_use_registers (gdbarch, tdesc, tdesc_data);
+
   if (tdesc == tdesc_nds32)
       nds32_init_pseudo_registers (gdbarch);
-  else
-      set_gdbarch_num_regs (gdbarch, NDS32_FD0_REGNUM + 32);
-
-  tdesc_use_registers (gdbarch, tdesc, tdesc_data);
 
   /* If there is already a candidate, use it.  */
   for (best_arch = gdbarch_list_lookup_by_info (arches, &info);
