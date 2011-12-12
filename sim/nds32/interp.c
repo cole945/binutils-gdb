@@ -571,7 +571,7 @@ nds32_decode32_alu1 (SIM_DESC sd, const uint32_t insn)
       nds32_gpr[rt].s = nds32_gpr[ra].s >> imm5u;
       return;
     case 0xc:			/* sll */
-      nds32_gpr[rt].u = nds32_gpr[ra].u << nds32_gpr[rb].u;
+      nds32_gpr[rt].u = nds32_gpr[ra].u << (nds32_gpr[rb].u & 0x1f);
       return;
     case 0xd:			/* srl */
       nds32_gpr[rt].u = nds32_gpr[ra].u >> nds32_gpr[rb].u;
@@ -1097,7 +1097,7 @@ nds32_decode32 (SIM_DESC sd, const uint32_t insn)
 	    nds32_ld (sd, nds32_gpr[NG_GP].u + (N32_IMMS (insn, 17) << 2), 4);
 	  break;
 	case 7:			/* swi.gp */
-	  nds32_st (sd, nds32_gpr[NG_GP].u + (N32_IMMS (insn, 17) << 2), 2, nds32_gpr[rt].u);
+	  nds32_st (sd, nds32_gpr[NG_GP].u + (N32_IMMS (insn, 17) << 2), 4, nds32_gpr[rt].u);
 	  break;
 	}
       return;
