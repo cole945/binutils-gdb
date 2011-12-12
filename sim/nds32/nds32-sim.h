@@ -51,6 +51,9 @@ enum nds32_gdb_regnum
   NG_D0HI = 34,
   NG_D1LO = 35,
   NG_D1HI = 36,
+
+  NG_FS0 = 0x100 + 2,
+  NG_FD0 = NG_FS0 + 32,
 };
 
 enum nds32_cpu_regnum
