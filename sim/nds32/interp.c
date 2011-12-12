@@ -1470,8 +1470,6 @@ sim_store_register (SIM_DESC sd, int rn, unsigned char *memory, int length)
     case NG_D1HI:
       nds32_usr[NC_D1HI].u = extract_unsigned_integer_by_psw (memory, length);
       return 4;
-    default:
-      return 0;
     }
 
   /* System registers.  */
@@ -1506,8 +1504,22 @@ sim_fetch_register (SIM_DESC sd, int rn, unsigned char *memory, int length)
     case NG_D1HI:
       store_unsigned_integer_by_psw (memory, length, nds32_usr[NC_D1HI].u);
       return 4;
-    default:
-      return 0;
+    }
+
+  if (rn >= NG_FS0 && rn < NG_FS0 + 64)
+    {
+      int fr = rn - NG_FS0;
+      if (fr < 32)
+	{
+          store_unsigned_integer_by_psw (memory, length, nds32_fpr[fr].u);
+	}
+      else
+	{
+	  uint64_t d;
+	  fr = (fr - 32) << 1;
+	  d = ((uint64_t)nds32_fpr[fr].u << 32) | (uint64_t)nds32_fpr[fr + 1].u;
+	  store_unsigned_integer_by_psw (memory, length, d);
+	}
     }
 
   /* System registers.  */
