@@ -716,6 +716,9 @@ nds32_decode32_alu2 (SIM_DESC sd, const uint32_t insn)
     case 0x9:			/* bclr */
       nds32_gpr[rt].u = nds32_gpr[ra].u & ~(1 << imm5u);
       return;
+    case 0xa:			/* btgl */
+      nds32_gpr[rt].u = nds32_gpr[ra].u ^ (1 << imm5u);
+      return;
     case 0xb:			/* btst */
       nds32_gpr[rt].u = (nds32_gpr[ra].u & (1 << imm5u)) != 0;
       return;
@@ -745,19 +748,49 @@ nds32_decode32_alu2 (SIM_DESC sd, const uint32_t insn)
       }
       return;
     case 0x2a:			/* madds64 */
-	goto bad_op;
+      {
+	int64_t mr = (int64_t) nds32_gpr[ra].s * (int64_t) nds32_gpr[rb].s;
+	int64_t d = ((int64_t) nds32_usr[dt + 1].s << 32)
+		    | ((int64_t) nds32_usr[dt].  s & 0xFFFFFFFF);
+
+	d += mr;
+	nds32_usr[dt].u = d & 0xFFFFFFFF;
+	nds32_usr[dt + 1].u = (d >> 32) & 0xFFFFFFFF;
+      }
+      return;
     case 0x2b:			/* madd64 */
       {
-	uint64_t d = (uint64_t) nds32_gpr[ra].u * (uint64_t) nds32_gpr[rb].u;
+	uint64_t mr = (uint64_t) nds32_gpr[ra].u * (uint64_t) nds32_gpr[rb].u;
+	uint64_t d = ((uint64_t) nds32_usr[dt + 1].u << 32)
+		     | ((uint64_t) nds32_usr[dt].u & 0xFFFFFFFF);
 
-	d += nds32_usr[dt].u;
-	d += (uint64_t)nds32_usr[dt + 1].u << 32;
+	d += mr;
 	nds32_usr[dt].u = d & 0xFFFFFFFF;
 	nds32_usr[dt + 1].u = (d >> 32) & 0xFFFFFFFF;
       }
       return;
     case 0x2c:			/* msubs64 */
+      {
+	int64_t mr = (int64_t) nds32_gpr[ra].s * (int64_t) nds32_gpr[rb].s;
+	int64_t d = ((int64_t) nds32_usr[dt + 1].s << 32)
+		    | ((int64_t) nds32_usr[dt].s & 0xFFFFFFFF);
+
+	d -= mr;
+	nds32_usr[dt].u = d & 0xFFFFFFFF;
+	nds32_usr[dt + 1].u = (d >> 32) & 0xFFFFFFFF;
+      }
+      return;
     case 0x2d:			/* msub64 */
+      {
+	uint64_t mr = (uint64_t) nds32_gpr[ra].u * (uint64_t) nds32_gpr[rb].u;
+	uint64_t d = ((uint64_t) nds32_usr[dt + 1].u << 32)
+		     | ((uint64_t) nds32_usr[dt].u & 0xFFFFFFFF);
+
+	d -= mr;
+	nds32_usr[dt].u = d & 0xFFFFFFFF;
+	nds32_usr[dt + 1].u = (d >> 32) & 0xFFFFFFFF;
+      }
+      return;
     case 0x2e:			/* divs */
       {
 	int32_t q;
@@ -781,9 +814,14 @@ nds32_decode32_alu2 (SIM_DESC sd, const uint32_t insn)
       }
       return;
     case 0x31:			/* mult32 */
+      nds32_usr[dt].s = nds32_gpr[ra].s * nds32_gpr[ra].s;
+      return;
     case 0x33:			/* madd32 */
+      nds32_usr[dt].s += nds32_gpr[ra].s * nds32_gpr[ra].s;
+      return;
     case 0x35:			/* msub32 */
-	goto bad_op;
+      nds32_usr[dt].s -= nds32_gpr[ra].s * nds32_gpr[ra].s;
+      return;
     case 0x68:			/* mulsr64 */
       {
 	int64_t r = (int64_t) nds32_gpr[ra].s * (int64_t) nds32_gpr[rb].s;
@@ -1639,7 +1677,7 @@ sim_create_inferior (SIM_DESC sd, struct bfd *prog_bfd, char **argv,
   memset (sd->cmdline, 0, sizeof (sd->cmdline));
   mlen = sizeof (sd->cmdline) - 1;
   len = 0;
-  for (i = 0; argv[i]; i++)
+  for (i = 0; argv && argv[i]; i++)
     {
       int l = strlen (argv[i]) + 1;
       if (l + len >= mlen)
