@@ -814,13 +814,13 @@ nds32_decode32_alu2 (SIM_DESC sd, const uint32_t insn)
       }
       return;
     case 0x31:			/* mult32 */
-      nds32_usr[dt].s = nds32_gpr[ra].s * nds32_gpr[ra].s;
+      nds32_usr[dt].s = nds32_gpr[ra].s * nds32_gpr[rb].s;
       return;
     case 0x33:			/* madd32 */
-      nds32_usr[dt].s += nds32_gpr[ra].s * nds32_gpr[ra].s;
+      nds32_usr[dt].s += nds32_gpr[ra].s * nds32_gpr[rb].s;
       return;
     case 0x35:			/* msub32 */
-      nds32_usr[dt].s -= nds32_gpr[ra].s * nds32_gpr[ra].s;
+      nds32_usr[dt].s -= nds32_gpr[ra].s * nds32_gpr[rb].s;
       return;
     case 0x68:			/* mulsr64 */
       {
