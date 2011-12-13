@@ -244,14 +244,16 @@ nds32_decode32_cop (SIM_DESC sd, const uint32_t insn)
 	  if (!dp)
 	    {
 	      /* fcpyss */
-	      nds32_fpr[fst].u = nds32_fpr[fsa].u & 0x7fffffff;
-	      nds32_fpr[fst].u |= nds32_fpr[fsb].u & 0x80000000;
+	      u32 = nds32_fpr[fsa].u & 0x7fffffff;
+	      u32 |= nds32_fpr[fsb].u & 0x80000000;
+	      nds32_fpr[fst].u = u32;
 	    }
 	  else
 	    {
 	      /* fcpysd */
-	      nds32_fpr[fdt_].u = nds32_fpr[fda_].u & 0x7fffffff;
-	      nds32_fpr[fdt_].u |= nds32_fpr[fdb_].u & 0x80000000;
+	      u32 = nds32_fpr[fda_].u & 0x7fffffff;
+	      u32 |= nds32_fpr[fdb_].u & 0x80000000;
+	      nds32_fpr[fdt_].u = u32;
 	      nds32_fpr[fdt_ + 1].u = nds32_fpr[fda_ + 1].u;
 	    }
 	  return; /* Just return.  */
