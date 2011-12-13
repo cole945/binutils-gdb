@@ -894,6 +894,15 @@ nds32_decode32_jreg (SIM_DESC sd, const uint32_t insn)
       *nds32_pc = nds32_gpr[rb].u;
       /* SIM_IO_DPRINTF (sd, "set $pc to 0x%x, save ra to $r%d\n", *nds32_pc, rb); */
       return;
+    case 2:			/* jrnez */
+      if (nds32_gpr[rb].u != 0)
+	*nds32_pc = nds32_gpr[rb].u;
+      return;
+    case 3:			/* jralnez */
+      nds32_gpr[rt].u = *nds32_pc;
+      if (nds32_gpr[rb].u != 0)
+	*nds32_pc = nds32_gpr[rb].u;
+      return;
     }
   nds32_bad_op (sd, *nds32_pc - 4, insn, "JREG");
 }
@@ -1248,6 +1257,16 @@ nds32_decode16 (SIM_DESC sd, uint32_t insn)
       return;
     }
 
+  if (__GF (insn, 8, 7) == 0x7d)
+    {
+      int rt5e = __GF (insn, 4, 4) << 1;
+      int ra5e = __GF (insn, 0, 4) << 1;
+
+      nds32_gpr[rt5e] = nds32_gpr[ra5e];
+      nds32_gpr[rt5e + 1] = nds32_gpr[ra5e + 1];
+      return;
+    }
+
   switch (__GF (insn, 10, 5))
     {
     case 0x0:			/* mov55 */
@@ -1281,27 +1300,6 @@ nds32_decode16 (SIM_DESC sd, uint32_t insn)
     case 0x9:			/* srli45 */
       nds32_gpr[rt4].u = nds32_gpr[rt4].u >> imm5u;
       return;
-    case 0x1a:			/* lwi450 */
-      nds32_gpr[rt4].u = nds32_ld (sd, nds32_gpr[ra5].u, 4);
-      return;
-    case 0x1b:			/* swi450 */
-      nds32_st (sd, nds32_gpr[ra5].u, 4, nds32_gpr[rt4].u);
-      return;
-    case 0x30:			/* slts45 */
-      nds32_gpr[NG_TA].u =
-	(nds32_gpr[rt4].s < nds32_gpr[ra5].s) ? 1 : 0;
-      return;
-    case 0x31:			/* slt45 */
-      nds32_gpr[NG_TA].u =
-	(nds32_gpr[rt4].u < nds32_gpr[ra5].u) ? 1 : 0;
-      return;
-    case 0x32:			/* sltsi45 */
-      nds32_gpr[NG_TA].u = (nds32_gpr[rt4].s < imm5u) ? 1 : 0;
-      return;
-    case 0x33:			/* slti45 */
-      nds32_gpr[NG_TA].u = (nds32_gpr[rt4].u < imm5u) ? 1 : 0;
-      return;
-
     case 0xa:			/* slli333 */
       nds32_gpr[rt3].u = nds32_gpr[ra3].u << imm3u;
       return;
@@ -1347,6 +1345,35 @@ nds32_decode16 (SIM_DESC sd, uint32_t insn)
       nds32_st (sd, nds32_gpr[ra3].u, 4, nds32_gpr[rt3].u);
       nds32_gpr[ra3].u += imm3u << 2;
       return;
+    case 0x19:			/* lwi45.fe */
+      {
+	/* Not tested yet */
+	int imm7n = -((32 - imm5u) << 2);
+
+	nds32_gpr[rt4].u = nds32_ld (sd, nds32_gpr[8].u + imm7n, 4);
+      }
+      return;
+    case 0x1a:			/* lwi450 */
+      nds32_gpr[rt4].u = nds32_ld (sd, nds32_gpr[ra5].u, 4);
+      return;
+    case 0x1b:			/* swi450 */
+      nds32_st (sd, nds32_gpr[ra5].u, 4, nds32_gpr[rt4].u);
+      return;
+    case 0x30:			/* slts45 */
+      nds32_gpr[NG_TA].u =
+	(nds32_gpr[rt4].s < nds32_gpr[ra5].s) ? 1 : 0;
+      return;
+    case 0x31:			/* slt45 */
+      nds32_gpr[NG_TA].u =
+	(nds32_gpr[rt4].u < nds32_gpr[ra5].u) ? 1 : 0;
+      return;
+    case 0x32:			/* sltsi45 */
+      nds32_gpr[NG_TA].u = (nds32_gpr[rt4].s < imm5u) ? 1 : 0;
+      return;
+    case 0x33:			/* slti45 */
+      nds32_gpr[NG_TA].u = (nds32_gpr[rt4].u < imm5u) ? 1 : 0;
+      return;
+
     case 0x34:			/* beqzs8, bnezs8 */
       if (((insn & (1 << 8)) == 0) ^ (nds32_gpr[NG_TA].u != 0))
 	*nds32_pc += -2 + (N16_IMM8S (insn) << 1);
@@ -1354,6 +1381,34 @@ nds32_decode16 (SIM_DESC sd, uint32_t insn)
     case 0x35:			/* break16 */
       *nds32_pc -= 2;
       cpu_exception = sim_stopped;
+      return;
+    case 0x3d:			/* movpi45 */
+      nds32_gpr[rt4].u = imm5u + 16;
+      return;
+    case 0x3f:			/* MISC33 */
+      switch (insn & 0x7)
+	{
+	case 2:			/* neg33 */
+	  nds32_gpr[rt3].s = -nds32_gpr[ra3].u;
+	  return;
+	case 3:			/* not33 */
+	  nds32_gpr[rt3].u = ~nds32_gpr[ra3].u;
+	  return;
+	case 4:			/* mul33 */
+	  nds32_gpr[rt3].u = nds32_gpr[rt3].u * nds32_gpr[ra3].u;
+	  return;
+	case 5:			/* xor33 */
+	  nds32_gpr[rt3].u = nds32_gpr[rt3].u ^ nds32_gpr[ra3].u;
+	  return;
+	case 6:			/* and33 */
+	  nds32_gpr[rt3].u = nds32_gpr[rt3].u & nds32_gpr[ra3].u;
+	  return;
+	case 7:			/* or33 */
+	  nds32_gpr[rt3].u = nds32_gpr[rt3].u | nds32_gpr[ra3].u;
+	  return;
+	default:
+	  goto bad_op;
+	}
       return;
     case 0xb:			/* ... */
       switch (insn & 0x7)
