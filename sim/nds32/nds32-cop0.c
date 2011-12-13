@@ -430,7 +430,8 @@ nds32_decode32_cop (SIM_DESC sd, const uint32_t insn)
       nds32_st (sd, nds32_gpr[ra].u + (nds32_gpr[rb].s << sv), 4, nds32_fpr[fst].u);
       return;
     case 0xb:			/* fsd */
-      nds32_st (sd, nds32_gpr[ra].u + (nds32_gpr[rb].s << sv), 8, nds32_fpr[fdt_].u);
+      u64 = nds32_fd_to_64 (sd, fdt_ >> 1);
+      nds32_st (sd, nds32_gpr[ra].u + (nds32_gpr[rb].s << sv), 8, u64);
       return;
     case 0x82:			/* fls.bi */
       u32 = nds32_ld (sd, nds32_gpr[ra].u, 4);
@@ -447,7 +448,8 @@ nds32_decode32_cop (SIM_DESC sd, const uint32_t insn)
       nds32_gpr[ra].u += (nds32_gpr[rb].s << sv);
       return;
     case 0x8b:			/* fsd.bi */
-      nds32_st (sd, nds32_gpr[ra].u, 8, nds32_fpr[fdt_].u);
+      u64 = nds32_fd_to_64 (sd, fdt_ >> 1);
+      nds32_st (sd, nds32_gpr[ra].u, 8, u64);
       nds32_gpr[ra].u += (nds32_gpr[rb].s << sv);
       return;
     }
