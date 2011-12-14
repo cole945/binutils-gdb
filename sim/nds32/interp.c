@@ -533,23 +533,24 @@ nds32_decode32_alu1 (SIM_DESC sd, const uint32_t insn)
   int rb = N32_RB5 (insn);
   const int rd = N32_RD5 (insn);
   const int imm5u = rb;
+  const int sh5 = N32_SH5 (insn);
 
   switch (insn & 0x1f)
     {
-    case 0x0:			/* add */
-      nds32_gpr[rt].u = nds32_gpr[ra].u + nds32_gpr[rb].u;
+    case 0x0:			/* add, add_slli */
+      nds32_gpr[rt].u = nds32_gpr[ra].u + (nds32_gpr[rb].u << sh5);
       return;
-    case 0x1:			/* sub */
-      nds32_gpr[rt].u = nds32_gpr[ra].u - nds32_gpr[rb].u;
+    case 0x1:			/* sub, sub_slli */
+      nds32_gpr[rt].u = nds32_gpr[ra].u - (nds32_gpr[rb].u << sh5);
       return;
-    case 0x2:			/* and */
-      nds32_gpr[rt].u = nds32_gpr[ra].u & nds32_gpr[rb].u;
+    case 0x2:			/* and, add_slli */
+      nds32_gpr[rt].u = nds32_gpr[ra].u & (nds32_gpr[rb].u << sh5);
       return;
-    case 0x3:			/* xor */
-      nds32_gpr[rt].u = nds32_gpr[ra].u ^ nds32_gpr[rb].u;
+    case 0x3:			/* xor, xor_slli */
+      nds32_gpr[rt].u = nds32_gpr[ra].u ^ (nds32_gpr[rb].u << sh5);
       return;
-    case 0x4:			/* or */
-      nds32_gpr[rt].u = nds32_gpr[ra].u | nds32_gpr[rb].u;
+    case 0x4:			/* or, or_slli */
+      nds32_gpr[rt].u = nds32_gpr[ra].u | (nds32_gpr[rb].u << sh5);
       return;
     case 0x5:			/* nor */
       nds32_gpr[rt].u = ~(nds32_gpr[ra].u | nds32_gpr[rb].u);
@@ -595,13 +596,18 @@ nds32_decode32_alu1 (SIM_DESC sd, const uint32_t insn)
     case 0x11:			/* seh */
       nds32_gpr[rt].s = __SEXT (nds32_gpr[ra].s, 16);
       return;
-
+    case 0x12:			/* bitc */
+      nds32_gpr[rt].u = nds32_gpr[ra].u & ~(nds32_gpr[rb].u);
+      return;
     case 0x13:			/* zeh */
       nds32_gpr[rt].u = nds32_gpr[ra].u & 0xffff;
       return;
     case 0x14:			/* wsbh */
       nds32_gpr[rt].u = ((nds32_gpr[ra].u & 0xFF00FF00) >> 8)
 			| ((nds32_gpr[ra].u & 0x00FF00FF) << 8);
+      return;
+    case 0x15:			/* or_srli */
+      nds32_gpr[rt].u = nds32_gpr[ra].u | (nds32_gpr[rb].u >> sh5);
       return;
     case 0x16:			/* divsr */
       {
@@ -644,6 +650,18 @@ nds32_decode32_alu1 (SIM_DESC sd, const uint32_t insn)
     case 0x1b:			/* comvn */
       if (nds32_gpr[rb].u != 0)
 	nds32_gpr[rt].u = nds32_gpr[ra].u;
+      return;
+    case 0x1c:			/* add_srli */
+      nds32_gpr[rt].u = nds32_gpr[ra].u + (nds32_gpr[rb].u >> sh5);
+      return;
+    case 0x1d:			/* sub_srli */
+      nds32_gpr[rt].u = nds32_gpr[ra].u - (nds32_gpr[rb].u >> sh5);
+      return;
+    case 0x1e:			/* and_srli */
+      nds32_gpr[rt].u = nds32_gpr[ra].u & (nds32_gpr[rb].u >> sh5);
+      return;
+    case 0x1f:			/* xor_srli */
+      nds32_gpr[rt].u = nds32_gpr[ra].u ^ (nds32_gpr[rb].u >> sh5);
       return;
     }
 
@@ -1199,7 +1217,7 @@ nds32_decode32 (SIM_DESC sd, const uint32_t insn)
       {
 	int imm11s = __SEXT (__GF (insn, 8, 11), 11);
 
-	if (((insn & (1 << 19)) == 0) ^ (nds32_gpr[NG_TA].u != 0))
+	if (((insn & (1 << 19)) == 0) ^ (nds32_gpr[rt].s != imm11s))
 	  *nds32_pc += -4 + (N32_IMMS (insn, 8) << 1);
       }
       return;
@@ -1213,7 +1231,7 @@ nds32_decode32 (SIM_DESC sd, const uint32_t insn)
       nds32_decode32_misc (sd, insn);
       return;
     case 0x33:			/* bitci */
-      nds32_gpr[rt].u = nds32_gpr[ra].u & ~(imm15u);
+      nds32_gpr[rt].u = nds32_gpr[ra].u & ~imm15u;
       return;
     case 0x35:			/* COP */
       nds32_decode32_cop (sd, insn);
@@ -1264,7 +1282,7 @@ nds32_decode16 (SIM_DESC sd, uint32_t insn)
 	lmw_bim |= res[re] << 10;
 	nds32_gpr[NG_SP].u += (imm5u << 3);
 	nds32_decode32_lsmw (sd, lmw_bim);
-	*nds32_pc =nds32_gpr[NG_LP].u;
+	nds32_usr[NC_PC] = nds32_gpr[NG_LP];
       }
       return;
     }
@@ -1276,19 +1294,6 @@ nds32_decode16 (SIM_DESC sd, uint32_t insn)
 
       nds32_gpr[rt5e] = nds32_gpr[ra5e];
       nds32_gpr[rt5e + 1] = nds32_gpr[ra5e + 1];
-      return;
-    }
-
-  switch (__GF (insn, 10, 5))
-    {
-    case 0x0:			/* mov55 */
-      nds32_gpr[rt5].u = nds32_gpr[ra5].u;
-      return;
-    case 0x1:			/* movi55 */
-      nds32_gpr[rt5].s = imm5s;
-      return;
-    case 0x1b:			/* addi10s (V2) */
-      nds32_gpr[NG_SP].u += N16_IMM10S (insn);
       return;
     }
 
@@ -1447,6 +1452,19 @@ nds32_decode16 (SIM_DESC sd, uint32_t insn)
 	case 7:
 	  goto bad_op;
 	}
+      return;
+    }
+
+  switch (__GF (insn, 10, 5))
+    {
+    case 0x0:			/* mov55 */
+      nds32_gpr[rt5].u = nds32_gpr[ra5].u;
+      return;
+    case 0x1:			/* movi55 */
+      nds32_gpr[rt5].s = imm5s;
+      return;
+    case 0x1b:			/* addi10s (V2) */
+      nds32_gpr[NG_SP].u += N16_IMM10S (insn);
       return;
     }
 
