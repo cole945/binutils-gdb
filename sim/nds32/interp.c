@@ -36,6 +36,8 @@
 #include "opcode/nds32.h"
 #include "nds32-libc.h"
 
+#include <sys/time.h>
+
 /* Debug flag to display instructions and registers.  */
 static int tracing = 0;
 static int lock_step = 0;
@@ -271,6 +273,18 @@ nds32_syscall (SIM_DESC sd, int swid)
     case SYS_time:
       break;
     case SYS_gettimeofday:
+      {
+	struct timeval t;
+	struct timezone tz;
+
+	r = gettimeofday (&t, &tz);
+	if (nds32_gpr[0].u)
+	  sim_write (sd, nds32_gpr[0].u, (const unsigned char *) &t,
+		     sizeof (t));
+	if (nds32_gpr[1].u)
+	  sim_write (sd, nds32_gpr[1].u, (const unsigned char *) &t,
+		     sizeof (tz));
+      }
       break;
     case SYS_times:
       break;
