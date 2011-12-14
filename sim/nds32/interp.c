@@ -1195,6 +1195,14 @@ nds32_decode32 (SIM_DESC sd, const uint32_t insn)
     case 0x2c:			/* ori */
       nds32_gpr[rt].u = nds32_gpr[ra].u | imm15u;
       return;
+    case 0x2d:			/* br3, beqc, bnec */
+      {
+	int imm11s = __SEXT (__GF (insn, 8, 11), 11);
+
+	if (((insn & (1 << 19)) == 0) ^ (nds32_gpr[NG_TA].u != 0))
+	  *nds32_pc += -4 + (N32_IMMS (insn, 8) << 1);
+      }
+      return;
     case 0x2e:			/* slti */
       nds32_gpr[rt].u = (nds32_gpr[ra].u < imm15u) ? 1 : 0;
       return;
@@ -1203,6 +1211,9 @@ nds32_decode32 (SIM_DESC sd, const uint32_t insn)
       return;
     case 0x32:			/* misc */
       nds32_decode32_misc (sd, insn);
+      return;
+    case 0x33:			/* bitci */
+      nds32_gpr[rt].u = nds32_gpr[ra].u & ~(imm15u);
       return;
     case 0x35:			/* COP */
       nds32_decode32_cop (sd, insn);
@@ -1253,6 +1264,7 @@ nds32_decode16 (SIM_DESC sd, uint32_t insn)
 	lmw_bim |= res[re] << 10;
 	nds32_gpr[NG_SP].u += (imm5u << 3);
 	nds32_decode32_lsmw (sd, lmw_bim);
+	*nds32_pc =nds32_gpr[NG_LP].u;
       }
       return;
     }
@@ -1742,7 +1754,7 @@ sim_create_inferior (SIM_DESC sd, struct bfd *prog_bfd, char **argv,
 		argv[i]);
     }
   if (len > 0)
-    sd->cmdline[len] = '\0'; /* Eat the last space. */
+    sd->cmdline[len - 1] = '\0'; /* Eat the last space. */
 
   return SIM_RC_OK;
 }
