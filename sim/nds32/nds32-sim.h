@@ -62,6 +62,7 @@ enum nds32_cpu_regnum
   NC_D0HI = 1,
   NC_D1LO = 2,
   NC_D1HI = 3,
+  NC_IFCLP = 29,
   NC_PC = 31,
 };
 
@@ -128,6 +129,24 @@ static inline int
 nds32_psw_be ()
 {
   return nds32_sr[SRIDX (1, 0, 0)].u & (1 << 5);
+}
+
+static inline int
+nds32_psw_ifc ()
+{
+  return nds32_sr[SRIDX (1, 0, 0)].u & (1 << 15);
+}
+
+static inline void
+nds32_psw_ifc_on ()
+{
+  nds32_sr[SRIDX (1, 0, 0)].u |= (1 << 15);
+}
+
+static inline void
+nds32_psw_ifc_off ()
+{
+  nds32_sr[SRIDX (1, 0, 0)].u &= ~(1 << 15);
 }
 
 #endif
