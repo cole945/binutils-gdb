@@ -929,8 +929,17 @@ nds32_decode32_jreg (SIM_DESC sd, const uint32_t insn)
 
   switch (insn & 0x1f)
     {
-    case 0:			/* jr */
-      nds32_usr[NC_PC].u = nds32_gpr[rb].u;
+    case 0:			/* jr, ifret */
+      if (__GF (insn, 5, 2) == 0x3)
+	{
+	  if (nds32_psw_ifc ())
+	    {
+	      nds32_usr[NC_PC] = nds32_usr[NC_IFCLP];
+	      nds32_psw_ifc_off ();
+	    }
+	}
+      else
+	nds32_usr[NC_PC].u = nds32_gpr[rb].u;
       /* SIM_IO_DPRINTF (sd, "set $pc to 0x%x\n", nds32_usr[NC_PC].u); */
       return;
     case 1:			/* jral */
@@ -1507,7 +1516,7 @@ nds32_decode16 (SIM_DESC sd, uint32_t insn)
 
   switch (__GF (insn, 10, 5))
     {
-    case 0x0:			/* mov55 */
+    case 0x0:			/* mov55 or ifret16 */
       if (nds32_psw_ifc () && rt5 == ra5 && rt5 == 31)
 	{
 	  nds32_usr[NC_PC] = nds32_usr[NC_IFCLP];
