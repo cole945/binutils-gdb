@@ -310,6 +310,8 @@ nds32_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 					nds32_linux_regset_from_core_section);
 
   set_gdbarch_skip_solib_resolver (gdbarch, glibc_skip_solib_resolver);
+  /* No pseudo register on Linux (monitor rcmd) */
+  set_gdbarch_num_pseudo_regs (gdbarch, 0);
 
   if (!tdesc_has_registers (tdesc))
     tdesc = tdesc_nds32_linux;
