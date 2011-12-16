@@ -929,32 +929,46 @@ nds32_decode32_jreg (SIM_DESC sd, const uint32_t insn)
 
   switch (insn & 0x1f)
     {
-    case 0:			/* jr, ifret */
+    case 0:			/* jr, ifret, ret */
       if (__GF (insn, 5, 2) == 0x3)
 	{
 	  if (nds32_psw_ifc ())
 	    {
 	      nds32_usr[NC_PC] = nds32_usr[NC_IFCLP];
-	      nds32_psw_ifc_off ();
 	    }
 	}
       else
 	nds32_usr[NC_PC].u = nds32_gpr[rb].u;
+      nds32_psw_ifc_off ();
       /* SIM_IO_DPRINTF (sd, "set $pc to 0x%x\n", nds32_usr[NC_PC].u); */
       return;
     case 1:			/* jral */
       nds32_gpr[rt].u = nds32_usr[NC_PC].u;
       nds32_usr[NC_PC].u = nds32_gpr[rb].u;
       /* SIM_IO_DPRINTF (sd, "set $pc to 0x%x, save ra to $r%d\n", nds32_usr[NC_PC].u, rb); */
+      if (nds32_psw_ifc ())
+	{
+	  nds32_gpr[rt] = nds32_usr[NC_IFCLP];
+	  nds32_psw_ifc_off ();
+	}
       return;
     case 2:			/* jrnez */
       if (nds32_gpr[rb].u != 0)
 	nds32_usr[NC_PC].u = nds32_gpr[rb].u;
+
+      if (nds32_psw_ifc () && nds32_gpr[rb].u != 0)
+	nds32_psw_ifc_off ();
       return;
     case 3:			/* jralnez */
       nds32_gpr[rt].u = nds32_usr[NC_PC].u;
       if (nds32_gpr[rb].u != 0)
 	nds32_usr[NC_PC].u = nds32_gpr[rb].u;
+
+      if (nds32_psw_ifc () && nds32_gpr[rb].u != 0)
+	{
+	  nds32_gpr[rt] = nds32_usr[NC_IFCLP];
+	  nds32_psw_ifc_off ();
+	}
       return;
     }
   nds32_bad_op (sd, nds32_usr[NC_PC].u - 4, insn, "JREG");
@@ -1330,6 +1344,7 @@ nds32_decode16 (SIM_DESC sd, uint32_t insn)
 	nds32_gpr[NG_SP].u += (imm5u << 3);
 	nds32_decode32_lsmw (sd, lmw_bim);
 	nds32_usr[NC_PC] = nds32_gpr[NG_LP];
+	nds32_psw_ifc_off ();
       }
       return;
     }
@@ -1561,10 +1576,16 @@ nds32_decode16 (SIM_DESC sd, uint32_t insn)
 	    case 0:		/* jr5 */
 	    case 4:		/* ret5 */
 	      nds32_usr[NC_PC].u = nds32_gpr[ra5].u;
+	      nds32_psw_ifc_off ();
 	      return;
 	    case 1:		/* jral5 */
 	      nds32_gpr[NG_LP].u = nds32_usr[NC_PC].u;
 	      nds32_usr[NC_PC].u = nds32_gpr[ra5].u;
+	      if (nds32_psw_ifc ())
+		{
+		  nds32_gpr[NG_LP] = nds32_usr[NC_IFCLP];
+		  nds32_psw_ifc_off ();
+		}
 	      return;
 	    default:
 	      goto bad_op;
@@ -1710,6 +1731,12 @@ sim_fetch_register (SIM_DESC sd, int rn, unsigned char *memory, int length)
     }
 
   /* System registers.  */
+  switch (rn)
+    {
+    case NG_PSW:
+      store_unsigned_integer_by_psw (memory, length, nds32_sr[SRIDX (1, 0, 0)].u);
+      break;
+    }
   return 0;
 }
 
