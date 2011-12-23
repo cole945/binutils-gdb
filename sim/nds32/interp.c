@@ -1424,6 +1424,9 @@ nds32_decode16 (SIM_DESC sd, uint32_t insn)
       nds32_st (sd, nds32_gpr[ra3].u, 4, nds32_gpr[rt3].u);
       nds32_gpr[ra3].u += imm3u << 2;
       return;
+    case 0x18:			/* addri36.sp */
+      nds32_gpr[rt3].u = nds32_gpr[NG_SP].u + (N16_IMM6U (insn) << 2);
+      return;
     case 0x19:			/* lwi45.fe */
       {
 	/* Not tested yet */
@@ -1522,9 +1525,12 @@ nds32_decode16 (SIM_DESC sd, uint32_t insn)
 	case 5:			/* x11b33 */
 	  nds32_gpr[rt3].u = nds32_gpr[ra3].u & 0x7FF;
 	  break;
-	case 6:
-	case 7:
-	  goto bad_op;
+	case 6:		/* bmski33 */
+	  nds32_gpr[rt3].u = nds32_gpr[rt3].u & (1 << __GF (insn, 3, 3));
+	  break;
+	case 7:		/* fexti33 */
+	  nds32_gpr[rt3].u = nds32_gpr[rt3].u & ((1 << (__GF (insn, 3, 3) + 1)) - 1);
+	  break;
 	}
       return;
     }
