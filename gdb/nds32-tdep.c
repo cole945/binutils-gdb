@@ -1355,6 +1355,7 @@ nds32_frame_unwind_cache (struct frame_info *this_frame,
   CORE_ADDR pc, scan_limit;
   ULONGEST prev_sp;
   ULONGEST next_base;
+  ULONGEST fp_base;
   int i;
   uint32_t insn;
   struct nds32_unwind_cache *info;
@@ -1707,15 +1708,12 @@ nds32_frame_unwind_cache (struct frame_info *this_frame,
      Assume that the FP is this frame's SP but with that pushed
      stack space added back.  */
   next_base = get_frame_register_unsigned (this_frame, NDS32_SP_REGNUM);
-  if (info->use_frame && nds32_config.use_fp)
+  prev_sp = next_base + info->size;
+  fp_base = get_frame_register_unsigned (this_frame, NDS32_FP_REGNUM);
+  if (info->use_frame && nds32_config.use_fp && fp_base > 0)
     {
-      ULONGEST fp_base =
-	get_frame_register_unsigned (this_frame, REG_FP);
+      /* Try to use FP if possible. */
       prev_sp = fp_base - info->fp_offset;
-    }
-  else
-    {
-      prev_sp = next_base + info->size;
     }
 
   /* Convert that SP/BASE into real addresses.  */
@@ -2868,7 +2866,7 @@ nds32_config_int (const char *str, int def)
 static void
 nds32_load_config (struct nds32_gdb_config *config)
 {
-  config->use_cfi = nds32_config_int ("USE_CFI", 1);
+  config->use_cfi = nds32_config_int ("USE_CFI", 0);
   config->use_ifcret = nds32_config_int ("USE_IFC_RET", 1);
   config->use_fp = nds32_config_int ("USE_FP", 1);
   config->use_abi = nds32_config_int ("USE_ABI", NDS32_ABI_AUTO);
