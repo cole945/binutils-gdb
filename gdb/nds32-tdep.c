@@ -2866,7 +2866,7 @@ nds32_config_int (const char *str, int def)
 static void
 nds32_load_config (struct nds32_gdb_config *config)
 {
-  config->use_cfi = nds32_config_int ("USE_CFI", 0);
+  config->use_cfi = nds32_config_int ("USE_CFI", 1);
   config->use_ifcret = nds32_config_int ("USE_IFC_RET", 1);
   config->use_fp = nds32_config_int ("USE_FP", 1);
   config->use_abi = nds32_config_int ("USE_ABI", NDS32_ABI_AUTO);
