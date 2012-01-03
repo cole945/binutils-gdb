@@ -1066,11 +1066,12 @@ nds32_decode32_misc (SIM_DESC sd, const uint32_t insn)
     {
     case 0x0:			/* standby */
     case 0x1:			/* cctl */
+    case 0x8:			/* dsb */
+    case 0x9:			/* isb */
+	return;
     case 0x4:			/* iret */
     case 0x6:			/* teqz */
     case 0x7:			/* tnez */
-    case 0x8:			/* dsb */
-    case 0x9:			/* isb */
     case 0xc:			/* msync */
     case 0xd:			/* isync */
     case 0xe:			/* tlbop */
