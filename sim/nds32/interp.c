@@ -771,9 +771,11 @@ nds32_decode32_alu2 (SIM_DESC sd, const uint32_t insn)
       return;
     case 0x20:			/* mfusr */
       nds32_gpr[rt].u = nds32_usr[rb << 5 | ra].u;
+      if (((rb << 5) | ra) == 31)
+	nds32_gpr[rt].u -= 4;	/* FIXME: I add PC before execution */
       return;
     case 0x21:			/* mtusr */
-      nds32_usr[rb << 5 | ra].u = nds32_gpr[rt].u;
+      nds32_usr[(rb << 5) | ra].u = nds32_gpr[rt].u;
       return;
     case 0x28:			/* mults64 */
       {
@@ -1284,7 +1286,7 @@ nds32_decode32 (SIM_DESC sd, const uint32_t insn)
       }
       return;
     case 0x2e:			/* slti */
-      nds32_gpr[rt].u = (nds32_gpr[ra].u < imm15u) ? 1 : 0;
+      nds32_gpr[rt].u = (nds32_gpr[ra].u < (uint32_t)imm15s) ? 1 : 0;
       return;
     case 0x2f:			/* sltsi */
       nds32_gpr[rt].u = (nds32_gpr[ra].s < imm15s) ? 1 : 0;
