@@ -382,6 +382,7 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
       nds32_append_flag (type, 13, "AEN");
       nds32_append_flag (type, 14, "WBNA");
       nds32_append_flag (type, 15, "IFCON");
+      nds32_append_flag (type, 20, "OV");
       nds32_list_insert (&tdep->nds32_types, "ir0", type);
       nds32_list_insert (&tdep->nds32_types, "ir1", type);
       nds32_list_insert (&tdep->nds32_types, "ir2", type);
