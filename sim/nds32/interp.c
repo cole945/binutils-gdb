@@ -36,8 +36,11 @@
 #include "opcode/nds32.h"
 #include "nds32-libc.h"
 
+#ifdef __linux__
+/* FIXME */
 #include <sys/time.h>
 #include <sys/times.h>
+#endif
 
 /* Debug flag to display instructions and registers.  */
 static int tracing = 0;
@@ -264,6 +267,7 @@ nds32_syscall (SIM_DESC sd, int swid)
       r = nds32_gpr[0].u;
       sim_write (sd, nds32_gpr[0].u, sd->cmdline, strlen (sd->cmdline) + 1);
       break;
+#ifdef __linux__
     case SYS_gettimeofday:
       {
 	struct timeval t;
@@ -278,6 +282,7 @@ nds32_syscall (SIM_DESC sd, int swid)
 		     sizeof (tz));
       }
       break;
+#endif
     case SYS_unlink:
       {
 	char *path;
@@ -287,6 +292,7 @@ nds32_syscall (SIM_DESC sd, int swid)
 	free (path);
       }
       break;
+#ifdef __linux__
     case SYS_times:
       {
 	struct tms tms;
@@ -297,6 +303,7 @@ nds32_syscall (SIM_DESC sd, int swid)
 		     sizeof (tms));
       }
       break;
+#endif
     case SYS_rename:
     case SYS_errno:
     case SYS_time:
