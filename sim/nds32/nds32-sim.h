@@ -64,6 +64,7 @@ enum nds32_cpu_regnum
   NC_D0HI = 1,
   NC_D1LO = 2,
   NC_D1HI = 3,
+  NC_ITB = 28,
   NC_IFCLP = 29,
   NC_PC = 31,
 };
