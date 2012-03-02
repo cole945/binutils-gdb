@@ -1191,7 +1191,7 @@ nds32_decode32 (SIM_DESC sd, const uint32_t insn)
       }
       return;
     case 0x17:			/* LBGP */
-      if(insn & (1 << 19))	/* lbsi.gp */
+      if (insn & (1 << 19))	/* lbsi.gp */
 	nds32_gpr[rt].s = nds32_ld_sext (sd, nds32_gpr[NG_GP].u + N32_IMMS (insn, 19), 1);
       else			/* lbi.gp */
 	nds32_gpr[rt].u = nds32_ld (sd, nds32_gpr[NG_GP].u + N32_IMMS (insn, 19), 1);
@@ -1238,7 +1238,7 @@ nds32_decode32 (SIM_DESC sd, const uint32_t insn)
 	}
       return;
     case 0x1f:			/* SBGP */
-      if(insn & (1 << 19))	/* addi.gp */
+      if (insn & (1 << 19))	/* addi.gp */
 	nds32_gpr[rt].s = nds32_gpr[NG_GP].u + N32_IMMS (insn, 19);
       else			/* sbi.gp */
 	nds32_st (sd, nds32_gpr[NG_GP].u + N32_IMMS (insn, 19), 1, nds32_gpr[rt].u & 0xFF);
@@ -1321,6 +1321,7 @@ nds32_decode16 (SIM_DESC sd, uint32_t insn)
   const int rt4 = N16_RT4 (insn);
   const int imm5u = N16_IMM5U (insn);
   const int imm5s = N16_IMM5S (insn);
+  const int imm9u = N16_IMM9U (insn);
   const int rt3 = N16_RT3 (insn);
   const int ra3 = N16_RA3 (insn);
   const int rb3 = N16_RB3 (insn);
@@ -1329,6 +1330,14 @@ nds32_decode16 (SIM_DESC sd, uint32_t insn)
 
   nds32_usr[NC_PC].u += 2;
 
+  if (__GF (insn, 5, 10) == 0x2ea) /* ex9.it  */
+    {
+      sim_read (sd, nds32_usr[NC_ITB].u + (imm5u << 2), (unsigned char *) &insn, 4);
+      insn = extract_unsigned_integer ((unsigned char *) &insn, 4, BIG_ENDIAN);
+      nds32_usr[NC_PC].u -= 4;
+      nds32_decode32 (sd, insn);
+      return;
+    }
   switch (__GF (insn, 7, 8))
     {
     case 0xf8:			/* push25 */
@@ -1470,9 +1479,19 @@ nds32_decode16 (SIM_DESC sd, uint32_t insn)
       if (((insn & (1 << 8)) == 0) ^ (nds32_gpr[NG_TA].u != 0))
 	nds32_usr[NC_PC].u += -2 + (N16_IMM8S (insn) << 1);
       return;
-    case 0x35:			/* break16 */
-      nds32_usr[NC_PC].u -= 2;
-      cpu_exception = sim_stopped;
+    case 0x35:			/* break16, ex9.it */
+      if (imm9u > 31)
+	{
+	  sim_read (sd, nds32_usr[NC_ITB].u + (imm9u << 2), (unsigned char *) &insn, 4);
+	  insn = extract_unsigned_integer ((unsigned char *) &insn, 4, BIG_ENDIAN);
+	  nds32_usr[NC_PC].u -= 4;
+	  nds32_decode32 (sd, insn);
+	}
+      else
+	{
+	  nds32_usr[NC_PC].u -= 2;
+	  cpu_exception = sim_stopped;
+	}
       return;
     case 0x3c:			/* ifcall9 */
       if (!nds32_psw_ifc ())
@@ -1860,9 +1879,20 @@ sim_create_inferior (SIM_DESC sd, struct bfd *prog_bfd, char **argv,
   int len;
   int mlen;
   int i;
+  asection *s;
   /* Set the initial register set.  */
   if (prog_bfd != NULL)
-    nds32_usr[NC_PC].u = bfd_get_start_address (prog_bfd);
+    {
+      for (s = prog_bfd->sections; s; s = s->next)
+	{
+	  if (strcmp (bfd_get_section_name (prog_bfd, s), ".ex9.itable") == 0)
+	    {
+	      nds32_usr[NC_ITB].u = ((uint32_t) bfd_get_section_vma (prog_bfd, s));
+	      break;
+	    }
+	}
+      nds32_usr[NC_PC].u = bfd_get_start_address (prog_bfd);
+    }
   else
     nds32_usr[NC_PC].u = 0;
 
