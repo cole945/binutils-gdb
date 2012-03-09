@@ -82,6 +82,12 @@ initialize_tdesc_nds32 (void)
   tdesc_create_reg (feature, "ir17", 171, 1, "ir", 32, "data_ptr");
   tdesc_create_reg (feature, "ir18", 173, 1, "ir", 32, "data_ptr");
   tdesc_create_reg (feature, "ir19", 174, 1, "ir", 32, "data_ptr");
+  tdesc_create_reg (feature, "ir20", 176, 1, "ir", 32, "data_ptr");
+  tdesc_create_reg (feature, "ir21", 177, 1, "ir", 32, "data_ptr");
+  tdesc_create_reg (feature, "ir22", 178, 1, "ir", 32, "data_ptr");
+  tdesc_create_reg (feature, "ir23", 179, 1, "ir", 32, "data_ptr");
+  tdesc_create_reg (feature, "ir24", 180, 1, "ir", 32, "data_ptr");
+  tdesc_create_reg (feature, "ir25", 181, 1, "ir", 32, "data_ptr");
   tdesc_create_reg (feature, "mr0", 60, 1, "mr", 32, "data_ptr");
   tdesc_create_reg (feature, "mr1", 61, 1, "mr", 32, "data_ptr");
   tdesc_create_reg (feature, "mr2", 62, 1, "mr", 32, "data_ptr");
@@ -93,6 +99,7 @@ initialize_tdesc_nds32 (void)
   tdesc_create_reg (feature, "mr8", 68, 1, "mr", 32, "data_ptr");
   tdesc_create_reg (feature, "mr9", 69, 1, "mr", 32, "data_ptr");
   tdesc_create_reg (feature, "mr10", 70, 1, "mr", 32, "data_ptr");
+  tdesc_create_reg (feature, "mr11", 182, 1, "mr", 32, "data_ptr");
   tdesc_create_reg (feature, "dr0", 71, 1, "dr", 32, "data_ptr");
   tdesc_create_reg (feature, "dr1", 72, 1, "dr", 32, "data_ptr");
   tdesc_create_reg (feature, "dr2", 73, 1, "dr", 32, "data_ptr");
@@ -161,6 +168,7 @@ initialize_tdesc_nds32 (void)
   tdesc_create_reg (feature, "racr0", 135, 1, "racr", 32, "data_ptr");
   tdesc_create_reg (feature, "idr0", 136, 1, "idr", 32, "data_ptr");
   tdesc_create_reg (feature, "idr1", 137, 1, "idr", 32, "data_ptr");
+  tdesc_create_reg (feature, "secur0", 183, 1, "secur", 32, "data_ptr");
 
   feature = tdesc_create_feature (result, "org.gnu.gdb.nds32.audio");
   tdesc_create_reg (feature, "D0L24", 138, 1, NULL, 32, "int");
