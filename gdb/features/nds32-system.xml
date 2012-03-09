@@ -35,6 +35,12 @@
   <reg name="ir17" bitsize="32" group="ir" type="data_ptr" regnum="171"/>
   <reg name="ir18" bitsize="32" group="ir" type="data_ptr" regnum="173"/>
   <reg name="ir19" bitsize="32" group="ir" type="data_ptr" regnum="174"/>
+  <reg name="ir20" bitsize="32" group="ir" type="data_ptr" regnum="176"/>
+  <reg name="ir21" bitsize="32" group="ir" type="data_ptr" regnum="177"/>
+  <reg name="ir22" bitsize="32" group="ir" type="data_ptr" regnum="178"/>
+  <reg name="ir23" bitsize="32" group="ir" type="data_ptr" regnum="179"/>
+  <reg name="ir24" bitsize="32" group="ir" type="data_ptr" regnum="180"/>
+  <reg name="ir25" bitsize="32" group="ir" type="data_ptr" regnum="181"/>
 
   <reg name="mr0" bitsize="32" group="mr" type="data_ptr" regnum="60"/>
   <reg name="mr1" bitsize="32" group="mr" type="data_ptr"/>
@@ -47,6 +53,7 @@
   <reg name="mr8" bitsize="32" group="mr" type="data_ptr"/>
   <reg name="mr9" bitsize="32" group="mr" type="data_ptr"/>
   <reg name="mr10" bitsize="32" group="mr" type="data_ptr"/>
+  <reg name="mr11" bitsize="32" group="mr" type="data_ptr" regnum="182"/>
 
   <reg name="dr0" bitsize="32" group="dr" type="data_ptr" regnum="71"/>
   <reg name="dr1" bitsize="32" group="dr" type="data_ptr"/>
@@ -121,4 +128,6 @@
 
   <reg name="idr0" bitsize="32" group="idr" type="data_ptr" regnum="136"/>
   <reg name="idr1" bitsize="32" group="idr" type="data_ptr"/>
+
+  <reg name="secur0" bitsize="32" group="secur" type="data_ptr" regnum="183"/>
 </feature>
