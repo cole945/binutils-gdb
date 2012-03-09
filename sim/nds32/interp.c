@@ -59,6 +59,8 @@ static SIM_OPEN_KIND sim_kind;
 static char *myname;
 static host_callback *callback;
 
+static int sig_ex9 = 0;
+
 reg_t nds32_gpr[32];		/* 32 GPR */
 reg_t nds32_usr[32 * 32];	/* Group, Usr */
 reg_t nds32_sr[8 * 16 * 8];	/* Major, Minor, Ext */
@@ -1258,7 +1260,10 @@ nds32_decode32 (SIM_DESC sd, const uint32_t insn)
     case 0x24:			/* ji, jal */
       if (insn & (1 << 24))	/* jal */
 	nds32_gpr[NG_LP].u = nds32_usr[NC_PC].u;
-      nds32_usr[NC_PC].u = nds32_usr[NC_PC].u - 4 + (N32_IMM24S (insn) << 1);
+      if (sig_ex9 == 1)
+	nds32_usr[NC_PC].u = (nds32_usr[NC_PC].u & 0xff000000) + (N32_IMM24S (insn) << 1);
+      else
+	nds32_usr[NC_PC].u = nds32_usr[NC_PC].u - 4 + (N32_IMM24S (insn) << 1);
       return;
     case 0x25:			/* jreg */
       nds32_decode32_jreg (sd, insn);
@@ -1335,7 +1340,9 @@ nds32_decode16 (SIM_DESC sd, uint32_t insn)
       sim_read (sd, nds32_usr[NC_ITB].u + (imm5u << 2), (unsigned char *) &insn, 4);
       insn = extract_unsigned_integer ((unsigned char *) &insn, 4, BIG_ENDIAN);
       nds32_usr[NC_PC].u -= 4;
+      sig_ex9 = 1;
       nds32_decode32 (sd, insn);
+      sig_ex9 = 0;
       return;
     }
   switch (__GF (insn, 7, 8))
@@ -1485,7 +1492,9 @@ nds32_decode16 (SIM_DESC sd, uint32_t insn)
 	  sim_read (sd, nds32_usr[NC_ITB].u + (imm9u << 2), (unsigned char *) &insn, 4);
 	  insn = extract_unsigned_integer ((unsigned char *) &insn, 4, BIG_ENDIAN);
 	  nds32_usr[NC_PC].u -= 4;
+	  sig_ex9 = 1;
 	  nds32_decode32 (sd, insn);
+	  sig_ex9 = 0;
 	}
       else
 	{
