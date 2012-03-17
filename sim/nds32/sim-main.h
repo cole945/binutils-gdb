@@ -39,22 +39,29 @@ typedef union {
   int32_t s;
 } reg_t;
 
+enum nds32_internal_flags
+{
+  NIF_EX9 = 1,
+};
+
 struct _sim_cpu {
   /* 32 general purpose registers. */
   reg_t reg_gpr[32];
-#define CCPU_GPR	cpu->reg_gpr
+#define CCPU_GPR	(cpu->reg_gpr)
 
   /* User registers. 32 group x 32 USR */
   reg_t reg_usr[32 * 32];
-#define CCPU_USR	cpu->reg_usr
+#define CCPU_USR	(cpu->reg_usr)
 
   /* System registers.  Major x Minor x Ext */
   reg_t reg_sr[8 * 16 * 8];
-#define CCPU_SR		cpu->reg_sr
+#define CCPU_SR		(cpu->reg_sr)
 
   /* Floating-point registers. 32 single union 32 double. FIXME */
   reg_t reg_fpr[64];
-#define CCPU_FPR	cpu->reg_fpr
+#define CCPU_FPR	(cpu->reg_fpr)
+
+  enum nds32_internal_flags iflags;
 
   sim_cpu_base base;
 };
