@@ -53,9 +53,6 @@ static unsigned int cycles = 0;
 
 static struct bfd *cur_bfd;
 
-static enum sim_stop cpu_exception;
-static uint32_t cpu_signal;
-
 static SIM_OPEN_KIND sim_kind;
 static char *myname;
 static host_callback *callback;
@@ -166,10 +163,11 @@ nds32_bad_op (sim_cpu *cpu, uint32_t cia, uint32_t insn, char *tag)
   if (tag == NULL)
     tag = "";
 
-  cpu_exception = sim_stopped;
   sim_io_printf (CPU_STATE (cpu),
 		 "Unhandled %s instruction at pc=0x%x, code=0x%08x\n",
 		 tag, cia, insn);
+
+  sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_signalled, SIM_SIGILL);
 }
 
 static sim_cia
@@ -181,8 +179,7 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
   switch (swid)
     {
     case SYS_exit:
-      cpu_exception = sim_exited;
-      cpu_signal = CCPU_GPR[0].s;
+      sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_exited, CCPU_GPR[0].s);
       break;
     case SYS_open:
       {
@@ -331,8 +328,9 @@ nds32_ld_sext (sim_cpu *cpu, SIM_ADDR addr, int size)
 
   if (r != size)
     {
-      sim_io_eprintf (sd, "access violation at 0x%x. pc=0x%x\n", addr, CCPU_USR[NC_PC].u);
-      cpu_exception = sim_stopped;
+      uint32_t cia = CCPU_USR[NC_PC].u; /* FIXME */
+      sim_io_eprintf (sd, "access violation at 0x%x. pc=0x%x\n", addr, cia);
+      sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_signalled, SIM_SIGSEGV);
     }
 
   return val;
@@ -353,8 +351,9 @@ nds32_ld (sim_cpu *cpu, SIM_ADDR addr, int size)
 
   if (r != size)
     {
-      sim_io_eprintf (sd, "access violation at 0x%x. pc=0x%x\n", addr, CCPU_USR[NC_PC].u);
-      cpu_exception = sim_stopped;
+      uint32_t cia = CCPU_USR[NC_PC].u; /* FIXME */
+      sim_io_eprintf (sd, "access violation at 0x%x. pc=0x%x\n", addr, cia);
+      sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_signalled, SIM_SIGSEGV);
     }
 
   return val;
@@ -374,8 +373,9 @@ nds32_st (sim_cpu *cpu, SIM_ADDR addr, int size, ulongest_t val)
 
   if (r != size)
     {
-      sim_io_eprintf (sd, "access violation at 0x%x. pc=0x%x\n", addr, CCPU_USR[NC_PC].u);
-      cpu_exception = sim_stopped;
+      uint32_t cia = CCPU_USR[NC_PC].u; /* FIXME */
+      sim_io_eprintf (sd, "access violation at 0x%x. pc=0x%x\n", addr, cia);
+      sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_signalled, SIM_SIGSEGV);
     }
 
   return;
@@ -1107,8 +1107,8 @@ nds32_decode32_misc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       break;
     case 0x5:			/* trap */
     case 0xa:			/* break */
-      cpu_exception = sim_stopped;
-      return cia; /* FIXME: Dispatch exception?  */
+      sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_stopped, SIM_SIGTRAP);
+      return cia; /* FIXME dispatch exception? */
     case 0x2:			/* mfsr */
       CCPU_GPR[rt] = CCPU_SR[__GF (insn, 10, 10)];
       break;
@@ -1116,8 +1116,7 @@ nds32_decode32_misc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       CCPU_SR[__GF (insn, 10, 10)] = CCPU_GPR[rt];
       break;
     case 0xb:			/* syscall */
-      cia = nds32_syscall (cpu, __GF (insn, 5, 15), cia);
-      break;
+      return nds32_syscall (cpu, __GF (insn, 5, 15), cia);
     case 0x4:			/* iret */
     case 0x6:			/* teqz */
     case 0x7:			/* tnez */
@@ -1505,7 +1504,7 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
     case 0x35:			/* break16, ex9.it */
       if (imm9u < 32)		/* break16 */
 	{
-	  cpu_exception = sim_stopped;
+	  sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_stopped, SIM_SIGTRAP);
 	  return cia;
 	}
 
@@ -1816,23 +1815,6 @@ static void
 nds32_pc_set (sim_cpu *cpu, sim_cia cia)
 {
   cpu->reg_usr[NC_PC].u = cia;
-}
-
-void
-sim_stop_reason (SIM_DESC sd, enum sim_stop *reason, int *sigrc)
-{
-  *reason = cpu_exception;
-  if (cpu_exception == sim_stopped)
-    *sigrc = 5;
-  /* *reason = sim_stopped; */
-}
-
-int
-sim_stop (SIM_DESC sd)
-{
-  cpu_exception = sim_stopped;
-  cpu_signal = GDB_SIGNAL_INT;
-  return 1;
 }
 
 static void
