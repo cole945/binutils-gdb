@@ -100,6 +100,7 @@ enum nds32_syscall_num
 longest_t nds32_ld_sext (sim_cpu *cpu, SIM_ADDR addr, int size);
 ulongest_t nds32_ld (sim_cpu *cpu, SIM_ADDR addr, int size);
 void nds32_st (sim_cpu *cpu, SIM_ADDR addr, int size, ulongest_t val);
+
 sim_cia nds32_decode32_lwc (sim_cpu *cpu, const uint32_t insn, sim_cia cia);
 sim_cia nds32_decode32_swc (sim_cpu *cpu, const uint32_t insn, sim_cia cia);
 sim_cia nds32_decode32_ldc (sim_cpu *cpu, const uint32_t insn, sim_cia cia);
@@ -139,5 +140,15 @@ nds32_psw_ifc_off ()
 {
   /* nds32_sr[SRIDX (1, 0, 0)].u &= ~(1 << 15); */
 }
+
+enum
+{
+  PSW_BE = 5,
+  PSW_IFCON = 15,
+};
+
+#define CCPU_PSW_TEST(BIT)	(cpu->reg_sr[SRIDX (1, 0, 0)].u & (1 << BIT))
+#define CCPU_PSW_SET(BIT)	do { cpu->reg_sr[SRIDX (1, 0, 0)].u |= (1 << BIT); } while (0)
+#define CCPU_PSW_CLEAR(BIT)	do { cpu->reg_sr[SRIDX (1, 0, 0)].u &= ~(1 << 15); } while (0)
 
 #endif
