@@ -108,6 +108,7 @@ sim_cia nds32_decode32_sdc (sim_cpu *cpu, const uint32_t insn, sim_cia cia);
 sim_cia nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia);
 void nds32_bad_op (sim_cpu *cpu, uint32_t cia, uint32_t insn, char *tag);
 
+void nds32_bad_op (sim_cpu *cpu, uint32_t cia, uint32_t insn, char *tag);
 
 #if 1
 #define SIM_IO_DPRINTF(sd, fmt, args...)   sim_io_printf (sd, fmt, ## args)
