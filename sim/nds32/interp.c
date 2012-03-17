@@ -985,7 +985,11 @@ nds32_decode32_jreg (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       return cia;
 
     case 1:			/* jral */
-      CCPU_GPR[rt].u = cia + 4;
+      if (cpu->iflags & NIF_EX9)
+	CCPU_GPR[rt].u = cia + 2;
+      else
+	CCPU_GPR[rt].u = cia + 4;
+
       cia = CCPU_GPR[rb].u;
       /* SIM_IO_DPRINTF (sd, "set $pc to 0x%x, save ra to $r%d\n", CCPU_USR[NC_PC].u, rb); */
       if (CCPU_PSW_TEST (PSW_IFCON))
@@ -1008,7 +1012,11 @@ nds32_decode32_jreg (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       break; /* NOT taken */
 
     case 3:			/* jralnez */
-      CCPU_GPR[rt].u = cia + 4;
+      if (cpu->iflags & NIF_EX9)
+	CCPU_GPR[rt].u = cia + 2;
+      else
+	CCPU_GPR[rt].u = cia + 4;
+
       if (CCPU_GPR[rb].u != 0)	/* taken */
 	{
 	  if (CCPU_PSW_TEST (PSW_IFCON))
@@ -1069,7 +1077,11 @@ nds32_decode32_br2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0x0:			/* ifcall */
       if (!CCPU_PSW_TEST (PSW_IFCON))
 	{
-	  CCPU_USR[NC_IFCLP].u = cia + 4;
+	  if (cpu->iflags & NIF_EX9)
+	    CCPU_USR[NC_IFCLP].u = cia + 2;
+	  else
+	    CCPU_USR[NC_IFCLP].u = cia + 4;
+
 	  CCPU_PSW_SET (PSW_IFCON);
 	  cpu->iflags &= ~NIF_EX9;	/* Check ex9.it for details. */
 	  return cia + (N32_IMMS (insn, 16) << 1);
@@ -1133,7 +1145,11 @@ nds32_decode32_br2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0x1d:			/* bltzal */
       if (CCPU_GPR[rt].s < 0)
 	{
-	  CCPU_GPR[NG_LP].u = cia + 4;
+	  if (cpu->iflags & NIF_EX9)
+	    CCPU_USR[NC_IFCLP].u = cia + 2;
+	  else
+	    CCPU_USR[NC_IFCLP].u = cia + 4;
+
 	  cpu->iflags &= ~NIF_EX9;	/* Check ex9.it for details. */
 	  return cia + (imm16s << 1);
 	}
@@ -1328,8 +1344,18 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       CCPU_GPR[rt].u = N32_IMM20U (insn) << 12;
       break;
     case 0x24:			/* ji, jal */
-      if (insn & (1 << 24))	/* jal */
-	CCPU_GPR[NG_LP].u = cia + 4;
+      if (cpu->iflags & NIF_EX9)
+	{
+	  if (insn & (1 << 24))	/* jal in ex9 */
+	    CCPU_GPR[NG_LP].u = cia + 2;
+	  cia = (cia & 0xff000000) | (N32_IMMU (insn, 24) << 1);
+	}
+      else
+	{
+	  if (insn & (1 << 24))	/* jal */
+	    CCPU_GPR[NG_LP].u = cia + 4;
+	  cia = cia + (N32_IMMS (insn, 24) << 1);
+	}
 
       if (CCPU_PSW_TEST (PSW_IFCON))
 	{
@@ -1337,10 +1363,6 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	  CCPU_PSW_CLEAR (PSW_IFCON);
 	}
 
-      if (cpu->iflags & NIF_EX9)
-	cia = (cia & 0xff000000) + (N32_IMM24S (insn) << 1);
-      else
-	cia = cia + (N32_IMM24S (insn) << 1);
       cpu->iflags &= ~NIF_EX9;
       return cia;
     case 0x25:			/* jreg */
