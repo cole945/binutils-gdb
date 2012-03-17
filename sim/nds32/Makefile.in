@@ -29,6 +29,8 @@ SIM_OBJS = \
 	sim-hrw.o \
 	sim-load.o \
 	sim-hload.o \
+	sim-resume.o \
+	sim-reg.o \
 	$(SIM_EXTRA_OBJS)
 ## COMMON_POST_CONFIG_FRAG
 
