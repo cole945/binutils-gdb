@@ -30,6 +30,8 @@ SIM_OBJS = \
 	sim-load.o \
 	sim-hload.o \
 	sim-resume.o \
+	sim-stop.o \
+	sim-reason.o \
 	sim-reg.o \
 	$(SIM_EXTRA_OBJS)
 ## COMMON_POST_CONFIG_FRAG
