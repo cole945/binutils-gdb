@@ -25,20 +25,37 @@
 
 #include "sim-basics.h"
 #include "sim-signal.h"
-#include "nds32-sim.h"
 
+typedef struct _sim_cpu SIM_CPU; /* sim-reg.c needs this. */
 typedef unsigned32 sim_cia;
 
 #define CIA_GET(cpu)     CPU_PC_GET (cpu)
 #define CIA_SET(cpu,val) CPU_PC_SET ((cpu), (val))
 
-typedef struct _sim_cpu SIM_CPU;
-
 #include "sim-base.h"
 
+typedef union {
+  uint32_t u;
+  int32_t s;
+} reg_t;
+
 struct _sim_cpu {
-  /* ... simulator specific members ... */
-  struct nds32_cpu_state state;
+  /* 32 general purpose registers. */
+  reg_t reg_gpr[32];
+#define CCPU_GPR	cpu->reg_gpr
+
+  /* User registers. 32 group x 32 USR */
+  reg_t reg_usr[32 * 32];
+#define CCPU_USR	cpu->reg_usr
+
+  /* System registers.  Major x Minor x Ext */
+  reg_t reg_sr[8 * 16 * 8];
+#define CCPU_SR		cpu->reg_sr
+
+  /* Floating-point registers. 32 single union 32 double. FIXME */
+  reg_t reg_fpr[64];
+#define CCPU_FPR	cpu->reg_fpr
+
   sim_cpu_base base;
 };
 

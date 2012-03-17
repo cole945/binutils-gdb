@@ -30,6 +30,7 @@
 #include "gdb/remote-sim.h"
 #include "dis-asm.h"
 #include "sim-main.h"
+#include "nds32-sim.h"
 #include "sim-utils.h"
 #include "sim-fpu.h"
 
@@ -37,22 +38,22 @@
 #include "nds32-libc.h"
 
 static inline uint64_t
-nds32_fd_to_64 (SIM_DESC sd, int fd)
+nds32_fd_to_64 (sim_cpu *cpu, int fd)
 {
   fd <<= 1;
-  return ((uint64_t) nds32_fpr[fd].u << 32) | (uint64_t) nds32_fpr[fd + 1].u;
+  return ((uint64_t) CCPU_FPR[fd].u << 32) | (uint64_t) CCPU_FPR[fd + 1].u;
 }
 
 static inline void
-nds32_fd_from_64 (SIM_DESC sd, int fd, uint64_t u64)
+nds32_fd_from_64 (sim_cpu *cpu, int fd, uint64_t u64)
 {
   fd <<= 1;
-  nds32_fpr[fd + 1].u = u64 & 0xFFFFFFFF;
-  nds32_fpr[fd].u = (u64 >> 32) & 0xFFFFFFFF;
+  CCPU_FPR[fd + 1].u = u64 & 0xFFFFFFFF;
+  CCPU_FPR[fd].u = (u64 >> 32) & 0xFFFFFFFF;
 }
 
-void
-nds32_decode32_lwc (SIM_DESC sd, const uint32_t insn)
+sim_cia
+nds32_decode32_lwc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
   const int cop = __GF (insn, 13, 2);
   const int fst = N32_RT5 (insn);
@@ -62,17 +63,19 @@ nds32_decode32_lwc (SIM_DESC sd, const uint32_t insn)
 
   if (insn & (1 << 12))
     {
-      nds32_fpr[fst].u = nds32_ld (sd, nds32_gpr[ra].u, 4);
-      nds32_gpr[ra].u += (imm12s << 2);
+      CCPU_FPR[fst].u = nds32_ld (cpu, CCPU_GPR[ra].u, 4);
+      CCPU_GPR[ra].u += (imm12s << 2);
     }
   else
     {
-      nds32_fpr[fst].u = nds32_ld (sd, nds32_gpr[ra].u + (imm12s << 2), 4);
+      CCPU_FPR[fst].u = nds32_ld (cpu, CCPU_GPR[ra].u + (imm12s << 2), 4);
     }
+
+  return cia + 4;
 }
 
-void
-nds32_decode32_swc (SIM_DESC sd, const uint32_t insn)
+sim_cia
+nds32_decode32_swc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
   const int cop = __GF (insn, 13, 2);
   const int fst = N32_RT5 (insn);
@@ -81,17 +84,19 @@ nds32_decode32_swc (SIM_DESC sd, const uint32_t insn)
 
   if (insn & (1 << 12))		/* fssi.bi */
     {
-      nds32_st (sd, nds32_gpr[ra].u, 4, nds32_fpr[fst].u);
-      nds32_gpr[ra].u += (imm12s << 2);
+      nds32_st (cpu, CCPU_GPR[ra].u, 4, CCPU_FPR[fst].u);
+      CCPU_GPR[ra].u += (imm12s << 2);
     }
   else				/* fssi */
     {
-      nds32_st (sd, nds32_gpr[ra].u + (imm12s << 2), 4, nds32_fpr[fst].u);
+      nds32_st (cpu, CCPU_GPR[ra].u + (imm12s << 2), 4, CCPU_FPR[fst].u);
     }
+
+  return cia + 4;
 }
 
-void
-nds32_decode32_ldc (SIM_DESC sd, const uint32_t insn)
+sim_cia
+nds32_decode32_ldc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
   const int cop = __GF (insn, 13, 2);
   const int fdt = N32_RT5 (insn);
@@ -101,19 +106,21 @@ nds32_decode32_ldc (SIM_DESC sd, const uint32_t insn)
 
   if (insn & (1 << 12))		/* fldi.bi */
     {
-      u64 = nds32_ld (sd, nds32_gpr[ra].u, 8);
-      nds32_gpr[ra].u += (imm12s << 2);
+      u64 = nds32_ld (cpu, CCPU_GPR[ra].u, 8);
+      CCPU_GPR[ra].u += (imm12s << 2);
     }
   else				/* fldi */
     {
-      u64 = nds32_ld (sd, nds32_gpr[ra].u + (imm12s << 2), 8);
+      u64 = nds32_ld (cpu, CCPU_GPR[ra].u + (imm12s << 2), 8);
     }
 
-  nds32_fd_from_64 (sd, fdt, u64);
+  nds32_fd_from_64 (cpu, fdt, u64);
+
+  return cia + 4;
 }
 
-void
-nds32_decode32_sdc (SIM_DESC sd, const uint32_t insn)
+sim_cia
+nds32_decode32_sdc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
   const int cop = __GF (insn, 13, 2);
   const int fdt = N32_RT5 (insn);
@@ -121,17 +128,19 @@ nds32_decode32_sdc (SIM_DESC sd, const uint32_t insn)
   const int imm12s = N32_IMM12S (insn);
   uint64_t u64;
 
-  u64 = nds32_fd_to_64 (sd, fdt);
+  u64 = nds32_fd_to_64 (cpu, fdt);
 
   if (insn & (1 << 12))
     {
-      nds32_st (sd, nds32_gpr[ra].u, 8, u64);
-      nds32_gpr[ra].u += (imm12s << 2);
+      nds32_st (cpu, CCPU_GPR[ra].u, 8, u64);
+      CCPU_GPR[ra].u += (imm12s << 2);
     }
   else
     {
-      nds32_st (sd, nds32_gpr[ra].u + (imm12s << 2), 8, u64);
+      nds32_st (cpu, CCPU_GPR[ra].u + (imm12s << 2), 8, u64);
     }
+
+  return cia + 4;
 }
 
 /* Returns 0 for false
@@ -189,8 +198,8 @@ nds32_decode32_fcmp (sim_fpu *sfa, sim_fpu *sfb)
   return 0;
 }
 
-void
-nds32_decode32_cop (SIM_DESC sd, const uint32_t insn)
+sim_cia
+nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
   const int sv = __GF (insn, 8, 2);
   const int cop = __GF (insn, 4, 2);
@@ -215,15 +224,15 @@ nds32_decode32_cop (SIM_DESC sd, const uint32_t insn)
   if ((insn & 0xb) == 0)
     {
       /* FS1,  FS2 */
-      sim_fpu_32to (&sfa, nds32_fpr[fsa].u);
-      sim_fpu_32to (&sfb, nds32_fpr[fsb].u);
+      sim_fpu_32to (&sfa, CCPU_FPR[fsa].u);
+      sim_fpu_32to (&sfb, CCPU_FPR[fsb].u);
     }
   else if ((insn & 0xb) == 8)
     {
       /* FD1, FD2 */
-      u64 = nds32_fd_to_64 (sd, fda_ >> 1);
+      u64 = nds32_fd_to_64 (cpu, fda_ >> 1);
       sim_fpu_64to (&sfa, u64);
-      u64 = nds32_fd_to_64 (sd, fdb_ >> 1);
+      u64 = nds32_fd_to_64 (cpu, fdb_ >> 1);
       sim_fpu_64to (&sfb, u64);
     }
 
@@ -244,37 +253,37 @@ nds32_decode32_cop (SIM_DESC sd, const uint32_t insn)
 	  if (!dp)
 	    {
 	      /* fcpyss */
-	      u32 = nds32_fpr[fsa].u & 0x7fffffff;
-	      u32 |= nds32_fpr[fsb].u & 0x80000000;
-	      nds32_fpr[fst].u = u32;
+	      u32 = CCPU_FPR[fsa].u & 0x7fffffff;
+	      u32 |= CCPU_FPR[fsb].u & 0x80000000;
+	      CCPU_FPR[fst].u = u32;
 	    }
 	  else
 	    {
 	      /* fcpysd */
-	      u32 = nds32_fpr[fda_].u & 0x7fffffff;
-	      u32 |= nds32_fpr[fdb_].u & 0x80000000;
-	      nds32_fpr[fdt_].u = u32;
-	      nds32_fpr[fdt_ + 1].u = nds32_fpr[fda_ + 1].u;
+	      u32 = CCPU_FPR[fda_].u & 0x7fffffff;
+	      u32 |= CCPU_FPR[fdb_].u & 0x80000000;
+	      CCPU_FPR[fdt_].u = u32;
+	      CCPU_FPR[fdt_ + 1].u = CCPU_FPR[fda_ + 1].u;
 	    }
-	  return; /* Just return.  */
+	  goto done; /* Just return.  */
 	case 0x6:		/* fcmovnX */
 	case 0x7:		/* fcmovzX */
 	  if (!dp)
 	    {
 	      /* fcmovzs */
-	      if ((nds32_fpr[fsb].u != 0) ^ ((insn & 1 << 6) != 0))
-		nds32_fpr[fst] = nds32_fpr[fsa];
+	      if ((CCPU_FPR[fsb].u != 0) ^ ((insn & 1 << 6) != 0))
+		CCPU_FPR[fst] = CCPU_FPR[fsa];
 	    }
 	  else
 	    {
 	      /* fcmovzd */
-	      if ((nds32_fpr[fsb].u != 0) ^ ((insn & 1 << 6) != 0))
+	      if ((CCPU_FPR[fsb].u != 0) ^ ((insn & 1 << 6) != 0))
 		{
-		  nds32_fpr[fdt_] = nds32_fpr[fda_];
-		  nds32_fpr[fdt_ + 1] = nds32_fpr[fda_ + 1];
+		  CCPU_FPR[fdt_] = CCPU_FPR[fda_];
+		  CCPU_FPR[fdt_ + 1] = CCPU_FPR[fda_ + 1];
 		}
 	    }
-	  return;
+	  goto done;
 	case 0xc:		/* fmuls */
 	  sim_fpu_mul (&sft, &sfa, &sfb);
 	  break;
@@ -306,15 +315,15 @@ nds32_decode32_cop (SIM_DESC sd, const uint32_t insn)
 	      sim_fpu_sqrt (&sft, &sfa);
 	      break;
 	    case 0x5:		/* fabss */
-	      nds32_fpr[fst].u = nds32_fpr[fsa].u & 0x7fffffff;
-	      return; /* Just return.  */
+	      CCPU_FPR[fst].u = CCPU_FPR[fsa].u & 0x7fffffff;
+	      goto done; /* Just return.  */
 	    case 0x5 | DP:	/* fabsd */
-	      nds32_fpr[fdt_].u = nds32_fpr[fda_].u & 0x7fffffff;
-	      nds32_fpr[fdt_ + 1].u = nds32_fpr[fda_ + 1].u;
-	      return; /* Just return.  */
+	      CCPU_FPR[fdt_].u = CCPU_FPR[fda_].u & 0x7fffffff;
+	      CCPU_FPR[fdt_ + 1].u = CCPU_FPR[fda_ + 1].u;
+	      goto done; /* Just return.  */
 	    case 0xc:		/* fsi2s */
 	    case 0xc | DP:	/* fsi2d */
-	      sim_fpu_i32to (&sft, nds32_fpr[fsa].u, sim_fpu_round_near);
+	      sim_fpu_i32to (&sft, CCPU_FPR[fsa].u, sim_fpu_round_near);
 	      break;
 	    case 0x10:		/* fs2ui */
 	    case 0x14:		/* fs2ui.z */
@@ -323,8 +332,8 @@ nds32_decode32_cop (SIM_DESC sd, const uint32_t insn)
 	      sim_fpu_to32u (&u32, &sfa, (insn & (1 << 12))
 					 ? sim_fpu_round_zero
 					 : sim_fpu_round_near);
-	      nds32_fpr[fst].u = u32;
-	      return; /* Just return.  */
+	      CCPU_FPR[fst].u = u32;
+	      goto done; /* Just return.  */
 	    case 0x18:		/* fs2si */
 	    case 0x1c:		/* fs2si.z */
 	    case 0x18 | DP:	/* fd2si */
@@ -332,8 +341,8 @@ nds32_decode32_cop (SIM_DESC sd, const uint32_t insn)
 	      sim_fpu_to32i (&i32, &sfa, (insn & (1 << 12))
 					 ? sim_fpu_round_zero
 					 : sim_fpu_round_near);
-	      nds32_fpr[fst].s = i32;
-	      return; /* Just return.  */
+	      CCPU_FPR[fst].s = i32;
+	      goto done; /* Just return.  */
 	    default:
 	      goto bad_op;
 	    }
@@ -345,15 +354,15 @@ nds32_decode32_cop (SIM_DESC sd, const uint32_t insn)
       if (!sft_to_dp)
 	{
 	  /* General epilogue for saving result to fst.  */
-	  sim_fpu_to32 ((unsigned32 *) (nds32_fpr + fst), &sft);
+	  sim_fpu_to32 ((unsigned32 *) (CCPU_FPR + fst), &sft);
 	}
       else
 	{
 	  /* General epilogue for saving result to fdt.  */
 	  sim_fpu_to64 (&u64, &sft);
-	  nds32_fd_from_64 (sd, fdt_ >> 1, u64);
+	  nds32_fd_from_64 (cpu, fdt_ >> 1, u64);
 	}
-      return;
+      goto done;
     }
 
   /* fcmpxxd and fcmpxxs share this function. */
@@ -363,99 +372,104 @@ nds32_decode32_cop (SIM_DESC sd, const uint32_t insn)
       switch (__GF (insn, 7, 3))
 	{
 	case 0x0:		/* fcmpeq[sd] */
-	  nds32_fpr[fst].u = fcmp == 1;
-	  return;
+	  CCPU_FPR[fst].u = fcmp == 1;
+	  goto done;
 	case 0x1:		/* fcmplt[sd] */
-	  nds32_fpr[fst].u = fcmp == 2;
-	  return;
+	  CCPU_FPR[fst].u = fcmp == 2;
+	  goto done;
 	case 0x2:		/* fcmple[sd] */
-	  nds32_fpr[fst].u = fcmp == 1 || fcmp == 2;
-	  return;
+	  CCPU_FPR[fst].u = fcmp == 1 || fcmp == 2;
+	  goto done;
 	case 0x3:
-	  nds32_fpr[fst].u = fcmp == 3 || fcmp == 4;
-	  return;
+	  CCPU_FPR[fst].u = fcmp == 3 || fcmp == 4;
+	  goto done;
 	}
-      return;
+      goto done;
     }
 
   switch (insn & 0x3ff)
     {
     case 0x1:			/* fmfsr */
-      nds32_gpr[rt].u = nds32_fpr[fsa].u;
-      return;
+      CCPU_GPR[rt].u = CCPU_FPR[fsa].u;
+      goto done;
     case 0x9:			/* fmtsr */
-      nds32_fpr[fsa].u = nds32_gpr[rt].u;
-      return;
+      CCPU_FPR[fsa].u = CCPU_GPR[rt].u;
+      goto done;
     case 0x41:			/* fmfdr */
       {
 	int rt_ = rt & ~1;
 	if (nds32_psw_be ())
 	  {
-	    nds32_gpr[rt_] = nds32_fpr[fda_];
-	    nds32_gpr[rt_ + 1] = nds32_fpr[fda_ + 1];
+	    CCPU_GPR[rt_] = CCPU_FPR[fda_];
+	    CCPU_GPR[rt_ + 1] = CCPU_FPR[fda_ + 1];
 	  }
 	else
 	  {
-	    nds32_gpr[rt_] = nds32_fpr[fda_ + 1];
-	    nds32_gpr[rt_ + 1] = nds32_fpr[fda_];
+	    CCPU_GPR[rt_] = CCPU_FPR[fda_ + 1];
+	    CCPU_GPR[rt_ + 1] = CCPU_FPR[fda_];
 	  }
       }
-      return;
+      goto done;
     case 0x49:			/* fmtdr */
       {
 	int rt_ = rt & ~1;
 	if (nds32_psw_be ())
 	  {
-	    nds32_fpr[fda_ + 1] = nds32_gpr[rt_ + 1];
-	    nds32_fpr[fda_] = nds32_gpr[rt_];
+	    CCPU_FPR[fda_ + 1] = CCPU_GPR[rt_ + 1];
+	    CCPU_FPR[fda_] = CCPU_GPR[rt_];
 	  }
 	else
 	  {
-	    nds32_fpr[fda_ + 1] = nds32_gpr[rt_];
-	    nds32_fpr[fda_] = nds32_gpr[rt_ + 1];
+	    CCPU_FPR[fda_ + 1] = CCPU_GPR[rt_];
+	    CCPU_FPR[fda_] = CCPU_GPR[rt_ + 1];
 	  }
       }
-      return;
+      goto done;
     }
 
   switch (insn & 0xFF)
     {
     case 0x2:			/* fls */
-      u32 = nds32_ld (sd, nds32_gpr[ra].u + (nds32_gpr[rb].s << sv), 4);
-      nds32_fpr[fst].u = u32;
-      return;
+      u32 = nds32_ld (cpu, CCPU_GPR[ra].u + (CCPU_GPR[rb].s << sv), 4);
+      CCPU_FPR[fst].u = u32;
+      goto done;
     case 0x3:			/* fld */
-      u64 = nds32_ld (sd, nds32_gpr[ra].u + (nds32_gpr[rb].s << sv), 8);
-      nds32_fd_from_64 (sd, fdt_ >> 1, u64);
-      return;
+      u64 = nds32_ld (cpu, CCPU_GPR[ra].u + (CCPU_GPR[rb].s << sv), 8);
+      nds32_fd_from_64 (cpu, fdt_ >> 1, u64);
+      goto done;
     case 0xa:			/* fss */
-      nds32_st (sd, nds32_gpr[ra].u + (nds32_gpr[rb].s << sv), 4, nds32_fpr[fst].u);
-      return;
+      nds32_st (cpu, CCPU_GPR[ra].u + (CCPU_GPR[rb].s << sv), 4, CCPU_FPR[fst].u);
+      goto done;
     case 0xb:			/* fsd */
-      u64 = nds32_fd_to_64 (sd, fdt_ >> 1);
-      nds32_st (sd, nds32_gpr[ra].u + (nds32_gpr[rb].s << sv), 8, u64);
-      return;
+      u64 = nds32_fd_to_64 (cpu, fdt_ >> 1);
+      nds32_st (cpu, CCPU_GPR[ra].u + (CCPU_GPR[rb].s << sv), 8, u64);
+      goto done;
     case 0x82:			/* fls.bi */
-      u32 = nds32_ld (sd, nds32_gpr[ra].u, 4);
-      nds32_gpr[ra].u += (nds32_gpr[rb].s << sv);
-      nds32_fpr[fst].u = u32;
-      return;
+      u32 = nds32_ld (cpu, CCPU_GPR[ra].u, 4);
+      CCPU_GPR[ra].u += (CCPU_GPR[rb].s << sv);
+      CCPU_FPR[fst].u = u32;
+      goto done;
     case 0x83:			/* fld.bi */
-      u64 = nds32_ld (sd, nds32_gpr[ra].u, 8);
-      nds32_gpr[ra].u += (nds32_gpr[rb].s << sv);
-      nds32_fd_from_64 (sd, fdt_ >> 1, u64);
-      return;
+      u64 = nds32_ld (cpu, CCPU_GPR[ra].u, 8);
+      CCPU_GPR[ra].u += (CCPU_GPR[rb].s << sv);
+      nds32_fd_from_64 (cpu, fdt_ >> 1, u64);
+      goto done;
     case 0x8a:			/* fss.bi */
-      nds32_st (sd, nds32_gpr[ra].u, 4, nds32_fpr[fst].u);
-      nds32_gpr[ra].u += (nds32_gpr[rb].s << sv);
-      return;
+      nds32_st (cpu, CCPU_GPR[ra].u, 4, CCPU_FPR[fst].u);
+      CCPU_GPR[ra].u += (CCPU_GPR[rb].s << sv);
+      goto done;
     case 0x8b:			/* fsd.bi */
-      u64 = nds32_fd_to_64 (sd, fdt_ >> 1);
-      nds32_st (sd, nds32_gpr[ra].u, 8, u64);
-      nds32_gpr[ra].u += (nds32_gpr[rb].s << sv);
-      return;
+      u64 = nds32_fd_to_64 (cpu, fdt_ >> 1);
+      nds32_st (cpu, CCPU_GPR[ra].u, 8, u64);
+      CCPU_GPR[ra].u += (CCPU_GPR[rb].s << sv);
+      goto done;
     }
 
+
+done:
+  return cia + 4;
+
 bad_op:
-  nds32_bad_op (sd, nds32_usr[NC_PC].u - 4, insn, "COP");
+  nds32_bad_op (cpu, cia, insn, "COP");
+  return cia;
 }
