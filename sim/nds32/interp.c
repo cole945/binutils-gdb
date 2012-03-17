@@ -162,9 +162,9 @@ nds32_bad_op (sim_cpu *cpu, uint32_t cia, uint32_t insn, char *tag)
   if (tag == NULL)
     tag = "";
 
-  sim_io_printf (CPU_STATE (cpu),
-		 "Unhandled %s instruction at pc=0x%x, code=0x%08x\n",
-		 tag, cia, insn);
+  sim_io_error (CPU_STATE (cpu),
+		"Unhandled %s instruction at 0x%x, code=0x%08x\n",
+		tag, cia, insn);
 
   sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_signalled, SIM_SIGILL);
 }
@@ -328,7 +328,8 @@ nds32_ld_sext (sim_cpu *cpu, SIM_ADDR addr, int size)
   if (r != size)
     {
       uint32_t cia = CCPU_USR[NC_PC].u; /* FIXME */
-      sim_io_eprintf (sd, "access violation at 0x%x. pc=0x%x\n", addr, cia);
+      sim_io_eprintf (sd, "Access violation at 0x%08x. Read of address 0x%08x\n",
+		      cia, addr);
       sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_signalled, SIM_SIGSEGV);
     }
 
@@ -351,7 +352,8 @@ nds32_ld (sim_cpu *cpu, SIM_ADDR addr, int size)
   if (r != size)
     {
       uint32_t cia = CCPU_USR[NC_PC].u; /* FIXME */
-      sim_io_eprintf (sd, "access violation at 0x%x. pc=0x%x\n", addr, cia);
+      sim_io_eprintf (sd, "Access violation at 0x%08x. Read of address 0x%08x\n",
+		      cia, addr);
       sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_signalled, SIM_SIGSEGV);
     }
 
@@ -373,7 +375,7 @@ nds32_st (sim_cpu *cpu, SIM_ADDR addr, int size, ulongest_t val)
   if (r != size)
     {
       uint32_t cia = CCPU_USR[NC_PC].u; /* FIXME */
-      sim_io_eprintf (sd, "access violation at 0x%x. pc=0x%x\n", addr, cia);
+      sim_io_eprintf (sd, "Access violation at %p. Write of address %p\n", (void*)cia, (void*)addr);
       sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_signalled, SIM_SIGSEGV);
     }
 
@@ -506,7 +508,13 @@ nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
   switch (insn & 0x23)
     {
     case 33:			/* smwa */
-      sim_io_error (sd, "FIXME: SMWA aligment is not checked at 0x%x\n", cia);
+      if (base & 3)
+	{
+	  sim_io_eprintf (sd, "SMWA: unaligned access at 0x%x. "
+			      "Write of address 0x%llx.\n",
+			  cia, base);
+	  return cia;
+	}
     case 32:			/* smw */
       /* TODO: alignment exception check for SMWA */
       for (i = 0; i < 4; i++)
@@ -531,7 +539,13 @@ nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	CCPU_GPR[ra].u += m * di;
       break;
     case 1:			/* lmwa */
-      sim_io_error (sd, "FIXME: LMWA aligment is not checked.\n");
+      if (base & 3)
+	{
+	  sim_io_eprintf (sd, "LMWA: unaligned access at 0x%x. "
+			      "Read of address 0x%llx.\n",
+			  cia, base);
+	  return cia;
+	}
     case 0:			/* lmw */
       /* TODO: alignment exception check for SMWA */
       for (i = 0; i < 4; i++)
@@ -789,8 +803,8 @@ nds32_decode32_alu2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       break;
     case 0x20:			/* mfusr */
       CCPU_GPR[rt].u = CCPU_USR[rb << 5 | ra].u;
-      if (((rb << 5) | ra) == 31)
-	CCPU_GPR[rt].u -= cia;	/* FIXME: I add PC before execution */
+      if (((rb << 5) | ra) == 31)	/* PC */
+	CCPU_GPR[rt].u = cia;
       break;
     case 0x21:			/* mtusr */
       CCPU_USR[(rb << 5) | ra].u = CCPU_GPR[rt].u;
@@ -1358,7 +1372,10 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	int imm11s = __SEXT (__GF (insn, 8, 11), 11);
 
 	if (((insn & (1 << 19)) == 0) ^ (CCPU_GPR[rt].s != imm11s))
-	  CCPU_USR[NC_PC].u += -4 + (N32_IMMS (insn, 8) << 1);
+	  {
+	    cpu->iflags &= ~NIF_EX9;
+	    return cia + (N32_IMMS (insn, 8) << 1);
+	  }
       }
       break;
     case 0x2e:			/* slti */
@@ -1996,6 +2013,7 @@ sim_create_inferior (SIM_DESC sd, struct bfd *prog_bfd, char **argv,
   /* Set the initial register set.  */
   if (prog_bfd != NULL)
     {
+      /* FIXME: Remove this when crt0 is readly. */
       for (s = prog_bfd->sections; s; s = s->next)
 	{
 	  if (strcmp (bfd_get_section_name (prog_bfd, s), ".ex9.itable") == 0)
@@ -2004,7 +2022,9 @@ sim_create_inferior (SIM_DESC sd, struct bfd *prog_bfd, char **argv,
 	      break;
 	    }
 	}
-      CCPU_USR[NC_PC].u = bfd_get_start_address (prog_bfd);
+
+      /* Set PC to entry point address. */
+      (* CPU_PC_STORE (cpu)) (cpu, bfd_get_start_address (prog_bfd));
     }
 
   return SIM_RC_OK;
