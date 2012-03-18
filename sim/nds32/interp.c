@@ -1425,6 +1425,25 @@ bad_op:
 }
 
 static sim_cia
+nds32_decode16_ex9 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
+{
+  sim_cia ex9_cia;
+
+  /* For jump and taken branch, it should clear the NIF_EX9 bit
+     to indicate the ex9_cia should be used; otherwsie,
+     the next cia, cia + 2, should be used.  */
+
+  cpu->iflags |= NIF_EX9;
+  ex9_cia = nds32_decode32 (cpu, insn, cia);
+
+  if ((cpu->iflags & NIF_EX9) == 0)
+    return ex9_cia;
+
+  cpu->iflags &= ~NIF_EX9;
+  return cia + 2;
+}
+
+static sim_cia
 nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
 {
   SIM_DESC sd = CPU_STATE (cpu);
@@ -1440,24 +1459,11 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
   const int rt38 = N16_RT38 (insn);
   const int imm3u = rb3;
 
-  if (__GF (insn, 5, 10) == 0x2ea) /* ex9.it */
+  if (__GF (insn, 5, 10) == 0x2ea) /* ex9.it imm5 */
     {
-      sim_cia ex9_cia;
-
       sim_read (sd, CCPU_USR[NC_ITB].u + (imm5u << 2), (unsigned char *) &insn, 4);
       insn = extract_unsigned_integer ((unsigned char *) &insn, 4, BIG_ENDIAN);
-      cpu->iflags |= NIF_EX9;
-      ex9_cia = nds32_decode32 (cpu, insn, cia);
-
-      /* For jump and taken branch, it should clear the NIF_EX9 bit
-	 to indicate the ex9_cia should be used; otherwsie,
-	 the next cia, cia + 2, should be used.  */
-
-      if ((cpu->iflags & NIF_EX9) == 0)
-	return ex9_cia;
-
-      cpu->iflags &= ~NIF_EX9;
-      return cia + 2;
+      return nds32_decode16_ex9 (cpu, insn, cia);
     }
 
   switch (__GF (insn, 7, 8))
@@ -1610,10 +1616,7 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
       sim_read (sd, CCPU_USR[NC_ITB].u + (imm9u << 2),
 		(unsigned char *) &insn, 4);
       insn = extract_unsigned_integer ((unsigned char *) &insn, 4, BIG_ENDIAN);
-      cpu->iflags |= NIF_EX9;
-      cia = nds32_decode32 (cpu, insn, cia);
-      cpu->iflags &= ~NIF_EX9;
-      return cia;
+      return nds32_decode16_ex9 (cpu, insn, cia);
     case 0x3c:			/* ifcall9 */
       if (!CCPU_PSW_TEST (PSW_IFCON))
 	{
