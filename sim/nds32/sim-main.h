@@ -41,6 +41,11 @@ typedef union {
 
 enum nds32_internal_flags
 {
+  /* Set NIF_EX9 to indicate the instructions is executed in ITB.
+     JAL and J work differently in ITB.
+     If the instruction is a branch or jump, clear NIF_EX9
+     to indicate the next CIA is changed by the instruction
+     instead of CIA + 2.  */
   NIF_EX9 = 1,
 };
 
