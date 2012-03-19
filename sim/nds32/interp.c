@@ -1176,6 +1176,8 @@ nds32_decode32_misc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0x1:			/* cctl */
     case 0x8:			/* dsb */
     case 0x9:			/* isb */
+    case 0xd:			/* isync */
+    case 0xc:			/* msync */
       break;
     case 0x5:			/* trap */
     case 0xa:			/* break */
@@ -1190,11 +1192,17 @@ nds32_decode32_misc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0xb:			/* syscall */
       return nds32_syscall (cpu, __GF (insn, 5, 15), cia);
     case 0x4:			/* iret */
+      nds32_bad_op (cpu, cia, insn, "iret (MISC)");
+      return cia;
     case 0x6:			/* teqz */
+      nds32_bad_op (cpu, cia, insn, "teqz (MISC)");
+      return cia;
     case 0x7:			/* tnez */
-    case 0xc:			/* msync */
-    case 0xd:			/* isync */
+      nds32_bad_op (cpu, cia, insn, "tnez (MISC)");
+      return cia;
     case 0xe:			/* tlbop */
+      nds32_bad_op (cpu, cia, insn, "tlbop (MISC)");
+      return cia;
     default:
       nds32_bad_op (cpu, cia, insn, "MISC");
       return cia;
