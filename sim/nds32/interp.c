@@ -2083,6 +2083,12 @@ sim_create_inferior (SIM_DESC sd, struct bfd *prog_bfd, char **argv,
 
       /* Set PC to entry point address. */
       (* CPU_PC_STORE (cpu)) (cpu, bfd_get_start_address (prog_bfd));
+
+      /* Set default endian. */
+      if (bfd_big_endian (prog_bfd))
+	CCPU_PSW_SET (PSW_BE);
+      else
+	CCPU_PSW_CLEAR (PSW_BE);
     }
 
   return SIM_RC_OK;
