@@ -82,6 +82,7 @@ enum nds32_syscall_num
   SYS_time = 18,
   SYS_gettimeofday = 19,
   SYS_times = 20,
+  SYS_link = 21,
   SYS_argc = 172,
   SYS_argnlen = 173,
   SYS_argn = 174,

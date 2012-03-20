@@ -33,6 +33,7 @@
 #include "nds32-sim.h"
 #include "sim-utils.h"
 #include "sim-fpu.h"
+#include "sim-trace.h"
 
 #include "opcode/nds32.h"
 #include "nds32-sim.h"
@@ -43,6 +44,8 @@
 #include <sys/time.h>
 #include <sys/times.h>
 #endif
+#include <unistd.h>
+#include <time.h>
 
 /* Debug flag to display instructions and registers.  */
 static int tracing = 0;
@@ -298,14 +301,48 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
       }
       break;
 #endif
-    case SYS_rename:
     case SYS_errno:
+      r = cpu->errno;
+      break;
+    case SYS_link:
+      {
+	char *oldpath = fetch_str (sd, CCPU_GPR[0].u);
+	char *newpath = fetch_str (sd, CCPU_GPR[1].u);
+
+	r = link (oldpath, newpath);
+	free (oldpath);
+	free (newpath);
+      }
+      break;
+    case SYS_rename:
+      {
+	char *oldpath = fetch_str (sd, CCPU_GPR[0].u);
+	char *newpath = fetch_str (sd, CCPU_GPR[1].u);
+
+	r = sim_io_rename (sd, oldpath, newpath);
+	free (oldpath);
+	free (newpath);
+      }
+      break;
     case SYS_time:
+      {
+	time_t t;
+	time_t *tp = NULL;
+
+	if (CCPU_GPR[0].u)
+	  {
+	    sim_read (sd, CCPU_GPR[0].u, (unsigned char *) &t, sizeof (t));
+	    tp = &t;
+	  }
+	r = time (tp);
+      }
+      break;
     default:
       nds32_bad_op (cpu, cia, swid, "syscall");
       return cia;
     }
 
+  cpu->errno = r;
   CCPU_GPR[0].s = r;
   return cia + 4;
 }
@@ -1808,18 +1845,6 @@ sim_engine_run (SIM_DESC sd, int next_cpu_nr, int nr_cpus, int siggnal)
 	  sim_events_process (sd);
 	}
     }
-}
-
-int
-sim_trace (SIM_DESC sd)
-{
-  tracing = 1;
-
-  sim_resume (sd, 0, 0);
-
-  tracing = 0;
-
-  return 1;
 }
 
 /* This function is mainly used for fetch general purpose registers.
