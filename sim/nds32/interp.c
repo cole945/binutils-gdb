@@ -136,6 +136,9 @@ fetch_str (SIM_DESC sd, address_word addr)
   int nr = 0;
   char null;
 
+  if (addr == 0)
+    return NULL;
+
   while (sim_read (sd, addr + nr, &null, 1) == 1 && null != 0)
     nr++;
   buf = NZALLOC (char, nr + 1);
@@ -231,13 +234,23 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
       r = sim_io_lseek (sd, CCPU_GPR[0].s, CCPU_GPR[1].s, CCPU_GPR[2].s);
       break;
     case SYS_fstat:
+    case SYS_stat:
       {
 	SIM_ADDR addr = CCPU_GPR[1].s;
 	struct stat stat;
 	struct nds32_stat nstat;
 
 	SIM_ASSERT (sizeof (struct nds32_stat) == 60);
-	r = sim_io_fstat (sd, CCPU_GPR[0].s, &stat);
+
+	if (swid == SYS_fstat)
+	  r = sim_io_fstat (sd, CCPU_GPR[0].s, &stat);
+	else
+	  {
+	    char *path = fetch_str (sd, CCPU_GPR[0].u);
+	    r = sim_io_stat (sd, path, &stat);
+	    free (path);
+	  }
+
 	if (r >= 0)
 	  {
 	    memset (&nstat, 0, sizeof (nstat));
@@ -259,6 +272,8 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
       break;
     case SYS_isatty:
       r = sim_io_isatty (sd, CCPU_GPR[0].s);
+      if (r == -1)
+	r = 0; /* -1 is returned if EBADF, but caller wants 0. */
       break;
     case SYS_getcmdline:
       r = CCPU_GPR[0].u;
@@ -302,7 +317,7 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
       break;
 #endif
     case SYS_errno:
-      r = cpu->errno;
+      r = sim_io_get_errno (sd);
       break;
     case SYS_link:
       {
@@ -342,7 +357,6 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
       return cia;
     }
 
-  cpu->errno = r;
   CCPU_GPR[0].s = r;
   return cia + 4;
 }
