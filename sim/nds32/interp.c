@@ -319,6 +319,7 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
     case SYS_errno:
       r = sim_io_get_errno (sd);
       break;
+#ifdef __linux__
     case SYS_link:
       {
 	char *oldpath = fetch_str (sd, CCPU_GPR[0].u);
@@ -329,6 +330,7 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 	free (newpath);
       }
       break;
+#endif
     case SYS_rename:
       {
 	char *oldpath = fetch_str (sd, CCPU_GPR[0].u);

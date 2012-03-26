@@ -68,8 +68,6 @@ struct _sim_cpu {
 
   enum nds32_internal_flags iflags;
 
-  int errno;	/* Last errno of syscall. */
-
   sim_cpu_base base;
 };
 
