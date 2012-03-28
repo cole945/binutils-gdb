@@ -1522,7 +1522,7 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
 
   if (__GF (insn, 5, 10) == 0x2ea) /* ex9.it imm5 */
     {
-      sim_read (sd, CCPU_USR[NC_ITB].u + (imm5u << 2), (unsigned char *) &insn, 4);
+      sim_read (sd, (CCPU_USR[NC_ITB].u & 0xfffffffc) + (imm5u << 2), (unsigned char *) &insn, 4);
       insn = extract_unsigned_integer ((unsigned char *) &insn, 4, BIG_ENDIAN);
       return nds32_decode16_ex9 (cpu, insn, cia);
     }
@@ -1674,7 +1674,7 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
 	}
 
       /* ex9.it */
-      sim_read (sd, CCPU_USR[NC_ITB].u + (imm9u << 2),
+      sim_read (sd, (CCPU_USR[NC_ITB].u & 0xfffffffc) + (imm9u << 2),
 		(unsigned char *) &insn, 4);
       insn = extract_unsigned_integer ((unsigned char *) &insn, 4, BIG_ENDIAN);
       return nds32_decode16_ex9 (cpu, insn, cia);
