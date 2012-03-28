@@ -139,10 +139,10 @@ fetch_str (SIM_DESC sd, address_word addr)
   if (addr == 0)
     return NULL;
 
-  while (sim_read (sd, addr + nr, &null, 1) == 1 && null != 0)
+  while (sim_read (sd, addr + nr, (unsigned char *) &null, 1) == 1 && null != 0)
     nr++;
   buf = NZALLOC (char, nr + 1);
-  sim_read (sd, addr, buf, nr);
+  sim_read (sd, addr, (unsigned char *) buf, nr);
 
   return buf;
 }
@@ -206,7 +206,7 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 
 	r = sim_io_read (sd, fd, buf, nr);
 	if (r > 0)
-	  sim_write (sd, addr, buf, r);
+	  sim_write (sd, addr, (unsigned char *) buf, r);
 	/* SIM_IO_DPRINTF (sd, "sys_read () = %s\n", buf); */
       }
       break;
@@ -217,7 +217,7 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 	int nr = CCPU_GPR[2].s;
 	char *buf = zalloc (nr);
 
-	sim_read (sd, addr, buf, nr);
+	sim_read (sd, addr, (unsigned char *) buf, nr);
 #if 0
 	if (fd == 1)
 	  r = sim_io_write_stdout (sd, buf, nr);
@@ -277,7 +277,7 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
       break;
     case SYS_getcmdline:
       r = CCPU_GPR[0].u;
-      sim_write (sd, CCPU_GPR[0].u, sd->cmdline, strlen (sd->cmdline) + 1);
+      sim_write (sd, CCPU_GPR[0].u, (unsigned char *) sd->cmdline, strlen (sd->cmdline) + 1);
       break;
 #ifdef __linux__
     case SYS_gettimeofday:
@@ -1986,7 +1986,6 @@ SIM_DESC
 sim_open (SIM_OPEN_KIND kind, host_callback * callback,
 	  struct bfd *abfd, char **argv)
 {
-  char c;
   int i;
   SIM_DESC sd = sim_state_alloc (kind, callback);
 
