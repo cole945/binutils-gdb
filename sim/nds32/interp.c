@@ -2086,16 +2086,6 @@ sim_create_inferior (SIM_DESC sd, struct bfd *prog_bfd, char **argv,
   /* Set the initial register set.  */
   if (prog_bfd != NULL)
     {
-      /* FIXME: Remove this when crt0 is readly. */
-      for (s = prog_bfd->sections; s; s = s->next)
-	{
-	  if (strcmp (bfd_get_section_name (prog_bfd, s), ".ex9.itable") == 0)
-	    {
-	      CCPU_USR[NC_ITB].u = ((uint32_t) bfd_get_section_vma (prog_bfd, s));
-	      break;
-	    }
-	}
-
       /* Set PC to entry point address. */
       (* CPU_PC_STORE (cpu)) (cpu, bfd_get_start_address (prog_bfd));
 
