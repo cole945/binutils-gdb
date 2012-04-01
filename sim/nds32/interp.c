@@ -111,14 +111,6 @@ store_unsigned_integer (unsigned char *addr, int len,
     }
 }
 
-static void
-store_unsigned_integer_by_psw (sim_cpu *cpu, unsigned char *addr, int len, ulongest_t val)
-{
-  int order = CCPU_PSW_TEST (PSW_BE) ? BIG_ENDIAN : LITTLE_ENDIAN;
-
-  store_unsigned_integer (addr, len, order, val);
-}
-
 /* Read a null terminated string from memory, return in a buffer */
 
 static char *
@@ -356,7 +348,7 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 }
 
 ulongest_t
-nds32_ld (sim_cpu *cpu, SIM_ADDR addr, int size)
+__nds32_ld (sim_cpu *cpu, SIM_ADDR addr, int size, int aligned_p)
 {
   int r;
   ulongest_t val = 0;
@@ -366,7 +358,7 @@ nds32_ld (sim_cpu *cpu, SIM_ADDR addr, int size)
 
   SIM_ASSERT (size <= sizeof (ulongest_t));
 
-  if ((addr & (size - 1)) != 0)
+  if (aligned_p && (addr & (size - 1)) != 0)
     {
       sim_io_eprintf (sd, "Unaligned access at 0x%08x. "
 			  "Read of address 0x%08x", cia, addr);
@@ -388,7 +380,8 @@ nds32_ld (sim_cpu *cpu, SIM_ADDR addr, int size)
 }
 
 void
-nds32_st (sim_cpu *cpu, SIM_ADDR addr, int size, ulongest_t val)
+__nds32_st (sim_cpu *cpu, SIM_ADDR addr, int size, ulongest_t val,
+	    int aligned_p)
 {
   int r;
   int order;
@@ -397,7 +390,7 @@ nds32_st (sim_cpu *cpu, SIM_ADDR addr, int size, ulongest_t val)
 
   SIM_ASSERT (size <= sizeof (ulongest_t));
 
-  if ((addr & (size - 1)) != 0)
+  if (aligned_p && (addr & (size - 1)) != 0)
     {
       sim_io_eprintf (sd, "Unaligned access at 0x%08x. "
 			  "Read of address 0x%08x", cia, addr);
@@ -440,6 +433,8 @@ nds32_decode32_mem (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
   const int rb = N32_RB5 (insn);
   const int sv = __GF (insn, 8, 2);
   const int op = insn & 0xFF;
+  uint32_t addr;
+  uint32_t shift;
 
   switch (op)
     {
@@ -447,34 +442,37 @@ nds32_decode32_mem (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0x1:			/* lh */
     case 0x2:			/* lw */
     case 0x3:			/* ld */
-      CCPU_GPR[rt].u =
-	nds32_ld (cpu, CCPU_GPR[ra].u + (CCPU_GPR[rb].u << sv), (1 << (op)));
+      addr = CCPU_GPR[ra].u + (CCPU_GPR[rb].u << sv);
+      CCPU_GPR[rt].u = nds32_ld_aligned (cpu, addr, (1 << (op)));
       break;
     case 0x4:			/* lb.bi */
     case 0x5:			/* lh.bi */
     case 0x6:			/* lw.bi */
     case 0x7:			/* ld.bi */
-      CCPU_GPR[rt].u = nds32_ld (cpu, CCPU_GPR[ra].u, (1 << (op & 0x3)));
+      CCPU_GPR[rt].u = nds32_ld_aligned (cpu, CCPU_GPR[ra].u, 1 << (op & 0x3));
       CCPU_GPR[ra].u += (CCPU_GPR[rb].u << sv);
       break;
     case 0x8:			/* sb */
     case 0x9:			/* sh */
     case 0xa:			/* sw */
     case 0xb:			/* sd */
-      nds32_st (cpu, CCPU_GPR[ra].u + (CCPU_GPR[rb].u << sv), (1 << (op & 0x3)),
-		CCPU_GPR[rt].u);
+      addr = CCPU_GPR[ra].u + (CCPU_GPR[rb].u << sv);
+      nds32_st_aligned (cpu, addr, (1 << (op & 0x3)), CCPU_GPR[rt].u);
       break;
     case 0xc:			/* sb.bi */
     case 0xd:			/* sh.bi */
     case 0xe:			/* sw.bi */
     case 0xf:			/* sd.bi */
-      nds32_st (cpu, CCPU_GPR[ra].u, (1 << (op & 0x3)), CCPU_GPR[rt].u);
+      nds32_st_aligned (cpu, CCPU_GPR[ra].u, (1 << (op & 0x3)),
+			CCPU_GPR[rt].u);
       CCPU_GPR[ra].u += (CCPU_GPR[rb].u << sv);
       break;
     case 0x10:			/* lbs */
     case 0x11:			/* lhs */
     case 0x12:			/* lws */
-      CCPU_GPR[rt].u = nds32_ld (cpu, CCPU_GPR[ra].u + (CCPU_GPR[rb].u << sv), (1 << (op & 0x3)));
+      addr = CCPU_GPR[ra].u + (CCPU_GPR[rb].u << sv);
+      CCPU_GPR[rt].u =
+	nds32_ld_aligned (cpu, addr, (1 << (op & 0x3)));
       CCPU_GPR[rt].u = __SEXT (CCPU_GPR[rt].u, (1 << (op & 0x3)) * 8);
       break;
     case 0x13:			/* dpref */
@@ -483,7 +481,8 @@ nds32_decode32_mem (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0x14:			/* lbs.bi */
     case 0x15:			/* lhs.bi */
     case 0x16:			/* lws.bi */
-      CCPU_GPR[rt].u = nds32_ld (cpu, CCPU_GPR[ra].u, (1 << (op & 0x3)));
+      CCPU_GPR[rt].u = nds32_ld_aligned (cpu, CCPU_GPR[ra].u,
+					 (1 << (op & 0x3)));
       CCPU_GPR[rt].u = __SEXT (CCPU_GPR[rt].u, (1 << (op & 0x3)) * 8);
       CCPU_GPR[ra].u += (CCPU_GPR[rb].u << sv);
       break;
@@ -559,8 +558,8 @@ nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	  if (enable4 & (1 << enb4map[aligned][i]))
 	    {
 	      sim_write (sd, base, reg, 4);
-	      nds32_st (cpu, base, 4,
-			CCPU_GPR[NG_SP - (enb4map[aligned][i])].u);
+	      nds32_st_unaligned (cpu, base, 4,
+				  CCPU_GPR[NG_SP - (enb4map[aligned][i])].u);
 	      base -= 4;
 	    }
 	}
@@ -568,7 +567,7 @@ nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       /* Skip if re == rb == sp > fp.  */
       for (i = re; i >= rb && rb < NG_FP; i--)
 	{
-	  nds32_st (cpu, base, 4, CCPU_GPR[i].u);
+	  nds32_st_unaligned (cpu, base, 4, CCPU_GPR[i].u);
 	  base -= 4;
 	}
 
@@ -589,8 +588,10 @@ nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	{
 	  if (enable4 & (1 << enb4map[aligned][i]))
 	    {
-	      CCPU_GPR[NG_SP - (enb4map[aligned][i])].u
-		= nds32_ld (cpu, base, 4);
+	      uint32_t u;
+
+	      u = nds32_ld_unaligned (cpu, base, 4);
+	      CCPU_GPR[NG_SP - (enb4map[aligned][i])].u = u;
 	      base -= 4;
 	    }
 	}
@@ -598,7 +599,7 @@ nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       /* Skip if re == rb == sp > fp.  */
       for (i = re; i >= rb && rb < NG_FP; i--)
 	{
-	  CCPU_GPR[i].u = nds32_ld (cpu, base, 4);
+	  CCPU_GPR[i].u = nds32_ld_unaligned (cpu, base, 4);
 	  base -= 4;
 	}
 
@@ -1257,6 +1258,8 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
   int rb = N32_RB5 (insn);
   int imm15s = N32_IMM15S (insn);
   int imm15u = N32_IMM15U (insn);
+  uint32_t shift;
+  uint32_t addr;
 
   switch (op)
     {
@@ -1265,10 +1268,9 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0x2:			/* lwi */
     case 0x3:			/* ldi */
       {
-	int shift = (op - 0x0);
-
-	CCPU_GPR[rt].u =
-	  nds32_ld (cpu, CCPU_GPR[ra].u + (imm15s << shift), 1 << shift);
+	shift = (op - 0x0);
+	addr = CCPU_GPR[ra].u + (imm15s << shift);
+	CCPU_GPR[rt].u = nds32_ld_aligned (cpu, addr, 1 << shift);
       }
       break;
 
@@ -1277,9 +1279,8 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0x6:			/* lwi.bi */
     case 0x7:			/* ldi.bi */
       {
-	int shift = (op - 0x4);
-
-	CCPU_GPR[rt].u = nds32_ld (cpu, CCPU_GPR[ra].u, 1 << shift);
+	shift = (op - 0x4);
+	CCPU_GPR[rt].u = nds32_ld_aligned (cpu, CCPU_GPR[ra].u, 1 << shift);
 	CCPU_GPR[ra].u += (imm15s << shift);
       }
       break;
@@ -1289,10 +1290,9 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0xa:			/* swi */
     case 0xb:			/* sdi */
       {
-	int shift = (op - 0x8);
-
-	nds32_st (cpu, CCPU_GPR[ra].u + (imm15s << shift), 1 << shift,
-		  CCPU_GPR[rt].u);
+	shift = (op - 0x8);
+	addr = CCPU_GPR[ra].u + (imm15s << shift);
+	nds32_st_aligned (cpu, addr, 1 << shift, CCPU_GPR[rt].u);
       }
       break;
 
@@ -1301,9 +1301,8 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0xe:			/* swi.bi */
     case 0xf:			/* sdi.bi */
       {
-	int shift = (op - 0xc);
-
-	nds32_st (cpu, CCPU_GPR[ra].u, 1 << shift, CCPU_GPR[rt].u);
+	shift = (op - 0xc);
+	nds32_st_aligned (cpu, CCPU_GPR[ra].u, 1 << shift, CCPU_GPR[rt].u);
 	CCPU_GPR[ra].u += (imm15s << shift);
       }
       break;
@@ -1312,9 +1311,9 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0x11:			/* lhsi */
     case 0x12:			/* lwsi */
       {
-	int shift = (op - 0x10);
-
-	CCPU_GPR[rt].u = nds32_ld (cpu, CCPU_GPR[ra].u + (imm15s << shift), 1 << shift);
+	shift = (op - 0x10);
+	addr = CCPU_GPR[ra].u + (imm15s << shift);
+	CCPU_GPR[rt].u = nds32_ld_aligned (cpu, addr, 1 << shift);
 	CCPU_GPR[rt].u = __SEXT (CCPU_GPR[rt].u, (1 << shift) * 8);
       }
       break;
@@ -1325,9 +1324,8 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0x15:			/* lhsi.bi */
     case 0x16:			/* lwsi.bi */
       {
-	int shift = (op - 0x14);
-
-	CCPU_GPR[rt].u = nds32_ld (cpu, CCPU_GPR[ra].u, 1 << shift);
+	shift = (op - 0x14);
+	CCPU_GPR[rt].u = nds32_ld_aligned (cpu, CCPU_GPR[ra].u, 1 << shift);
 	CCPU_GPR[rt].u = __SEXT (CCPU_GPR[rt].u, (1 << shift) * 8);
 	CCPU_GPR[ra].u += (imm15s << shift);
       }
@@ -1335,11 +1333,13 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0x17:			/* LBGP */
       if (insn & (1 << 19))	/* lbsi.gp */
 	{
-	  CCPU_GPR[rt].u = nds32_ld (cpu, CCPU_GPR[NG_GP].u + N32_IMMS (insn, 19), 1);
+	  addr = CCPU_GPR[NG_GP].u + N32_IMMS (insn, 19);
+	  CCPU_GPR[rt].u = nds32_ld_aligned (cpu, addr, 1);
 	  CCPU_GPR[rt].u = __SEXT (CCPU_GPR[rt].u, 1 * 8);
 	}
       else			/* lbi.gp */
-	CCPU_GPR[rt].u = nds32_ld (cpu, CCPU_GPR[NG_GP].u + N32_IMMS (insn, 19), 1);
+	CCPU_GPR[rt].u =
+	  nds32_ld_aligned (cpu, CCPU_GPR[NG_GP].u + N32_IMMS (insn, 19), 1);
       break;
     case 0x18:			/* LWC */
       return nds32_decode32_lwc (cpu, insn, cia);
@@ -1357,23 +1357,25 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       switch (__GF (insn, 17, 3))
 	{
 	case 0: case 1:		/* lhi.gp */
-	  CCPU_GPR[rt].u =
-	    nds32_ld (cpu, CCPU_GPR[NG_GP].u + (N32_IMMS (insn, 18) << 1), 2);
+	  addr = CCPU_GPR[NG_GP].u + (N32_IMMS (insn, 18) << 1);
+	  CCPU_GPR[rt].u = nds32_ld_aligned (cpu, addr, 2);
 	  break;
 	case 2: case 3:		/* lhsi.gp */
-	  CCPU_GPR[rt].u =
-	    nds32_ld (cpu, CCPU_GPR[NG_GP].u + (N32_IMMS (insn, 18) << 1), 2);
+	  addr = CCPU_GPR[NG_GP].u + (N32_IMMS (insn, 18) << 1);
+	  CCPU_GPR[rt].u = nds32_ld_aligned (cpu, addr, 2);
 	  CCPU_GPR[rt].u = __SEXT (CCPU_GPR[rt].u, 2 * 8);
 	  break;
 	case 4: case 5:		/* shi.gp */
-	  nds32_st (cpu, CCPU_GPR[NG_GP].u + (N32_IMMS (insn, 18) << 1), 2, CCPU_GPR[rt].u);
+	  nds32_st_aligned (cpu, CCPU_GPR[NG_GP].u + (N32_IMMS (insn, 18) << 1), 2,
+			    CCPU_GPR[rt].u);
 	  break;
 	case 6:			/* lwi.gp */
-	  CCPU_GPR[rt].u =
-	    nds32_ld (cpu, CCPU_GPR[NG_GP].u + (N32_IMMS (insn, 17) << 2), 4);
+	  addr= CCPU_GPR[NG_GP].u + (N32_IMMS (insn, 17) << 2);
+	  CCPU_GPR[rt].u = nds32_ld_aligned (cpu, addr, 4);
 	  break;
 	case 7:			/* swi.gp */
-	  nds32_st (cpu, CCPU_GPR[NG_GP].u + (N32_IMMS (insn, 17) << 2), 4, CCPU_GPR[rt].u);
+	  nds32_st_aligned (cpu, CCPU_GPR[NG_GP].u + (N32_IMMS (insn, 17) << 2),
+			    4, CCPU_GPR[rt].u);
 	  break;
 	}
       break;
@@ -1381,7 +1383,8 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       if (insn & (1 << 19))	/* addi.gp */
 	CCPU_GPR[rt].s = CCPU_GPR[NG_GP].u + N32_IMMS (insn, 19);
       else			/* sbi.gp */
-	nds32_st (cpu, CCPU_GPR[NG_GP].u + N32_IMMS (insn, 19), 1, CCPU_GPR[rt].u & 0xFF);
+	nds32_st_aligned (cpu, CCPU_GPR[NG_GP].u + N32_IMMS (insn, 19), 1,
+			  CCPU_GPR[rt].u & 0xFF);
       break;
     case 0x20:			/* ALU_1 */
       return nds32_decode32_alu1 (cpu, insn, cia);
@@ -1508,6 +1511,8 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
   const int rb3 = N16_RB3 (insn);
   const int rt38 = N16_RT38 (insn);
   const int imm3u = rb3;
+  uint32_t shift;
+  uint32_t addr;
 
   if (__GF (insn, 5, 10) == 0x2ea) /* ex9.it imm5 */
     {
@@ -1596,14 +1601,14 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
     case 0x13:			/* lbi333 */
       {
 	int shtbl[] = { 2, -1, 1, 0 };
-	int shift = shtbl[(__GF (insn, 9, 6) - 0x10)];
 
-	CCPU_GPR[rt3].u =
-	  nds32_ld (cpu, CCPU_GPR[ra3].u + (imm3u << shift), 1 << shift);
+	shift = shtbl[(__GF (insn, 9, 6) - 0x10)];
+	addr = CCPU_GPR[ra3].u + (imm3u << shift);
+	CCPU_GPR[rt3].u = nds32_ld_aligned (cpu, addr, 1 << shift);
       }
       goto done;
     case 0x11:			/* lwi333.bi */
-      CCPU_GPR[rt3].u = nds32_ld (cpu, CCPU_GPR[ra3].u, 4);
+      CCPU_GPR[rt3].u = nds32_ld_aligned (cpu, CCPU_GPR[ra3].u, 4);
       CCPU_GPR[ra3].u += imm3u << 2;
       goto done;
     case 0x14:			/* swi333 */
@@ -1611,14 +1616,14 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
     case 0x17:			/* sbi333 */
       {
 	int shtbl[] = { 2, -1, 1, 0 };
-	int shift = shtbl[(__GF (insn, 9, 6) - 0x14)];
 
-	nds32_st (cpu, CCPU_GPR[ra3].u + (imm3u << shift), 1 << shift,
-		  CCPU_GPR[rt3].u);
+	shift = shtbl[(__GF (insn, 9, 6) - 0x14)];
+	nds32_st_aligned (cpu, CCPU_GPR[ra3].u + (imm3u << shift),
+			  1 << shift, CCPU_GPR[rt3].u);
       }
       goto done;
     case 0x15:			/* swi333.bi */
-      nds32_st (cpu, CCPU_GPR[ra3].u, 4, CCPU_GPR[rt3].u);
+      nds32_st_aligned (cpu, CCPU_GPR[ra3].u, 4, CCPU_GPR[rt3].u);
       CCPU_GPR[ra3].u += imm3u << 2;
       goto done;
     case 0x18:			/* addri36.sp */
@@ -1629,14 +1634,14 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
 	/* Not tested yet */
 	int imm7n = -((32 - imm5u) << 2);
 
-	CCPU_GPR[rt4].u = nds32_ld (cpu, CCPU_GPR[8].u + imm7n, 4);
+	CCPU_GPR[rt4].u = nds32_ld_aligned (cpu, CCPU_GPR[8].u + imm7n, 4);
       }
       goto done;
     case 0x1a:			/* lwi450 */
-      CCPU_GPR[rt4].u = nds32_ld (cpu, CCPU_GPR[ra5].u, 4);
+      CCPU_GPR[rt4].u = nds32_ld_aligned (cpu, CCPU_GPR[ra5].u, 4);
       goto done;
     case 0x1b:			/* swi450 */
-      nds32_st (cpu, CCPU_GPR[ra5].u, 4, CCPU_GPR[rt4].u);
+      nds32_st_aligned (cpu, CCPU_GPR[ra5].u, 4, CCPU_GPR[rt4].u);
       goto done;
     case 0x30:			/* slts45 */
       CCPU_GPR[NG_TA].u = (CCPU_GPR[rt4].s < CCPU_GPR[ra5].s) ? 1 : 0;
@@ -1760,10 +1765,11 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
   switch (__GF (insn, 11, 4))
     {
     case 0x7:			/* lwi37.fp/swi37.fp */
+      addr = CCPU_GPR[NG_FP].u + (N16_IMM7U (insn) << 2);
       if (insn & (1 << 7))	/* swi37.fp */
-	nds32_st (cpu, CCPU_GPR[NG_FP].u + (N16_IMM7U (insn) << 2), 4, CCPU_GPR[rt38].u);
+	nds32_st_aligned (cpu, addr, 4, CCPU_GPR[rt38].u);
       else			/* lwi37.fp */
-	CCPU_GPR[rt38].u = nds32_ld (cpu, CCPU_GPR[NG_FP].u + (N16_IMM7U (insn) << 2), 4);
+	CCPU_GPR[rt38].u = nds32_ld_aligned (cpu, addr, 4);
       goto done;
     case 0x8:			/* beqz38 */
       if (CCPU_GPR[rt38].u == 0)
@@ -1806,10 +1812,11 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
 	return cia + (N16_IMM8S (insn) << 1);
       goto done;
     case 0xe:			/* lwi37/swi37 */
+      addr = CCPU_GPR[NG_SP].u + (N16_IMM7U (insn) << 2);
       if (insn & (1 << 7))	/* swi37.sp */
-	nds32_st (cpu, CCPU_GPR[NG_SP].u + (N16_IMM7U (insn) << 2), 4, CCPU_GPR[rt38].u);
+	nds32_st_aligned (cpu, addr, 4, CCPU_GPR[rt38].u);
       else			/* lwi37.sp */
-	CCPU_GPR[rt38].u = nds32_ld (cpu, CCPU_GPR[NG_SP].u + (N16_IMM7U (insn) << 2), 4);
+	CCPU_GPR[rt38].u = nds32_ld_aligned (cpu, addr, 4);
       goto done;
     }
 
@@ -1912,7 +1919,9 @@ nds32_fetch_register (sim_cpu *cpu, int rn, unsigned char *memory, int length)
   return 0;
 
 do_fetch:
-  store_unsigned_integer_by_psw (cpu, memory, length, val);
+  store_unsigned_integer (memory, length,
+			  CCPU_PSW_TEST (PSW_BE) ? BIG_ENDIAN : LITTLE_ENDIAN,
+			  val);
   return 4;
 }
 
