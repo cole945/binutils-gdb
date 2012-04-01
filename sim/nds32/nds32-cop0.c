@@ -64,12 +64,12 @@ nds32_decode32_lwc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 
   if (insn & (1 << 12))
     {
-      CCPU_FPR[fst].u = nds32_ld (cpu, CCPU_GPR[ra].u, 4);
+      CCPU_FPR[fst].u = nds32_ld_aligned (cpu, CCPU_GPR[ra].u, 4);
       CCPU_GPR[ra].u += (imm12s << 2);
     }
   else
     {
-      CCPU_FPR[fst].u = nds32_ld (cpu, CCPU_GPR[ra].u + (imm12s << 2), 4);
+      CCPU_FPR[fst].u = nds32_ld_aligned (cpu, CCPU_GPR[ra].u + (imm12s << 2), 4);
     }
 
   return cia + 4;
@@ -85,12 +85,12 @@ nds32_decode32_swc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 
   if (insn & (1 << 12))		/* fssi.bi */
     {
-      nds32_st (cpu, CCPU_GPR[ra].u, 4, CCPU_FPR[fst].u);
+      nds32_st_aligned (cpu, CCPU_GPR[ra].u, 4, CCPU_FPR[fst].u);
       CCPU_GPR[ra].u += (imm12s << 2);
     }
   else				/* fssi */
     {
-      nds32_st (cpu, CCPU_GPR[ra].u + (imm12s << 2), 4, CCPU_FPR[fst].u);
+      nds32_st_aligned (cpu, CCPU_GPR[ra].u + (imm12s << 2), 4, CCPU_FPR[fst].u);
     }
 
   return cia + 4;
@@ -107,12 +107,12 @@ nds32_decode32_ldc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 
   if (insn & (1 << 12))		/* fldi.bi */
     {
-      u64 = nds32_ld (cpu, CCPU_GPR[ra].u, 8);
+      u64 = nds32_ld_aligned (cpu, CCPU_GPR[ra].u, 8);
       CCPU_GPR[ra].u += (imm12s << 2);
     }
   else				/* fldi */
     {
-      u64 = nds32_ld (cpu, CCPU_GPR[ra].u + (imm12s << 2), 8);
+      u64 = nds32_ld_aligned (cpu, CCPU_GPR[ra].u + (imm12s << 2), 8);
     }
 
   nds32_fd_from_64 (cpu, fdt, u64);
@@ -133,12 +133,12 @@ nds32_decode32_sdc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 
   if (insn & (1 << 12))
     {
-      nds32_st (cpu, CCPU_GPR[ra].u, 8, u64);
+      nds32_st_aligned (cpu, CCPU_GPR[ra].u, 8, u64);
       CCPU_GPR[ra].u += (imm12s << 2);
     }
   else
     {
-      nds32_st (cpu, CCPU_GPR[ra].u + (imm12s << 2), 8, u64);
+      nds32_st_aligned (cpu, CCPU_GPR[ra].u + (imm12s << 2), 8, u64);
     }
 
   return cia + 4;
@@ -431,37 +431,37 @@ nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
   switch (insn & 0xFF)
     {
     case 0x2:			/* fls */
-      u32 = nds32_ld (cpu, CCPU_GPR[ra].u + (CCPU_GPR[rb].s << sv), 4);
+      u32 = nds32_ld_aligned (cpu, CCPU_GPR[ra].u + (CCPU_GPR[rb].s << sv), 4);
       CCPU_FPR[fst].u = u32;
       goto done;
     case 0x3:			/* fld */
-      u64 = nds32_ld (cpu, CCPU_GPR[ra].u + (CCPU_GPR[rb].s << sv), 8);
+      u64 = nds32_ld_aligned (cpu, CCPU_GPR[ra].u + (CCPU_GPR[rb].s << sv), 8);
       nds32_fd_from_64 (cpu, fdt_ >> 1, u64);
       goto done;
     case 0xa:			/* fss */
-      nds32_st (cpu, CCPU_GPR[ra].u + (CCPU_GPR[rb].s << sv), 4, CCPU_FPR[fst].u);
+      nds32_st_aligned (cpu, CCPU_GPR[ra].u + (CCPU_GPR[rb].s << sv), 4, CCPU_FPR[fst].u);
       goto done;
     case 0xb:			/* fsd */
       u64 = nds32_fd_to_64 (cpu, fdt_ >> 1);
-      nds32_st (cpu, CCPU_GPR[ra].u + (CCPU_GPR[rb].s << sv), 8, u64);
+      nds32_st_aligned (cpu, CCPU_GPR[ra].u + (CCPU_GPR[rb].s << sv), 8, u64);
       goto done;
     case 0x82:			/* fls.bi */
-      u32 = nds32_ld (cpu, CCPU_GPR[ra].u, 4);
+      u32 = nds32_ld_aligned (cpu, CCPU_GPR[ra].u, 4);
       CCPU_GPR[ra].u += (CCPU_GPR[rb].s << sv);
       CCPU_FPR[fst].u = u32;
       goto done;
     case 0x83:			/* fld.bi */
-      u64 = nds32_ld (cpu, CCPU_GPR[ra].u, 8);
+      u64 = nds32_ld_aligned (cpu, CCPU_GPR[ra].u, 8);
       CCPU_GPR[ra].u += (CCPU_GPR[rb].s << sv);
       nds32_fd_from_64 (cpu, fdt_ >> 1, u64);
       goto done;
     case 0x8a:			/* fss.bi */
-      nds32_st (cpu, CCPU_GPR[ra].u, 4, CCPU_FPR[fst].u);
+      nds32_st_aligned (cpu, CCPU_GPR[ra].u, 4, CCPU_FPR[fst].u);
       CCPU_GPR[ra].u += (CCPU_GPR[rb].s << sv);
       goto done;
     case 0x8b:			/* fsd.bi */
       u64 = nds32_fd_to_64 (cpu, fdt_ >> 1);
-      nds32_st (cpu, CCPU_GPR[ra].u, 8, u64);
+      nds32_st_aligned (cpu, CCPU_GPR[ra].u, 8, u64);
       CCPU_GPR[ra].u += (CCPU_GPR[rb].s << sv);
       goto done;
     }

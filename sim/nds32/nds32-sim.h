@@ -98,9 +98,14 @@ enum nds32_syscall_num
 #define SRIDX(M,m,e)  ((M << 7) | (m << 3) | e)
 #define UXIDX(g,u)    ((g << 5) | u)
 
-longest_t nds32_ld_sext (sim_cpu *cpu, SIM_ADDR addr, int size);
-ulongest_t nds32_ld (sim_cpu *cpu, SIM_ADDR addr, int size);
-void nds32_st (sim_cpu *cpu, SIM_ADDR addr, int size, ulongest_t val);
+/* Do not use thsi directly. */
+ulongest_t __nds32_ld (sim_cpu *cpu, SIM_ADDR addr, int size, int aligned_p);
+void __nds32_st (sim_cpu *cpu, SIM_ADDR addr, int size, ulongest_t val, int aligned_p);
+/* Use these wrappers. */
+#define nds32_ld_aligned(CPU, ADDR, SIZE)		__nds32_ld (CPU, ADDR, SIZE, 1)
+#define nds32_st_aligned(CPU, ADDR, SIZE, VAL)		__nds32_st (CPU, ADDR, SIZE, VAL, 1)
+#define nds32_ld_unaligned(CPU, ADDR, SIZE)		__nds32_ld (CPU, ADDR, SIZE, 0)
+#define nds32_st_unaligned(CPU, ADDR, SIZE, VAL)	__nds32_st (CPU, ADDR, SIZE, VAL, 0)
 
 sim_cia nds32_decode32_lwc (sim_cpu *cpu, const uint32_t insn, sim_cia cia);
 sim_cia nds32_decode32_swc (sim_cpu *cpu, const uint32_t insn, sim_cia cia);
