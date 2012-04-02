@@ -1,3 +1,25 @@
+! _start: General entry potiner. It setups $sp.
+!   swap: Swap a word in $r0 and return in $r0.
+! result: Output "pass" if $r0 == 0; otherwise output "fail 0x##".
+
+.macro	FAIL	code
+	movi	$r0, \code
+	bal	result
+.endm
+
+.macro	PASS
+	movi	$r0, 0
+	bal	result
+.endm
+
+	.data
+	.align 2
+LPASS_STR:
+	.string	"pass\n"
+
+	.align 2
+LFAIL_STR:
+	.string "fail: 0x##\n"
 	.text
 	.align	2
 	.globl	swap
@@ -26,6 +48,50 @@ swap:
 	.size	swap, .-swap
 
 
+
+	! if $r0 = 0
+	!     pass
+	! else
+	!     fail + id
+	.align 2
+	.global	result
+	.type	result, @function
+result:
+	move	$r6, $r0
+	bnez	$r0, 1f
+	la	$r1, LPASS_STR
+	b	2f
+1:
+	la	$r1, LFAIL_STR
+
+	andi	$r2, $r0, 0xf
+	slti	$r3, $r2, 10
+	bnez	$r3, 3f
+	addi	$r2, $r2, 55
+	b	4f
+3:
+	addi	$r2, $r2, 48
+4:
+	sbi	$r2, [$r1 + 9]
+
+	andi	$r2, $r0, 0xf0
+	srli	$r2, $r2, 4
+	slti	$r3, $r2, 10
+	bnez	$r3, 3f
+	addi	$r2, $r2, 55
+	b	4f
+3:
+	addi	$r2, $r2, 48
+4:
+	sbi	$r2, [$r1 + 8]
+
+2:
+	move	$r0, $r1
+	bal	puts
+	move	$r0, $r6
+	syscall	1
+
+	.size	result, .-result
 
 	.align 2
 	.global	puts
