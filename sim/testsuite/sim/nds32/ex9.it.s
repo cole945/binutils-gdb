@@ -7,6 +7,8 @@
 	.include "utils.inc"
 
 .section	.ex9.itable, "a"
+	.align	2
+ITB:
 	.space	32 * 4, 0
 .L32:
 	addi	$r7, $r7, 13
@@ -20,6 +22,9 @@
 	.global	main
 main:
 	smw.adm $r6, [$sp], $r9, 10
+
+	la	$r9, ITB
+	mtusr	$r9, $ITB
 
 	la	$r9, .L32	! address of ITB entry 32
 
@@ -39,7 +44,11 @@ test_j32:
 	lwi	$r7, [$r9 + 4]
 	la	$r0, test_jal	! fix this address in
 	srli	$r0, $r0, 1
+	mfsr	$r8, $psw
+	andi	$r8, $r8, 32
+	bnez	$r8, 1f
 	bal	swap
+1:
 	or	$r0, $r0, $r7
 	swi	$r0, [$r9 + 4]
 
@@ -54,7 +63,11 @@ test_jal:
 	lwi	$r7, [$r9 + 8]
 	la	$r0, test_jal_call	! fix this address in
 	srli	$r0, $r0, 1
+	mfsr	$r8, $psw
+	andi	$r8, $r8, 32
+	bnez	$r8, 1f
 	bal	swap
+1:
 	or	$r0, $r0, $r7
 	swi	$r0, [$r9 + 8]
 
