@@ -113,10 +113,10 @@ test_jr:
 .Lpstr:
 	.string "pass\n"
 .Lfstr_n32:
-	.string "fall: addi in ex9.it (>=32)\n"
+	.string "fall: addi in ex9.it (<32)\n"
 .Lfstr_j32:
-	.string "fail: j in ex9.it (>=32)\n"
+	.string "fail: j in ex9.it (<32)\n"
 .Lfstr_jal:
-	.string "fail: jal in ex9.it (>=32)\n"
+	.string "fail: jal in ex9.it (<32)\n"
 .Lfstr_jr:
-	.string "fail: jr in ex9.it (>=32)\n"
+	.string "fail: jr in ex9.it (<32)\n"
