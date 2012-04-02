@@ -19,17 +19,15 @@ main:
 	addi    $r7, $r7, -1
 	! check $r7 == 0
 	beqz	$r7, .L2
-	movi	$r0, 3
-	syscall	1
+	FAIL	3
 .L2:
 	! check IFCON is off
 	mfsr	$r1, $psw
 	and	$r1, $r1, $r8
 	beqz	$r1, .L3
-	movi	$r0, 4
-	syscall	1
+	FAIL	4
 .L3:
-	j	.LPASS
+	PASS
 
 .L0:
 	! check IFCON is set
@@ -37,21 +35,12 @@ main:
 	and	$r1, $r1, $r8
 	bnez	$r1, .L1
 	! FAIL: IFCON not set
-	movi	$r0, 1
-	syscall	1
+	FAIL	1
 .L1:
 	addi	$r7, $r7, 1
 	ifret
-	movi	$r0, 2	! fail to ifret
-	syscall	1
+	FAIL	2	! fail to ifret
 
-
-.LPASS:
-	la	$r0, .Lpstr
-	bal	puts
-	movi	$r0, 0
-	lmw.bim $r6, [$sp], $r9, 10
-	ret
 
 .data
 	.align 2

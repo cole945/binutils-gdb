@@ -18,15 +18,13 @@ main:
 	nop
 .L0:
 	j	.L1		!! test J
-	movi	$r0, 1		! not jump
-	syscall	1
+	FAIL	1		! not jump
 .L1:
 	! check IFCON
 	mfsr	$r1, $psw
 	and	$r1, $r1, $r8
 	beqz	$r1, .Ltest_j8
-	movi	$r0, 2		! IFCON not cleared
-	syscall	1
+	FAIL	2		! IFCON not cleared
 
 .Ltest_j8:
 	! test J8
@@ -34,15 +32,13 @@ main:
 	nop
 .L2:
 	j8	.L3		!! test J8
-	movi	$r0, 3		! not jump
-	syscall	1
+	FAIL	3		! not jump
 .L3:
 	! check IFCON
 	mfsr	$r1, $psw
 	and	$r1, $r1, $r8
 	beqz	$r1, .Ltest_jr
-	movi	$r0, 4		! IFCON not cleared
-	syscall	1
+	FAIL	4		! IFCON not cleared
 
 .Ltest_jr:
 	! test JR
@@ -51,15 +47,13 @@ main:
 .L4:
 	la	$r9, .L5
 	jr	$r9		!! test JR
-	movi	$r0, 3		! not jump
-	syscall	1
+	FAIL	5		! not jump
 .L5:
 	! check IFCON
 	mfsr	$r1, $psw
 	and	$r1, $r1, $r8
 	beqz	$r1, .Ltest_jr5
-	movi	$r0, 4		! IFCON not cleared
-	syscall	1
+	FAIL	6		! IFCON not cleared
 
 .Ltest_jr5:
 	! test JR
@@ -68,15 +62,13 @@ main:
 .L6:
 	la	$r3, .L7
 	jr5	$r3		!! test JR
-	movi	$r0, 3		! not jump
-	syscall	1
+	FAIL	7		! not jump
 .L7:
 	! check IFCON
 	mfsr	$r1, $psw
 	and	$r1, $r1, $r8
 	beqz	$r1, .Ldone
-	movi	$r0, 4		! IFCON not cleared
-	syscall	1
+	FAIL	8		! IFCON not cleared
 
 
 .Ldone:
@@ -86,16 +78,6 @@ main:
 	movi	$r0, 0
 	lmw.bim	$r6, [$sp], $r9, 10
 	ret
-
-.LFAIL:
-	bal	puts
-	movi	$r0, 1
-	syscall 1
-
-.LPASS:
-	bal	puts
-	movi	$r0, 0
-	syscall 1
 
 .Lpstr:
 	.string "pass\n"
