@@ -156,7 +156,7 @@ nds32_bad_op (sim_cpu *cpu, uint32_t cia, uint32_t insn, char *tag)
 		"Unhandled %s instruction at 0x%x, code=0x%08x\n",
 		tag, cia, insn);
 
-  sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_signalled, SIM_SIGILL);
+  sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_stopped, SIM_SIGILL);
 }
 
 static sim_cia
@@ -362,7 +362,7 @@ __nds32_ld (sim_cpu *cpu, SIM_ADDR addr, int size, int aligned_p)
     {
       sim_io_eprintf (sd, "Unaligned access at 0x%08x. "
 			  "Read of address 0x%08x", cia, addr);
-      sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_signalled, SIM_SIGSEGV);
+      sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_stopped, SIM_SIGSEGV);
     }
 
   r = sim_read (sd, addr, (unsigned char *) &val, size);
@@ -373,7 +373,7 @@ __nds32_ld (sim_cpu *cpu, SIM_ADDR addr, int size, int aligned_p)
     {
       sim_io_eprintf (sd, "Access violation at 0x%08x. "
 			  "Read of address 0x%08x\n", cia, addr);
-      sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_signalled, SIM_SIGSEGV);
+      sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_stopped, SIM_SIGSEGV);
     }
 
   return val;
@@ -394,7 +394,7 @@ __nds32_st (sim_cpu *cpu, SIM_ADDR addr, int size, ulongest_t val,
     {
       sim_io_eprintf (sd, "Unaligned access at 0x%08x. "
 			  "Read of address 0x%08x", cia, addr);
-      sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_signalled, SIM_SIGSEGV);
+      sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_stopped, SIM_SIGSEGV);
     }
 
   order = CCPU_PSW_TEST (PSW_BE) ? BIG_ENDIAN : LITTLE_ENDIAN;
@@ -405,7 +405,7 @@ __nds32_st (sim_cpu *cpu, SIM_ADDR addr, int size, ulongest_t val,
     {
       sim_io_eprintf (sd, "Access violation at 0x%08x. "
 			  "Write of address 0x%08x\n", cia, addr);
-      sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_signalled, SIM_SIGSEGV);
+      sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_stopped, SIM_SIGSEGV);
     }
 
   return;
@@ -1127,7 +1127,7 @@ nds32_decode32_br2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       else
 	{
 	  sim_io_error (CPU_STATE (cpu), "Nested IFCALL.\n");
-	  sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_signalled, SIM_SIGABRT);
+	  sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_stopped, SIM_SIGABRT);
 	}
       break;
     case 0x2:			/* beqz */
@@ -1849,6 +1849,9 @@ sim_engine_run (SIM_DESC sd, int next_cpu_nr, int nr_cpus, int siggnal)
 	cia = nds32_decode32 (cpu, insn, cia);
       else
 	cia = nds32_decode16 (cpu, insn >> 16, cia);
+
+      /* Sync registers. TODO: Sync PSW with current_target_endian.  */
+      CIA_SET (cpu, cia);
 
       /* process any events */
       if (sim_events_tick (sd))
