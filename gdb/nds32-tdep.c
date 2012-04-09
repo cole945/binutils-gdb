@@ -2777,6 +2777,9 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_skip_permanent_breakpoint (gdbarch,
 					 nds32_skip_permanent_breakpoint);
 
+  /* Support simple overlay manager.  */
+  set_gdbarch_overlay_update (gdbarch, simple_overlay_update);
+
   /* Handle longjmp.  */
   set_gdbarch_get_longjmp_target (gdbarch, nds32_get_longjmp_target);
 
