@@ -151,12 +151,34 @@ struct gdbarch_tdep
 /* Hidden options.  */
 struct nds32_gdb_config
 {
-  int use_cfi;			/* default false */
+  /* Use DWARF/CFI for stack frame unwinding.
+     This is much reliable than manual prologue analysis.
+     Default true.  */
+  int use_cfi;
+
+  /* Backtrace for IFC frame by checking PSW.IFCON.
+     Default true, so monmon is happy about it.  */
   int use_ifcret;		/* default true */
-  int use_fp;			/* default true  */
-  int use_abi;			/* default AUTO  */
-  int use_stop_zfp;		/* default false */
-  int use_fpreg;		/* default auto */
+
+  /* Prefer $fp as framebase instead of analyzing $sp adjustion,
+     for dynamic stack, e.g., calling alloca (), this should be reliable.
+     Default true.  */
+  int use_fp;
+
+  /* ABI for Inferior Call Setup.
+     Default AUTO by reading ABI in ELF header.  */
+  int use_abi;
+
+  /* Stop backtrace when $fp is 0. If the code does not use $fp
+     for frame setup, backtrace might be broken.
+     Default false.  */
+  int use_stop_zfp;
+
+  /* Whether there exists floating-point registers.
+     This should be auto configured by target-desciption,
+     but SID does not implement it.
+     Default AUTO by checking SP/DP bit is set in ELF header.  */
+  int use_fpreg;
 };
 
 extern struct cmd_list_element *nds32_cmdlist;
