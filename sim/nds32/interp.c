@@ -1845,11 +1845,21 @@ sim_engine_run (SIM_DESC sd, int next_cpu_nr, int nr_cpus, int siggnal)
       insn = extract_unsigned_integer ((unsigned char *) &insn, 4,
 				       BIG_ENDIAN);
 
+      if (TRACE_LINENUM_P (cpu))
+	{
+	  trace_prefix (sd, cpu, NULL_CIA, cia, TRACE_LINENUM_P (cpu),
+			NULL, 0, " "); /* Use a space for gcc warnings.  */
+	}
+
       if ((insn & 0x80000000) == 0)
 	cia = nds32_decode32 (cpu, insn, cia);
       else
 	cia = nds32_decode16 (cpu, insn >> 16, cia);
 
+      if (TRACE_LINENUM_P (cpu))
+	{
+	  trace_result_addr1 (sd, cpu, TRACE_INSN_IDX, cia);
+	}
       /* Sync registers. TODO: Sync PSW with current_target_endian.  */
       CIA_SET (cpu, cia);
 
