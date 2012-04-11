@@ -5,11 +5,7 @@
      are permitted in any medium without royalty provided the copyright
      notice and this notice are preserved.  -->
 
-<!DOCTYPE target SYSTEM "gdb-target.dtd">
-<target>
-  <architecture>nds32</architecture>
-  <xi:include href="nds32-core.xml"/>
-  <xi:include href="nds32-user.xml"/>
-  <xi:include href="nds32-system.xml"/>
-  <xi:include href="nds32-audio.xml"/>
-</target>
+<!DOCTYPE feature SYSTEM "gdb-target.dtd">
+<feature name="org.gnu.gdb.nds32.user">
+  <reg name="itb" bitsize="32" type="data_ptr" regnum="184"/>
+</feature>

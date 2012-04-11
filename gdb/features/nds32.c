@@ -54,6 +54,9 @@ initialize_tdesc_nds32 (void)
   tdesc_create_reg (feature, "d1hi", 36, 1, NULL, 32, "int");
   tdesc_create_reg (feature, "ifc_lp", 175, 1, NULL, 32, "code_ptr");
 
+  feature = tdesc_create_feature (result, "org.gnu.gdb.nds32.user");
+  tdesc_create_reg (feature, "itb", 184, 1, NULL, 32, "data_ptr");
+
   feature = tdesc_create_feature (result, "org.gnu.gdb.nds32.system");
   tdesc_create_reg (feature, "cr0", 37, 1, "cr", 32, "data_ptr");
   tdesc_create_reg (feature, "cr1", 38, 1, "cr", 32, "data_ptr");
