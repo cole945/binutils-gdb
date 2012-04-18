@@ -47,6 +47,7 @@
 #include "dwarf2-frame.h"
 #include "ui-file.h"
 #include "remote.h"
+#include "sim-regno.h"
 
 #include "nds32-tdep.h"
 #include "nds32-utils.h"
@@ -253,6 +254,22 @@ nds32_dwarf_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int num)
 
   /* No match, return a inaccessible register number.  */
   return gdbarch_num_regs (gdbarch) + gdbarch_num_pseudo_regs (gdbarch);
+}
+
+static int
+nds32_register_sim_regno (struct gdbarch *gdbarch, int regnum)
+{
+  /* Use target-descriptions for register mapping. */
+
+  /* Only makes sense to supply raw registers.  */
+  gdb_assert (regnum >= 0 && regnum < gdbarch_num_regs (gdbarch));
+
+  if (gdbarch_register_name (gdbarch, gdbarch_num_regs (gdbarch)) != NULL
+      && gdbarch_register_name (gdbarch,
+				gdbarch_num_regs (gdbarch))[0] != '\0')
+    return gdbarch_remote_register_number (gdbarch, regnum);
+  else
+    return LEGACY_SIM_REGNO_IGNORE;
 }
 
 /* Create types for system registers.  */
@@ -2753,6 +2770,8 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   set_gdbarch_dwarf2_reg_to_regnum (gdbarch,
 				    nds32_dwarf_dwarf2_reg_to_regnum);
+  /* Use target-descriptions for register mapping. */
+  set_gdbarch_register_sim_regno (gdbarch, nds32_register_sim_regno);
 
   set_gdbarch_push_dummy_call (gdbarch, nds32_push_dummy_call);
   set_gdbarch_return_value (gdbarch, nds32_return_value);
