@@ -1906,6 +1906,12 @@ nds32_fetch_register (sim_cpu *cpu, int rn, unsigned char *memory, int length)
     case NG_D1HI:
       val = cpu->reg_usr[NC_D1HI].u;
       goto do_fetch;
+    case NG_ITB:
+      val = cpu->reg_usr[NC_ITB].u;
+      goto do_fetch;
+    case NG_IFCLP:
+      val = cpu->reg_usr[NC_IFCLP].u;
+      goto do_fetch;
     }
 
   if (rn >= NG_FS0 && rn < NG_FS0 + 64)
@@ -1972,9 +1978,21 @@ nds32_store_register (sim_cpu *cpu, int rn, unsigned char *memory, int length)
     case NG_D1HI:
       cpu->reg_usr[NC_D1HI].u = val;
       return 4;
+    case NG_ITB:
+      cpu->reg_usr[NC_ITB].u = val;
+      return 4;
+    case NG_IFCLP:
+      cpu->reg_usr[NC_IFCLP].u = val;
+      return 4;
     }
 
   /* System registers.  */
+  switch (rn)
+    {
+    case NG_PSW:
+      cpu->reg_sr[SRIDX (1, 0, 0)].u = val;
+      return 4;
+    }
   return 0;
 }
 

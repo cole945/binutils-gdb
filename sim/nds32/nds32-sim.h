@@ -42,6 +42,8 @@ enum nds32_gdb_regnum
   NG_D0HI = 34,
   NG_D1LO = 35,
   NG_D1HI = 36,
+  NG_ITB = 184,
+  NG_IFCLP = 175,
 
   NG_PSW = 44,
 
