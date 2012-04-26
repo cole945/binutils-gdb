@@ -796,6 +796,22 @@ nds32_decode32_alu2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       else
 	CCPU_GPR[rt].s = -CCPU_GPR[ra].s;
       break;
+    case 0x4:			/* clips */
+      if (CCPU_GPR[ra].s > ((1 << imm5u) - 1))
+	CCPU_GPR[rt].s = ((1 << imm5u) - 1);
+      else if (CCPU_GPR[ra].s < -(1 << imm5u))
+	CCPU_GPR[rt].s = -(1 << imm5u);
+      else
+	CCPU_GPR[rt].s = CCPU_GPR[ra].s;
+      break;
+    case 0x5:			/* clip */
+      if (CCPU_GPR[ra].s > ((1 << imm5u) - 1))
+	CCPU_GPR[rt].s = ((1 << imm5u) - 1);
+      else if (CCPU_GPR[ra].s < 0)
+	CCPU_GPR[rt].s = 0;
+      else
+	CCPU_GPR[rt].s = CCPU_GPR[ra].s;
+      break;
     case 0x6:			/* clo */
       {
 	int i, cnt = 0;
