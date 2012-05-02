@@ -1530,13 +1530,6 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
   uint32_t shift;
   uint32_t addr;
 
-  if (__GF (insn, 5, 10) == 0x2ea) /* ex9.it imm5 */
-    {
-      sim_read (sd, (CCPU_USR[NC_ITB].u & 0xfffffffc) + (imm5u << 2), (unsigned char *) &insn, 4);
-      insn = extract_unsigned_integer ((unsigned char *) &insn, 4, BIG_ENDIAN);
-      return nds32_decode16_ex9 (cpu, insn, cia);
-    }
-
   switch (__GF (insn, 7, 8))
     {
     case 0xf8:			/* push25 */
@@ -1819,10 +1812,19 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
 		  CCPU_PSW_CLEAR (PSW_IFCON);
 		}
 	      return CCPU_GPR[ra5].u;
-	      goto done;
+	    case 2:		/* ex9.it imm5 */
+	      sim_read (sd, (CCPU_USR[NC_ITB].u & 0xfffffffc) + (imm5u << 2),
+			(unsigned char *) &insn, 4);
+	      insn = extract_unsigned_integer ((unsigned char *) &insn, 4,
+					       BIG_ENDIAN);
+	      return nds32_decode16_ex9 (cpu, insn, cia);
+	    case 5:		/* add5.pc */
+	      CCPU_GPR[ra5].u += cia;
+	      break;
 	    default:
 	      goto bad_op;
 	    }
+	  goto done;
 	}
       else if (CCPU_GPR[rt38].u != CCPU_GPR[5].u)
 	return cia + (N16_IMM8S (insn) << 1);
