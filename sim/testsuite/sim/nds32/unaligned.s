@@ -2,7 +2,7 @@
 # mach:	 all
 # as:
 # ld:		--defsym=_stack=0x3000000
-# output:	pass\n*MWA*\n\n
+# output:	pass\n*MWA*\nprogram stopped with signal*\n
 # xerror:
 
 	.include "utils.inc"

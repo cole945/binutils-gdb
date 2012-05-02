@@ -580,6 +580,7 @@ nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	  sim_io_eprintf (sd, "LMWA: unaligned access at 0x%x. "
 			      "Read of address 0x%llx.\n",
 			  cia, base);
+	  sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_stopped, SIM_SIGSEGV);
 	  return cia;
 	}
     case 0:			/* lmw */
