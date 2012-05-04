@@ -2447,6 +2447,10 @@ nds32_ifc_frame_sniffer (const struct frame_unwind *self,
     return 0;
 
   tdep = gdbarch_tdep (get_frame_arch (this_frame));
+
+  if (!tdep->nds32_psw || !tdep->nds32_ifc)
+    return 0;
+
   psw = get_frame_register_unsigned (this_frame, NDS32_PSW_REGNUM);
   return psw & (1 << 15);
 }
