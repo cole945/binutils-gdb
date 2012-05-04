@@ -2091,14 +2091,12 @@ sim_open (SIM_OPEN_KIND kind, host_callback * callback,
       return 0;
     }
 
-#if 0
   /* Establish any remaining configuration options.  */
   if (sim_config (sd) != SIM_RC_OK)
     {
       nds32_free_state (sd);
       return 0;
     }
-#endif
 
   if (sim_post_argv_init (sd) != SIM_RC_OK)
     {
