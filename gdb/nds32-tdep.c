@@ -264,9 +264,9 @@ nds32_register_sim_regno (struct gdbarch *gdbarch, int regnum)
   /* Only makes sense to supply raw registers.  */
   gdb_assert (regnum >= 0 && regnum < gdbarch_num_regs (gdbarch));
 
-  if (gdbarch_register_name (gdbarch, gdbarch_num_regs (gdbarch)) != NULL
-      && gdbarch_register_name (gdbarch,
-				gdbarch_num_regs (gdbarch))[0] != '\0')
+  /* It should have a non-empty name. */
+  if (gdbarch_register_name (gdbarch, regnum) != NULL
+      && gdbarch_register_name (gdbarch, regnum)[0] != '\0')
     return gdbarch_remote_register_number (gdbarch, regnum);
   else
     return LEGACY_SIM_REGNO_IGNORE;
