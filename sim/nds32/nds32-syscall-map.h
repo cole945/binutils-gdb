@@ -13,6 +13,7 @@
 #define CB_SYS_gettimeofday	(CB_SYS_BASE + 78)
 #define CB_SYS_uname		(CB_SYS_BASE + 122)
 #define CB_SYS_getpagesize	(CB_SYS_BASE + 166)
+#define CB_SYS_mmap2		(CB_SYS_BASE + 192)
 #define CB_SYS_stat64		(CB_SYS_BASE + 195)
 #define CB_SYS_lstat64		(CB_SYS_BASE + 196)
 #define CB_SYS_fstat64		(CB_SYS_BASE + 197)
@@ -20,6 +21,7 @@
 #define CB_SYS_getgid32		(CB_SYS_BASE + 200)
 #define CB_SYS_geteuid32	(CB_SYS_BASE + 201)
 #define CB_SYS_getegid32	(CB_SYS_BASE + 202)
+#define CB_SYS_exit_group	(CB_SYS_BASE + 248)
 
 #define CB_SYS_NDS32_isatty	(CB_SYS_BASE + 0x202)
 #define CB_SYS_NDS32_errno	(CB_SYS_BASE + 0x203)
@@ -96,6 +98,7 @@ static CB_TARGET_DEFS_MAP cb_nds32_syscall_map[] =
   {CB_SYS_fstat,	LINUX_SYS_BASE + 108},
   {CB_SYS_uname,	LINUX_SYS_BASE + 122},
   {CB_SYS_getpagesize,	LINUX_SYS_BASE + 166},
+  {CB_SYS_mmap2,	LINUX_SYS_BASE + 192},
   {CB_SYS_stat64,	LINUX_SYS_BASE + 195},
   {CB_SYS_lstat64,	LINUX_SYS_BASE + 196},
   {CB_SYS_fstat64,	LINUX_SYS_BASE + 197},
@@ -103,6 +106,7 @@ static CB_TARGET_DEFS_MAP cb_nds32_syscall_map[] =
   {CB_SYS_getgid32,	LINUX_SYS_BASE + 200},
   {CB_SYS_geteuid32,	LINUX_SYS_BASE + 201},
   {CB_SYS_getegid32,	LINUX_SYS_BASE + 202},
+  {CB_SYS_exit_group,	LINUX_SYS_BASE + 248},
 
   {-1, -1}
 };

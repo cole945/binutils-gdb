@@ -39,6 +39,7 @@
 
 #include "opcode/nds32.h"
 #include "nds32-sim.h"
+#include "nds32-linux.h"
 #include "nds32-syscall-map.h"
 
 #ifdef __linux__
@@ -46,11 +47,11 @@
 #include <sys/time.h>
 #include <sys/times.h>
 #include <sys/utsname.h>
-#include <sys/types.h>
-#include <sys/stat.h>
+#include <sys/mman.h>
 #endif
 #include <unistd.h>
 #include <time.h>
+#include <errno.h>
 
 /* Debug flag to display instructions and registers.  */
 static int tracing = 0;
@@ -264,6 +265,7 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
       cb_syscall (cb, &sc);
       break;
 
+    case CB_SYS_exit_group:
     case CB_SYS_exit:
       sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_exited, CCPU_GPR[0].s);
       break;
@@ -352,6 +354,52 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
     case CB_SYS_getegid32:
       sc.result = getegid ();
       break;
+
+    case CB_SYS_mmap2:
+       /* void *mmap2 (void *addr, size_t length, int prot,
+		       int flags, int fd, off_t pgoffset);  */
+      {
+	address_word addr = CCPU_GPR[0].u;
+	address_word len = CCPU_GPR[1].s;
+	int prot = CCPU_GPR[2].s;
+	int flags = CCPU_GPR[3].s;
+	int fd = CCPU_GPR[4].s;
+	off_t pgoffset = CCPU_GPR[5].u;
+	void *phy = NULL;
+
+	if (flags & MAP_ANONYMOUS)
+	  phy = mmap (NULL, len, prot, flags, fd, pgoffset * PAGE_SIZE);
+	else if (fd < 0 || fd > MAX_CALLBACK_FDS || cb->fd_buddy[fd] < 0)
+	  {
+	    sc.result = EBADF;
+	    goto out;
+	  }
+	else
+	  {
+	    fd = cb->fdmap[fd];
+	    phy = mmap (NULL, len, prot, flags, fd, pgoffset * PAGE_SIZE);
+	  }
+
+	if (phy == MAP_FAILED)
+	  goto out;
+
+	sc.result = (long) phy;
+
+	if (addr == 0)
+	  {
+	    addr = sd->unmapped;
+	    sd->unmapped = PAGE_ROUNDUP (addr + len);
+	  }
+
+	/* FIXME: It just works. Make it solid.
+		  It should return MAP_FAILED for fail.  */
+	sim_core_attach (sd, NULL, 0, access_read_write_exec, 0,
+			 PAGE_ALIGN (addr), PAGE_ROUNDUP (len), 0, NULL, phy);
+
+	sc.result = PAGE_ALIGN (addr);
+      }
+
+      break;
 #endif
 
     case CB_SYS_NDS32_isatty:
@@ -370,6 +418,7 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
       break;
     }
 
+out:
   CCPU_GPR[0].s = sc.result;
   return cia + 4;
 }
@@ -2113,6 +2162,7 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
       const int init_sp_size = 0x4000;
       Elf_Internal_Phdr *phdr;
       sd->elf_brk = 0;
+      sd->unmapped = TASK_UNMAPPED_BASE;
 
       /* Create stack page for argv/env. */
       sd->elf_sp = (long) STACK_TOP - init_sp_size;
@@ -2138,6 +2188,8 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
 	  if (addr + len > sd->elf_brk);
 	    sd->elf_brk = addr + len;
 	}
+
+      SIM_ASSERT (sd->elf_brk < sd->unmapped && sd->unmapped < sd->elf_sp);
     }
 
   return r;

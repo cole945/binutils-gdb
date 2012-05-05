@@ -82,8 +82,10 @@ struct sim_state {
 
   char cmdline[256];	/* cmdline buffer for -mcrt-arg hacking. */
   int osabi;		/* 0 for elf, 1 for linux. */
+
   uint32_t elf_brk;	/* for brk */
   uint32_t elf_sp;	/* for expand stack */
+  uint32_t unmapped;	/* for mmap */
 
   sim_state_base base;
 };
