@@ -36,7 +36,6 @@
 
 #include "opcode/nds32.h"
 #include "nds32-sim.h"
-#include "nds32-libc.h"
 
 static inline uint64_t
 nds32_fd_to_64 (sim_cpu *cpu, int fd)

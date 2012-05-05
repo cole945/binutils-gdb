@@ -80,7 +80,10 @@ struct sim_state {
 #endif
 #define STATE_BOARD_DATA(sd) (&(sd)->board)
 
-  char cmdline[256];	/* cmdline buffer */
+  char cmdline[256];	/* cmdline buffer for -mcrt-arg hacking. */
+  int osabi;		/* 0 for elf, 1 for linux. */
+  uint32_t elf_brk;	/* for brk */
+  uint32_t elf_sp;	/* for expand stack */
 
   sim_state_base base;
 };

@@ -35,15 +35,20 @@
 #include "sim-utils.h"
 #include "sim-fpu.h"
 #include "sim-trace.h"
+#include "targ-vals.h"
 
 #include "opcode/nds32.h"
 #include "nds32-sim.h"
-#include "nds32-libc.h"
+#include "nds32-libgloss.h"
+#include "nds32-syscall-map.h"
 
 #ifdef __linux__
 /* FIXME */
 #include <sys/time.h>
 #include <sys/times.h>
+#include <sys/utsname.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #endif
 #include <unistd.h>
 #include <time.h>
@@ -160,83 +165,180 @@ nds32_bad_op (sim_cpu *cpu, uint32_t cia, uint32_t insn, char *tag)
   sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_stopped, SIM_SIGILL);
 }
 
+/* Read/write functions for system call interface.  */
+
+static int
+syscall_read_mem (host_callback *cb, struct cb_syscall *sc,
+		  unsigned long taddr, char *buf, int bytes)
+{
+  SIM_DESC sd = (SIM_DESC) sc->p1;
+  SIM_CPU *cpu = (SIM_CPU *) sc->p2;
+
+  return sim_core_read_buffer (sd, cpu, read_map, buf, taddr, bytes);
+}
+
+static int
+syscall_write_mem (host_callback *cb, struct cb_syscall *sc,
+		  unsigned long taddr, const char *buf, int bytes)
+{
+  SIM_DESC sd = (SIM_DESC) sc->p1;
+  SIM_CPU *cpu = (SIM_CPU *) sc->p2;
+
+  return sim_core_write_buffer (sd, cpu, write_map, buf, taddr, bytes);
+}
+
 static sim_cia
 nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 {
   SIM_DESC sd = CPU_STATE (cpu);
-  int r = -1;
+  host_callback *cb = STATE_CALLBACK (sd);
+  CB_SYSCALL sc;
+  int cbid;
 
-  switch (swid)
+  CB_SYSCALL_INIT (&sc);
+
+  sc.func = swid;
+  sc.arg1 = CCPU_GPR[0].s;
+  sc.arg2 = CCPU_GPR[1].s;
+  sc.arg3 = CCPU_GPR[2].s;
+  sc.arg4 = CCPU_GPR[3].s;
+
+  sc.p1 = (PTR) sd;
+  sc.p2 = (PTR) cpu;
+  sc.read_mem = syscall_read_mem;
+  sc.write_mem = syscall_write_mem;
+
+  /* switch (swid) */
+  switch (cbid = cb_target_to_host_syscall (cb, sc.func))
     {
-    case SYS_exit:
+    default:
+      cb_syscall (cb, &sc);
+      if (sc.result == -1 && sc.errcode == TARGET_ENOSYS)
+	{
+	  nds32_bad_op (cpu, cia, swid, "syscall");
+	  return cia;
+	}
+      break;
+
+    case CB_SYS_exit:
       sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_exited, CCPU_GPR[0].s);
       break;
-    case SYS_open:
-      {
-	char *path = fetch_str (sd, CCPU_GPR[0].u);
 
-	r = sim_io_open (sd, path, CCPU_GPR[1].u);
-	free (path);
+    case CB_SYS_brk:
+      if (sd->elf_brk == 0)
+	sc.result = 0;
+      else if (CCPU_GPR[0].u <= sd->elf_brk)
+	sc.result = sd->elf_brk;
+      else
+	{
+	  char buf[256];
+	  long len = CCPU_GPR[0].u - sd->elf_brk;
+
+	  snprintf (buf, sizeof (buf), "memory region 0x%lx,0x%lx",
+		(long) sd->elf_brk, (long) len);
+	  sim_do_command (sd, buf);
+	  sc.result = CCPU_GPR[0].u;
+	}
+      break;
+
+#ifdef __linux__
+    case CB_SYS_gettimeofday:
+      {
+	struct timeval t;
+	struct timezone tz;
+
+	sc.result = gettimeofday (&t, &tz);
+	if (CCPU_GPR[0].u)
+	  sim_write (sd, CCPU_GPR[0].u, (const unsigned char *) &t,
+		     sizeof (t));
+	if (CCPU_GPR[1].u)
+	  sim_write (sd, CCPU_GPR[1].u, (const unsigned char *) &t,
+		     sizeof (tz));
       }
       break;
-    case SYS_close:
-      r = sim_io_close (sd, CCPU_GPR[0].u);
-      break;
-    case SYS_read:
-      {
-	int fd = CCPU_GPR[0].s;
-	SIM_ADDR addr = CCPU_GPR[1].s;
-	int nr = CCPU_GPR[2].s;
-	char *buf = zalloc (nr);
 
-	r = sim_io_read (sd, fd, buf, nr);
-	if (r > 0)
-	  sim_write (sd, addr, (unsigned char *) buf, r);
-	/* SIM_IO_DPRINTF (sd, "sys_read () = %s\n", buf); */
+    case CB_SYS_times:
+      {
+	struct tms tms;
+
+	sc.result = times (&tms);
+	if (CCPU_GPR[0].u)
+	  sim_write (sd, CCPU_GPR[0].u, (const unsigned char *) &tms,
+		     sizeof (tms));
       }
       break;
-    case SYS_write:
-      {
-	int fd = CCPU_GPR[0].s;
-	SIM_ADDR addr = CCPU_GPR[1].s;
-	int nr = CCPU_GPR[2].s;
-	char *buf = zalloc (nr);
 
-	sim_read (sd, addr, (unsigned char *) buf, nr);
-#if 0
-	if (fd == 1)
-	  r = sim_io_write_stdout (sd, buf, nr);
-	else if (fd == 2)
-	  r = sim_io_write_stderr (sd, buf, nr);
-	else
+    case CB_SYS_link:
+      {
+	char *oldpath = fetch_str (sd, CCPU_GPR[0].u);
+	char *newpath = fetch_str (sd, CCPU_GPR[1].u);
+
+	sc.result = link (oldpath, newpath);
+	free (oldpath);
+	free (newpath);
+      }
+      break;
+
+    case CB_SYS_uname:
+      {
+	struct utsname buf;
+
+	if ((sc.result = uname (&buf)) == 0 && CCPU_GPR[0].u)
+	  sim_write (sd, CCPU_GPR[0].u, (const unsigned char *) &buf,
+		     sizeof (buf));
+      }
+      break;
+#if 0  /* I am hard working on this. */
+    case CB_SYS_fstat64:
+      {
+	struct stat64 buf64;
+
+	sc.result = INLINE_SYSCALL (fstat64, 2, fd, __ptrvalue (&buf64));
+	if (sc.result == 0)
+	  sc.result = __xstat32_conv (vers, &buf64, buf);
+      }
 #endif
-	/* SIM_IO_DPRINTF (sd, "sys_write (%s)\n", buf); */
-	  r = sim_io_write (sd, fd, buf, nr);
-
-	break;
-      }
-    case SYS_lseek:
-      r = sim_io_lseek (sd, CCPU_GPR[0].s, CCPU_GPR[1].s, CCPU_GPR[2].s);
+    case CB_SYS_getpagesize:
+      sc.result = getpagesize ();
       break;
-    case SYS_fstat:
-    case SYS_stat:
+
+    case CB_SYS_getuid32:
+      sc.result = getuid ();
+      break;
+
+    case CB_SYS_getgid32:
+      sc.result = getgid ();
+      break;
+
+    case CB_SYS_geteuid32:
+      sc.result = geteuid ();
+      break;
+
+    case CB_SYS_getegid32:
+      sc.result = getegid ();
+      break;
+#endif
+
+    case CB_SYS_LG_fstat:
+    case CB_SYS_LG_stat:
       {
+	/* The struct stat layout in newlib is different than in Linux.  */
 	SIM_ADDR addr = CCPU_GPR[1].s;
 	struct stat stat;
-	struct nds32_stat nstat;
+	struct libgloss_stat nstat;
 
-	SIM_ASSERT (sizeof (struct nds32_stat) == 60);
+	SIM_ASSERT (sizeof (nstat) == 60);
 
-	if (swid == SYS_fstat)
-	  r = sim_io_fstat (sd, CCPU_GPR[0].s, &stat);
+	if (cbid == CB_SYS_LG_fstat)
+	  sc.result = sim_io_fstat (sd, CCPU_GPR[0].s, &stat);
 	else
 	  {
 	    char *path = fetch_str (sd, CCPU_GPR[0].u);
-	    r = sim_io_stat (sd, path, &stat);
+	    sc.result = sim_io_stat (sd, path, &stat);
 	    free (path);
 	  }
 
-	if (r >= 0)
+	if (sc.result >= 0)
 	  {
 	    memset (&nstat, 0, sizeof (nstat));
 	    nstat.st_dev = stat.st_dev;
@@ -250,101 +352,29 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 	    nstat.st_atime_ = stat.st_atime;
 	    nstat.st_mtime_ = stat.st_mtime;
 	    nstat.st_ctime_ = stat.st_ctime;
-	    sim_write (sd, addr, (unsigned char *) &nstat,
-		       sizeof (struct nds32_stat));
+	    sim_write (sd, addr, (unsigned char *)
+		       &nstat, sizeof (nstat));
 	  }
       }
       break;
-    case SYS_isatty:
-      r = sim_io_isatty (sd, CCPU_GPR[0].s);
-      if (r == -1)
-	r = 0; /* -1 is returned if EBADF, but caller wants 0. */
-      break;
-    case SYS_getcmdline:
-      r = CCPU_GPR[0].u;
-      sim_write (sd, CCPU_GPR[0].u, (unsigned char *) sd->cmdline, strlen (sd->cmdline) + 1);
-      break;
-#ifdef __linux__
-    case SYS_gettimeofday:
-      {
-	struct timeval t;
-	struct timezone tz;
 
-	r = gettimeofday (&t, &tz);
-	if (CCPU_GPR[0].u)
-	  sim_write (sd, CCPU_GPR[0].u, (const unsigned char *) &t,
-		     sizeof (t));
-	if (CCPU_GPR[1].u)
-	  sim_write (sd, CCPU_GPR[1].u, (const unsigned char *) &t,
-		     sizeof (tz));
-      }
+    case CB_SYS_NDS32_isatty:
+      sc.result = sim_io_isatty (sd, CCPU_GPR[0].s);
+      if (sc.result == -1)
+	sc.result = 0; /* -1 is returned if EBADF, but caller wants 0. */
       break;
-#endif
-    case SYS_unlink:
-      {
-	char *path;
 
-	path = fetch_str (sd, CCPU_GPR[0].u);
-	r = sim_io_unlink (sd, path);
-	free (path);
-      }
+    case CB_SYS_NDS32_getcmdline:
+      sc.result = CCPU_GPR[0].u;
+      sim_write (sd, CCPU_GPR[0].u, (unsigned char*)sd->cmdline, strlen (sd->cmdline) + 1);
       break;
-#ifdef __linux__
-    case SYS_times:
-      {
-	struct tms tms;
 
-	r = times (&tms);
-	if (CCPU_GPR[0].u)
-	  sim_write (sd, CCPU_GPR[0].u, (const unsigned char *) &tms,
-		     sizeof (tms));
-      }
+    case CB_SYS_NDS32_errno:
+      sc.result = sim_io_get_errno (sd);
       break;
-#endif
-    case SYS_errno:
-      r = sim_io_get_errno (sd);
-      break;
-#ifdef __linux__
-    case SYS_link:
-      {
-	char *oldpath = fetch_str (sd, CCPU_GPR[0].u);
-	char *newpath = fetch_str (sd, CCPU_GPR[1].u);
-
-	r = link (oldpath, newpath);
-	free (oldpath);
-	free (newpath);
-      }
-      break;
-#endif
-    case SYS_rename:
-      {
-	char *oldpath = fetch_str (sd, CCPU_GPR[0].u);
-	char *newpath = fetch_str (sd, CCPU_GPR[1].u);
-
-	r = sim_io_rename (sd, oldpath, newpath);
-	free (oldpath);
-	free (newpath);
-      }
-      break;
-    case SYS_time:
-      {
-	time_t t;
-	time_t *tp = NULL;
-
-	if (CCPU_GPR[0].u)
-	  {
-	    sim_read (sd, CCPU_GPR[0].u, (unsigned char *) &t, sizeof (t));
-	    tp = &t;
-	  }
-	r = time (tp);
-      }
-      break;
-    default:
-      nds32_bad_op (cpu, cia, swid, "syscall");
-      return cia;
     }
 
-  CCPU_GPR[0].s = r;
+  CCPU_GPR[0].s = sc.result;
   return cia + 4;
 }
 
@@ -2073,6 +2103,7 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
     return 0;
 
   bfd_map_over_sections (abfd, nds32_simple_osabi_sniff_sections, &osabi);
+  sd->osabi = osabi;
 
   if (osabi == 0)
     {
@@ -2085,23 +2116,31 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
       char buf[256];
       const int init_sp_size = 0x4000;
       Elf_Internal_Phdr *phdr;
+      sd->elf_brk = 0;
 
       /* Create stack page for argv/env. */
+      sd->elf_sp = (long) STACK_TOP - init_sp_size;
       snprintf (buf, sizeof (buf), "memory region 0x%lx,0x%lx",
-		(long) STACK_TOP - init_sp_size, (long) init_sp_size);
+		(long) sd->elf_sp, (long) init_sp_size);
       sim_do_command (sd, buf);
 
       phdr = elf_tdata (abfd)->phdr;
       for (i = 0; i < elf_elfheader (abfd)->e_phnum; i++)
 	{
+	  uint32_t addr, len;
+
 	  if (phdr[i].p_type != PT_LOAD || phdr[i].p_memsz == 0)
 	    continue;
 
+	  addr = phdr[i].p_vaddr & ~(phdr[i].p_align - 1);
+	  len = (phdr[i].p_memsz + (phdr[i].p_align - 1)) & ~(phdr[i].p_align - 1);
 	  snprintf (buf, sizeof (buf), "memory region 0x%lx,0x%lx",
-		phdr[i].p_vaddr & ~(phdr[i].p_align - 1),
-		(phdr[i].p_memsz + (phdr[i].p_align - 1)) & ~(phdr[i].p_align - 1));
+		(long) addr, (long) len);
 	  sim_do_command (sd, buf);
 	  r = 1;
+
+	  if (addr + len > sd->elf_brk);
+	    sd->elf_brk = addr + len;
 	}
     }
 
@@ -2114,6 +2153,7 @@ nds32_init_stack (SIM_DESC sd, struct bfd *abfd, char **argv, char **env)
   int osabi = 0;
 
   bfd_map_over_sections (abfd, nds32_simple_osabi_sniff_sections, &osabi);
+  sd->osabi = osabi;
 
   if (osabi == 0)
     {
@@ -2261,6 +2301,8 @@ sim_open (SIM_OPEN_KIND kind, host_callback * callback,
       sim_cpu *cpu = STATE_CPU (sd, i);
       nds32_initialize_cpu (sd, cpu, abfd);
     }
+
+  callback->syscall_map = cb_nds32_syscall_map;
 
   return sd;
 }
