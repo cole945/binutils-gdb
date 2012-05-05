@@ -62,8 +62,6 @@ enum nds32_cpu_regnum
   NC_PC = 31,
 };
 
-#define STACK_TOP	0xbf000000
-
 #define SRIDX(M,m,e)  ((M << 7) | (m << 3) | e)
 #define UXIDX(g,u)    ((g << 5) | u)
 
