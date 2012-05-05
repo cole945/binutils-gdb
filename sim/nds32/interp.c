@@ -39,7 +39,6 @@
 
 #include "opcode/nds32.h"
 #include "nds32-sim.h"
-#include "nds32-libgloss.h"
 #include "nds32-syscall-map.h"
 
 #ifdef __linux__
@@ -66,6 +65,25 @@ static struct bfd *cur_bfd;
 static SIM_OPEN_KIND sim_kind;
 static char *myname;
 static host_callback *callback;
+
+/* Check
+	linux: arch/nds32/include/asm/stat.h
+	newlib: libc/include/sys/stat.h
+   for details.  */
+static const char cb_linux_stat_map_32[] =
+"st_dev,2:space,2:st_ino,4:st_mode,2:st_nlink,2:st_uid,2:st_gid,2:st_rdev,2:space,2:"
+"st_size,4:st_blksize,4:st_blocks,4:st_atime,4:st_atimensec,4:"
+"st_mtime,4:st_mtimensec,4:st_ctime,4:st_ctimensec,4:space,4:space,4";
+
+static const char cb_linux_stat_map_64[] =
+"st_dev,8:space,4:__st_ino,4:st_mode,4:st_nlink,4:st_uid,4:st_gid,4:st_rdev,8:"
+"space,8:st_size,8:st_blksize,4:space,4:st_blocks,8:st_atime,4:st_atimensec,4:"
+"st_mtime,4:st_mtimensec,4:st_ctime,4:st_ctimensec,4:st_ino,8";
+
+static const char cb_libgloss_stat_map_32[] =
+"st_dev,2:st_ino,2:st_mode,4:st_nlink,2:st_uid,2:st_gid,2:st_rdev,2:"
+"st_size,4:st_atime,4:space,4:st_mtime,4:space,4:st_ctime,4:space,4:"
+"st_blksize,4:st_blocks,4:space,8";
 
 static ulongest_t
 extract_unsigned_integer (unsigned char *addr, int len, int byte_order)
@@ -220,6 +238,32 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 	}
       break;
 
+    case CB_SYS_stat:
+    case CB_SYS_lstat:
+    case CB_SYS_fstat:
+      if (sd->osabi)
+	cb->stat_map = cb_linux_stat_map_32;
+      else
+	cb->stat_map = cb_libgloss_stat_map_32;
+      cb_syscall (cb, &sc);
+      break;
+
+    case CB_SYS_stat64:
+      cb->stat_map = cb_linux_stat_map_64;
+      sc.func = TARGET_LINUX_SYS_stat;
+      cb_syscall (cb, &sc);
+      break;
+    case CB_SYS_lstat64:
+      cb->stat_map = cb_linux_stat_map_64;
+      sc.func = TARGET_LINUX_SYS_lstat;
+      cb_syscall (cb, &sc);
+      break;
+    case CB_SYS_fstat64:
+      cb->stat_map = cb_linux_stat_map_64;
+      sc.func = TARGET_LINUX_SYS_fstat;
+      cb_syscall (cb, &sc);
+      break;
+
     case CB_SYS_exit:
       sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_exited, CCPU_GPR[0].s);
       break;
@@ -288,16 +332,7 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 		     sizeof (buf));
       }
       break;
-#if 0  /* I am hard working on this. */
-    case CB_SYS_fstat64:
-      {
-	struct stat64 buf64;
 
-	sc.result = INLINE_SYSCALL (fstat64, 2, fd, __ptrvalue (&buf64));
-	if (sc.result == 0)
-	  sc.result = __xstat32_conv (vers, &buf64, buf);
-      }
-#endif
     case CB_SYS_getpagesize:
       sc.result = getpagesize ();
       break;
@@ -318,45 +353,6 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
       sc.result = getegid ();
       break;
 #endif
-
-    case CB_SYS_LG_fstat:
-    case CB_SYS_LG_stat:
-      {
-	/* The struct stat layout in newlib is different than in Linux.  */
-	SIM_ADDR addr = CCPU_GPR[1].s;
-	struct stat stat;
-	struct libgloss_stat nstat;
-
-	SIM_ASSERT (sizeof (nstat) == 60);
-
-	if (cbid == CB_SYS_LG_fstat)
-	  sc.result = sim_io_fstat (sd, CCPU_GPR[0].s, &stat);
-	else
-	  {
-	    char *path = fetch_str (sd, CCPU_GPR[0].u);
-	    sc.result = sim_io_stat (sd, path, &stat);
-	    free (path);
-	  }
-
-	if (sc.result >= 0)
-	  {
-	    memset (&nstat, 0, sizeof (nstat));
-	    nstat.st_dev = stat.st_dev;
-	    nstat.st_ino = stat.st_ino;
-	    nstat.st_mode = stat.st_mode;
-	    nstat.st_nlink = stat.st_nlink;
-	    nstat.st_uid = stat.st_uid;
-	    nstat.st_gid = stat.st_gid;
-	    nstat.st_rdev = stat.st_rdev;
-	    nstat.st_size = stat.st_size;
-	    nstat.st_atime_ = stat.st_atime;
-	    nstat.st_mtime_ = stat.st_mtime;
-	    nstat.st_ctime_ = stat.st_ctime;
-	    sim_write (sd, addr, (unsigned char *)
-		       &nstat, sizeof (nstat));
-	  }
-      }
-      break;
 
     case CB_SYS_NDS32_isatty:
       sc.result = sim_io_isatty (sd, CCPU_GPR[0].s);
