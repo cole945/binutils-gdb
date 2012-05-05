@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-struct nds32_stat {
+struct libgloss_stat {
     int16_t st_dev;
     uint16_t st_ino;
     uint16_t st_mode;
