@@ -62,41 +62,6 @@ enum nds32_cpu_regnum
   NC_PC = 31,
 };
 
-enum nds32_syscall_num
-{
-  SYS_exit = 1,
-  SYS_open = 2,
-  SYS_close = 3,
-  SYS_read = 4,
-  SYS_write = 5,
-  SYS_lseek = 6,
-  SYS_unlink = 7,
-  SYS_getpid = 8,
-  SYS_kill = 9,
-  SYS_fstat = 10,
-/* ARGV support. */
-  SYS_argvlen = 12,
-  SYS_argv = 13,
-  SYS_chdir = 14,
-  SYS_stat = 15,
-  SYS_chmod = 16,
-  SYS_utime = 17,
-  SYS_time = 18,
-  SYS_gettimeofday = 19,
-  SYS_times = 20,
-  SYS_link = 21,
-  SYS_argc = 172,
-  SYS_argnlen = 173,
-  SYS_argn = 174,
-/* RedBoot. */
-  SYS_rename = 3001,
-  SYS_isatty = 3002,
-  SYS_system = 3003,
-/* NDS32 specific */
-  SYS_errno = 6001,
-  SYS_getcmdline = 6002
-};
-
 #define STACK_TOP	0xbf000000
 
 #define SRIDX(M,m,e)  ((M << 7) | (m << 3) | e)
