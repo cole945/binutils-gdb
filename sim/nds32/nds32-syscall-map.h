@@ -13,14 +13,14 @@
 #define CB_SYS_gettimeofday	(CB_SYS_BASE + 78)
 #define CB_SYS_uname		(CB_SYS_BASE + 122)
 #define CB_SYS_getpagesize	(CB_SYS_BASE + 166)
+#define CB_SYS_stat64		(CB_SYS_BASE + 195)
+#define CB_SYS_lstat64		(CB_SYS_BASE + 196)
 #define CB_SYS_fstat64		(CB_SYS_BASE + 197)
 #define CB_SYS_getuid32		(CB_SYS_BASE + 199)
 #define CB_SYS_getgid32		(CB_SYS_BASE + 200)
 #define CB_SYS_geteuid32	(CB_SYS_BASE + 201)
 #define CB_SYS_getegid32	(CB_SYS_BASE + 202)
 
-#define CB_SYS_LG_fstat		(CB_SYS_BASE + 0x200)
-#define CB_SYS_LG_stat		(CB_SYS_BASE + 0x201)
 #define CB_SYS_NDS32_isatty	(CB_SYS_BASE + 0x202)
 #define CB_SYS_NDS32_errno	(CB_SYS_BASE + 0x203)
 #define CB_SYS_NDS32_getcmdline	(CB_SYS_BASE + 0x204)
@@ -32,6 +32,8 @@
   {CB_SYS_ftruncate,	22},
   {CB_SYS_pipe,		23},
 #endif
+
+#define LINUX_SYS_BASE		0x5000
 
 static CB_TARGET_DEFS_MAP cb_nds32_syscall_map[] =
 {
@@ -49,7 +51,7 @@ static CB_TARGET_DEFS_MAP cb_nds32_syscall_map[] =
   {CB_SYS_unlink,	7},
   {CB_SYS_getpid,	8},
   {CB_SYS_kill,		9},
-  {CB_SYS_LG_fstat,	10},
+  {CB_SYS_fstat,	10},
 
   /* ARGV support.  */
   {CB_SYS_argvlen,	12},
@@ -57,7 +59,7 @@ static CB_TARGET_DEFS_MAP cb_nds32_syscall_map[] =
 
   /* These are extras added for one reason or another.  */
   {CB_SYS_chdir,	14},
-  {CB_SYS_LG_stat,	15},
+  {CB_SYS_stat,		15},
   {CB_SYS_chmod,	16},
   {CB_SYS_utime,	17},
   {CB_SYS_time,		18},
@@ -80,19 +82,27 @@ static CB_TARGET_DEFS_MAP cb_nds32_syscall_map[] =
   /*
    * Linux syscall.
    */
-  {CB_SYS_exit,		0x5001},
-  {CB_SYS_read,		0x5003},
-  {CB_SYS_write,	0x5004},
-  {CB_SYS_open,		0x5005},
-  {CB_SYS_close,	0x5006},
-  {CB_SYS_brk,		0x502d},
-  {CB_SYS_uname,	0x507a},
-  {CB_SYS_getpagesize,	0x50a6},
-  {CB_SYS_fstat64,	0x50c5},
-  {CB_SYS_getuid32,	0x50c7},
-  {CB_SYS_getgid32,	0x50c8},
-  {CB_SYS_geteuid32,	0x50c9},
-  {CB_SYS_getegid32,	0x50ca},
+  {CB_SYS_exit,		LINUX_SYS_BASE + 1},
+  {CB_SYS_read,		LINUX_SYS_BASE + 3},
+  {CB_SYS_write,	LINUX_SYS_BASE + 4},
+  {CB_SYS_open,		LINUX_SYS_BASE + 5},
+  {CB_SYS_close,	LINUX_SYS_BASE + 6},
+  {CB_SYS_brk,		LINUX_SYS_BASE + 45},
+#define TARGET_LINUX_SYS_stat	(LINUX_SYS_BASE + 106)
+#define TARGET_LINUX_SYS_lstat	(LINUX_SYS_BASE + 107)
+#define TARGET_LINUX_SYS_fstat	(LINUX_SYS_BASE + 108)
+  {CB_SYS_stat,		LINUX_SYS_BASE + 106},
+  {CB_SYS_lstat,	LINUX_SYS_BASE + 107},
+  {CB_SYS_fstat,	LINUX_SYS_BASE + 108},
+  {CB_SYS_uname,	LINUX_SYS_BASE + 122},
+  {CB_SYS_getpagesize,	LINUX_SYS_BASE + 166},
+  {CB_SYS_stat64,	LINUX_SYS_BASE + 195},
+  {CB_SYS_lstat64,	LINUX_SYS_BASE + 196},
+  {CB_SYS_fstat64,	LINUX_SYS_BASE + 197},
+  {CB_SYS_getuid32,	LINUX_SYS_BASE + 199},
+  {CB_SYS_getgid32,	LINUX_SYS_BASE + 200},
+  {CB_SYS_geteuid32,	LINUX_SYS_BASE + 201},
+  {CB_SYS_getegid32,	LINUX_SYS_BASE + 202},
 
   {-1, -1}
 };
