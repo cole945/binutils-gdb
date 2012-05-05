@@ -24,6 +24,7 @@
 #include <string.h>
 #endif
 #include "bfd.h"
+#include "elf-bfd.h"
 #include "gdb/callback.h"
 #include "gdb/signals.h"
 #include "libiberty.h"
@@ -2050,6 +2051,152 @@ nds32_initialize_cpu (SIM_DESC sd, sim_cpu *cpu, struct bfd *abfd)
   CCPU_SR_SET (MSC_CFG, MSC_CFG_EIT);
 }
 
+static void
+nds32_simple_osabi_sniff_sections (bfd *abfd, asection *sect, void *obj)
+{
+  const char *name;
+  int *osabi = (int*)obj;
+
+  name = bfd_get_section_name (abfd, sect);
+  if (strcmp (name, ".note.ABI-tag") == 0)
+    *osabi = 1;
+}
+
+static int
+nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
+{
+  int osabi = 0;
+  int r = 0;
+
+  /* Allocate core memory if none is specified by user. */
+  if (STATE_MEMOPT (sd) != NULL || abfd == NULL)
+    return 0;
+
+  bfd_map_over_sections (abfd, nds32_simple_osabi_sniff_sections, &osabi);
+
+  if (osabi == 0)
+    {
+      sim_do_command (sd, "memory region 0,0x4000000"); /* 64MB */
+      return 1;
+    }
+  else
+    {
+      int i;
+      char buf[256];
+      const int init_sp_size = 0x4000;
+      Elf_Internal_Phdr *phdr;
+
+      /* Create stack page for argv/env. */
+      snprintf (buf, sizeof (buf), "memory region 0x%lx,0x%lx",
+		(long) STACK_TOP - init_sp_size, (long) init_sp_size);
+      sim_do_command (sd, buf);
+
+      phdr = elf_tdata (abfd)->phdr;
+      for (i = 0; i < elf_elfheader (abfd)->e_phnum; i++)
+	{
+	  if (phdr[i].p_type != PT_LOAD || phdr[i].p_memsz == 0)
+	    continue;
+
+	  snprintf (buf, sizeof (buf), "memory region 0x%lx,0x%lx",
+		phdr[i].p_vaddr & ~(phdr[i].p_align - 1),
+		(phdr[i].p_memsz + (phdr[i].p_align - 1)) & ~(phdr[i].p_align - 1));
+	  sim_do_command (sd, buf);
+	  r = 1;
+	}
+    }
+
+  return r;
+}
+
+static uint32_t
+nds32_init_stack (SIM_DESC sd, struct bfd *abfd, char **argv, char **env)
+{
+  int osabi = 0;
+
+  bfd_map_over_sections (abfd, nds32_simple_osabi_sniff_sections, &osabi);
+
+  if (osabi == 0)
+    {
+      int len, mlen, i;
+
+      /* Save argv for -mcrt-arg hacking. */
+      memset (sd->cmdline, 0, sizeof (sd->cmdline));
+      mlen = sizeof (sd->cmdline) - 1;
+      len = 0;
+      for (i = 0; argv && argv[i]; i++)
+	{
+	  int l = strlen (argv[i]) + 1;
+	  if (l + len >= mlen)
+	    break;
+
+	  len += sprintf (sd->cmdline + len, "%s ", argv[i]);
+	}
+
+      if (len > 0)
+	sd->cmdline[len - 1] = '\0'; /* Eat the last space. */
+    }
+  else
+    {
+      int argc;
+      int argv_len = 0;
+      int envc;
+      int env_len = 0;
+      int auxvc = 0;
+      int auxv_len = 0;
+      int i;
+      uint32_t sp = STACK_TOP - 16;
+      uint32_t flat; /* begining of argv/env strings */
+      unsigned char buf[8];
+
+      /* Check stack layou in
+	 http://articles.manugarg.com/aboutelfauxiliaryvectors.html
+	 for details.  */
+
+      for (argc = 0; argv && argv[argc]; argc++)
+	argv_len += strlen (argv[argc]) + 1;
+
+      for (envc = 0; env && env[envc]; envc++)
+	env_len += strlen (env[envc]) + 1;
+
+      flat = sp - (argv_len + env_len + auxv_len);
+      sp = flat - ((argc + 1) * 4 + (envc + 1) * 4 + (auxvc + 1) * 8);
+      sp = sp & ~0xf;
+
+      /* write argc */
+      bfd_put_32 (abfd, argc, buf);
+      sim_write (sd, sp, buf, 4);
+
+      for (i = 0; i < argc; i++)
+	{
+	  int len = strlen (argv[i]) + 1; /* trailing \0 */
+
+	  sim_write (sd, flat, argv[i], len);
+	  bfd_put_32 (abfd, flat, buf);
+	  sim_write (sd, sp + (i + 1) * 4, buf, 4); /* skip argc */
+	  flat += len;
+	}
+
+      for (i = 0; i < envc; i++)
+	{
+	  int len = strlen (env[i]) + 1; /* trailing \0 */
+
+	  sim_write (sd, flat, env[i], len);
+	  bfd_put_32 (abfd, flat, buf);
+	  sim_write (sd, sp + (i + 1 + argc + 1) * 4, buf, 4); /* skip argc, argv[0..n] */
+	  flat += len;
+	}
+
+      memset (buf, 0, sizeof (buf));
+      sim_write (sd, sp + (1 + argc) * 4, buf, 4);
+      sim_write (sd, sp + (1 + argc + 1 + envc) * 4, buf, 4);
+      sim_write (sd, sp + (1 + argc + 1 + envc + 1) * 4 + (auxvc) * 8, buf, 8);
+
+      return sp;
+    }
+
+  return 0;
+}
+
 SIM_DESC
 sim_open (SIM_OPEN_KIND kind, host_callback * callback,
 	  struct bfd *abfd, char **argv)
@@ -2070,16 +2217,12 @@ sim_open (SIM_OPEN_KIND kind, host_callback * callback,
       return 0;
     }
 
-  /* getopt will print the error message so we just have to exit if this fails.
-     FIXME: Hmmm...  in the case of gdb we need getopt to call
-     print_filtered.  */
+  /* Handle target sim arguments. */
   if (sim_parse_args (sd, argv) != SIM_RC_OK)
     {
       nds32_free_state (sd);
       return 0;
     }
-
-  sim_do_command (sd, "memory region 0,0x04000000");
 
   /* Check for/establish the a reference program image.  */
   if (sim_analyze_program (sd,
@@ -2091,18 +2234,26 @@ sim_open (SIM_OPEN_KIND kind, host_callback * callback,
       return 0;
     }
 
+#if 0
+  /* COLE: Not sure whether this is necessary. */
+
   /* Establish any remaining configuration options.  */
   if (sim_config (sd) != SIM_RC_OK)
     {
       nds32_free_state (sd);
       return 0;
     }
+#endif
 
   if (sim_post_argv_init (sd) != SIM_RC_OK)
     {
       nds32_free_state (sd);
       return 0;
     }
+
+  /* Allocate memory in sim_open, so we can 'load' program.
+     But initial stack in sim_create_inferior, so we can push argv and env.  */
+  nds32_alloc_memory (sd, abfd);
 
   /* CPU specific initialization.  */
   for (i = 0; i < MAX_NR_PROCESSORS; ++i)
@@ -2125,28 +2276,9 @@ sim_create_inferior (SIM_DESC sd, struct bfd *prog_bfd, char **argv,
 		     char **env)
 {
   SIM_CPU *cpu = STATE_CPU (sd, 0);
-  int len;
-  int mlen;
-  int i;
   asection *s;
 
-  memset (sd->cmdline, 0, sizeof (sd->cmdline));
-  mlen = sizeof (sd->cmdline) - 1;
-  len = 0;
-  for (i = 0; argv && argv[i]; i++)
-    {
-      int l = strlen (argv[i]) + 1;
-      if (l + len >= mlen)
-	break;
-
-      len += sprintf (sd->cmdline + len, "%s ",
-		argv[i]);
-    }
-  if (len > 0)
-    sd->cmdline[len - 1] = '\0'; /* Eat the last space. */
-
-
-  /* nrun doesn't pass prog_bfd, (but run do).
+  /* nrun doesn't pass prog_bfd,
      so we can only handle bfd here instead of sim_open. */
 
   /* Set the initial register set.  */
@@ -2161,6 +2293,11 @@ sim_create_inferior (SIM_DESC sd, struct bfd *prog_bfd, char **argv,
       else
 	CCPU_SR_CLEAR (PSW, PSW_BE);
     }
+
+  if (nds32_alloc_memory (sd, prog_bfd))
+    /* for 'nrun' to load code after allocate memory.  */
+    sim_load (sd, argv[0], prog_bfd, 0);
+  CCPU_GPR[NG_SP].u = nds32_init_stack (sd, prog_bfd, argv, env);
 
   return SIM_RC_OK;
 }
