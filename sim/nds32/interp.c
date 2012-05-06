@@ -53,20 +53,6 @@
 #include <time.h>
 #include <errno.h>
 
-/* Debug flag to display instructions and registers.  */
-static int tracing = 0;
-static int lock_step = 0;
-static int verbose;
-
-/* We update a cycle counter.  */
-static unsigned int cycles = 0;
-
-static struct bfd *cur_bfd;
-
-static SIM_OPEN_KIND sim_kind;
-static char *myname;
-static host_callback *callback;
-
 /* Check
 	linux: arch/nds32/include/asm/stat.h
 	newlib: libc/include/sys/stat.h
@@ -242,7 +228,7 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
     case CB_SYS_stat:
     case CB_SYS_lstat:
     case CB_SYS_fstat:
-      if (sd->osabi)
+      if (STATE_ENVIRONMENT (sd) == USER_ENVIRONMENT)
 	cb->stat_map = cb_linux_stat_map_32;
       else
 	cb->stat_map = cb_libgloss_stat_map_32;
@@ -430,7 +416,7 @@ __nds32_ld (sim_cpu *cpu, SIM_ADDR addr, int size, int aligned_p)
   ulongest_t val = 0;
   int order;
   SIM_DESC sd = CPU_STATE (cpu);
-  uint32_t cia = CCPU_USR[NC_PC].u; /* FIXME */
+  uint32_t cia = CCPU_USR[NC_PC].u;
 
   SIM_ASSERT (size <= sizeof (ulongest_t));
 
@@ -462,7 +448,7 @@ __nds32_st (sim_cpu *cpu, SIM_ADDR addr, int size, ulongest_t val,
   int r;
   int order;
   SIM_DESC sd = CPU_STATE (cpu);
-  uint32_t cia = CCPU_USR[NC_PC].u; /* FIXME */
+  uint32_t cia = CCPU_USR[NC_PC].u;
 
   SIM_ASSERT (size <= sizeof (ulongest_t));
 
@@ -479,6 +465,7 @@ __nds32_st (sim_cpu *cpu, SIM_ADDR addr, int size, ulongest_t val,
 
   if (r != size)
     {
+      /* TODO: Handle expand-stack for Linux programs.  */
       sim_io_eprintf (sd, "Access violation at 0x%08x. "
 			  "Write of address 0x%08x\n", cia, addr);
       sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_stopped, SIM_SIGSEGV);
@@ -2126,165 +2113,6 @@ nds32_initialize_cpu (SIM_DESC sd, sim_cpu *cpu, struct bfd *abfd)
   CCPU_SR_SET (MSC_CFG, MSC_CFG_EIT);
 }
 
-static void
-nds32_simple_osabi_sniff_sections (bfd *abfd, asection *sect, void *obj)
-{
-  const char *name;
-  int *osabi = (int*)obj;
-
-  name = bfd_get_section_name (abfd, sect);
-  if (strcmp (name, ".note.ABI-tag") == 0)
-    *osabi = 1;
-}
-
-static int
-nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
-{
-  int osabi = 0;
-  int r = 0;
-
-  /* Allocate core memory if none is specified by user. */
-  if (STATE_MEMOPT (sd) != NULL || abfd == NULL)
-    return 0;
-
-  bfd_map_over_sections (abfd, nds32_simple_osabi_sniff_sections, &osabi);
-  sd->osabi = osabi;
-
-  if (osabi == 0)
-    {
-      sim_do_command (sd, "memory region 0,0x4000000"); /* 64MB */
-      return 1;
-    }
-  else
-    {
-      int i;
-      char buf[256];
-      const int init_sp_size = 0x4000;
-      Elf_Internal_Phdr *phdr;
-      sd->elf_brk = 0;
-      sd->unmapped = TASK_UNMAPPED_BASE;
-
-      /* Create stack page for argv/env. */
-      sd->elf_sp = (long) STACK_TOP - init_sp_size;
-      snprintf (buf, sizeof (buf), "memory region 0x%lx,0x%lx",
-		(long) sd->elf_sp, (long) init_sp_size);
-      sim_do_command (sd, buf);
-
-      phdr = elf_tdata (abfd)->phdr;
-      for (i = 0; i < elf_elfheader (abfd)->e_phnum; i++)
-	{
-	  uint32_t addr, len;
-
-	  if (phdr[i].p_type != PT_LOAD || phdr[i].p_memsz == 0)
-	    continue;
-
-	  addr = phdr[i].p_vaddr & ~(phdr[i].p_align - 1);
-	  len = (phdr[i].p_memsz + (phdr[i].p_align - 1)) & ~(phdr[i].p_align - 1);
-	  snprintf (buf, sizeof (buf), "memory region 0x%lx,0x%lx",
-		(long) addr, (long) len);
-	  sim_do_command (sd, buf);
-	  r = 1;
-
-	  if (addr + len > sd->elf_brk);
-	    sd->elf_brk = addr + len;
-	}
-
-      SIM_ASSERT (sd->elf_brk < sd->unmapped && sd->unmapped < sd->elf_sp);
-    }
-
-  return r;
-}
-
-static uint32_t
-nds32_init_stack (SIM_DESC sd, struct bfd *abfd, char **argv, char **env)
-{
-  int osabi = 0;
-
-  bfd_map_over_sections (abfd, nds32_simple_osabi_sniff_sections, &osabi);
-  sd->osabi = osabi;
-
-  if (osabi == 0)
-    {
-      int len, mlen, i;
-
-      /* Save argv for -mcrt-arg hacking. */
-      memset (sd->cmdline, 0, sizeof (sd->cmdline));
-      mlen = sizeof (sd->cmdline) - 1;
-      len = 0;
-      for (i = 0; argv && argv[i]; i++)
-	{
-	  int l = strlen (argv[i]) + 1;
-	  if (l + len >= mlen)
-	    break;
-
-	  len += sprintf (sd->cmdline + len, "%s ", argv[i]);
-	}
-
-      if (len > 0)
-	sd->cmdline[len - 1] = '\0'; /* Eat the last space. */
-    }
-  else
-    {
-      int argc;
-      int argv_len = 0;
-      int envc;
-      int env_len = 0;
-      int auxvc = 0;
-      int auxv_len = 0;
-      int i;
-      uint32_t sp = STACK_TOP - 16;
-      uint32_t flat; /* begining of argv/env strings */
-      unsigned char buf[8];
-
-      /* Check stack layou in
-	 http://articles.manugarg.com/aboutelfauxiliaryvectors.html
-	 for details.  */
-
-      for (argc = 0; argv && argv[argc]; argc++)
-	argv_len += strlen (argv[argc]) + 1;
-
-      for (envc = 0; env && env[envc]; envc++)
-	env_len += strlen (env[envc]) + 1;
-
-      flat = sp - (argv_len + env_len + auxv_len);
-      sp = flat - ((argc + 1) * 4 + (envc + 1) * 4 + (auxvc + 1) * 8);
-      sp = sp & ~0xf;
-
-      /* write argc */
-      bfd_put_32 (abfd, argc, buf);
-      sim_write (sd, sp, buf, 4);
-
-      for (i = 0; i < argc; i++)
-	{
-	  int len = strlen (argv[i]) + 1; /* trailing \0 */
-
-	  sim_write (sd, flat, argv[i], len);
-	  bfd_put_32 (abfd, flat, buf);
-	  sim_write (sd, sp + (i + 1) * 4, buf, 4); /* skip argc */
-	  flat += len;
-	}
-
-      for (i = 0; i < envc; i++)
-	{
-	  int len = strlen (env[i]) + 1; /* trailing \0 */
-
-	  sim_write (sd, flat, env[i], len);
-	  bfd_put_32 (abfd, flat, buf);
-	  sim_write (sd, sp + (i + 1 + argc + 1) * 4, buf, 4); /* skip argc, argv[0..n] */
-	  flat += len;
-	}
-
-      memset (buf, 0, sizeof (buf));
-      sim_write (sd, sp + (1 + argc) * 4, buf, 4);
-      sim_write (sd, sp + (1 + argc + 1 + envc) * 4, buf, 4);
-      sim_write (sd, sp + (1 + argc + 1 + envc + 1) * 4 + (auxvc) * 8, buf, 8);
-
-      return sp;
-    }
-
-  return 0;
-}
-
 SIM_DESC
 sim_open (SIM_OPEN_KIND kind, host_callback * callback,
 	  struct bfd *abfd, char **argv)
@@ -2339,10 +2167,6 @@ sim_open (SIM_OPEN_KIND kind, host_callback * callback,
       return 0;
     }
 
-  /* Allocate memory in sim_open, so we can 'load' program.
-     But initial stack in sim_create_inferior, so we can push argv and env.  */
-  nds32_alloc_memory (sd, abfd);
-
   /* CPU specific initialization.  */
   for (i = 0; i < MAX_NR_PROCESSORS; ++i)
     {
@@ -2366,28 +2190,24 @@ sim_create_inferior (SIM_DESC sd, struct bfd *prog_bfd, char **argv,
 		     char **env)
 {
   SIM_CPU *cpu = STATE_CPU (sd, 0);
-  asection *s;
-
-  /* nrun doesn't pass prog_bfd,
-     so we can only handle bfd here instead of sim_open. */
 
   /* Set the initial register set.  */
-  if (prog_bfd != NULL)
-    {
-      /* Set PC to entry point address. */
-      (* CPU_PC_STORE (cpu)) (cpu, bfd_get_start_address (prog_bfd));
+  if (prog_bfd == NULL)
+    return SIM_RC_OK;
 
-      /* Set default endian. */
-      if (bfd_big_endian (prog_bfd))
-	CCPU_SR_SET (PSW, PSW_BE);
-      else
-	CCPU_SR_CLEAR (PSW, PSW_BE);
-    }
+  /* Set PC to entry point address.  */
+  (*CPU_PC_STORE (cpu)) (cpu, bfd_get_start_address (prog_bfd));
 
-  if (nds32_alloc_memory (sd, prog_bfd))
-    /* for 'nrun' to load code after allocate memory.  */
-    sim_load (sd, argv[0], prog_bfd, 0);
-  CCPU_GPR[NG_SP].u = nds32_init_stack (sd, prog_bfd, argv, env);
+  /* Set default endian.  */
+  if (bfd_big_endian (prog_bfd))
+    CCPU_SR_SET (PSW, PSW_BE);
+  else
+    CCPU_SR_CLEAR (PSW, PSW_BE);
+
+  if (STATE_ENVIRONMENT (sd) == USER_ENVIRONMENT)
+    nds32_init_linux (sd, prog_bfd, argv, env);
+  else
+    nds32_init_libgloss (sd, prog_bfd, argv, env);
 
   return SIM_RC_OK;
 }
@@ -2401,5 +2221,5 @@ sim_kill (SIM_DESC sd)
 void
 sim_set_callbacks (host_callback * ptr)
 {
-  callback = ptr;
+  /* callback = ptr; */
 }
