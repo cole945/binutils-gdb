@@ -25,11 +25,11 @@ SIM_OBJS = \
 	$(SIM_NEW_COMMON_OBJS) \
 	interp.o \
 	nds32-cop0.o \
+	nds32-load.o \
 	sim-cpu.o \
 	sim-engine.o \
 	sim-hrw.o \
 	sim-load.o \
-	sim-hload.o \
 	sim-resume.o \
 	sim-stop.o \
 	sim-reason.o \
