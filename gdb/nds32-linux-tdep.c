@@ -39,7 +39,8 @@
 
 #include "nds32-tdep.h"
 #include "nds32-linux-tdep.h"
-#include "features/nds32-linux.c"
+/* #include "features/nds32-linux.c" */
+#include "features/nds32-linux-sid.c"
 extern struct nds32_gdb_config nds32_config;
 
 void _initialize_nds32_linux_tdep (void);
@@ -314,7 +315,8 @@ nds32_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   set_gdbarch_num_pseudo_regs (gdbarch, 0);
 
   if (!tdesc_has_registers (tdesc))
-    tdesc = tdesc_nds32_linux;
+    /* tdesc = tdesc_nds32_linux; */
+    tdesc = tdesc_nds32_linux_sid;
   tdep->tdesc = tdesc;
 
   if (tdesc_data)
@@ -337,5 +339,9 @@ _initialize_nds32_linux_tdep (void)
   gdbarch_register_osabi (bfd_arch_nds32, 0, GDB_OSABI_LINUX,
 			  nds32_linux_init_abi);
 
-  initialize_tdesc_nds32_linux ();
+  /* FIXME: the sid-tdesc for Linux jams a lot of dummy bytes
+	    in order to workaround SID "g-packet it long" issue.
+	    Remove this when SID implement target-description.  */
+  /* initialize_tdesc_nds32_linux (); */
+  initialize_tdesc_nds32_linux_sid ();
 }
