@@ -282,9 +282,6 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
   struct type *type, *stype1, *stype2;
   struct field *f;
 
-  if (reg_name == NULL || reg_name[0] == '\0')
-    return bt->builtin_data_ptr;
-
   if (tdep->nds32_types.next == NULL)
     nds32_list_init (&tdep->nds32_types);
   else
