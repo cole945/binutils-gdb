@@ -47,10 +47,14 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
 {
   int osabi = 0;
   int i;
-  char buf[256];
+  char buf[1024];
   const int init_sp_size = 0x4000;
   Elf_Internal_Phdr *phdr;
-
+  Elf_Internal_Phdr *interp_phdr = NULL;
+  uint32_t off;
+  uint32_t len;
+  int sysroot_len;
+  uint32_t interp_base;
 
   bfd_map_over_sections (abfd, nds32_simple_osabi_sniff_sections, &osabi);
   if (osabi)
@@ -68,7 +72,7 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
 	b. STACK_TOP for Linux programs.
      3. Loadable segments of the interpreter (loader).  */
 
-  if (STATE_ENVIRONMENT (sd) != OPERATING_ENVIRONMENT)
+  if (STATE_ENVIRONMENT (sd) != USER_ENVIRONMENT)
     {
       /* TODO: See above.  */
       sim_do_command (sd, "memory region 0,0x4000000");	/* 64MB */
@@ -84,16 +88,24 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
 	    (long) sd->elf_sp, (long) init_sp_size);
   sim_do_command (sd, buf);
 
+  /* FIXME: Handle ET_DYN and ET_EXEC.  */
   phdr = elf_tdata (abfd)->phdr;
   for (i = 0; i < elf_elfheader (abfd)->e_phnum; i++)
     {
       uint32_t addr, len;
 
+      if (phdr[i].p_type == PT_INTERP)
+	interp_phdr = &phdr[i];
+
       if (phdr[i].p_type != PT_LOAD || phdr[i].p_memsz == 0)
 	continue;
 
-      addr = phdr[i].p_vaddr & ~(phdr[i].p_align - 1);
-      len = (phdr[i].p_memsz + (phdr[i].p_align - 1)) & ~(phdr[i].p_align - 1);
+
+      addr = phdr[i].p_vaddr;
+      len = addr + phdr[i].p_memsz - PAGE_ALIGN (addr);
+      len = PAGE_ROUNDUP (len);
+      addr = PAGE_ALIGN (addr);
+
       snprintf (buf, sizeof (buf), "memory region 0x%lx,0x%lx",
 		(long) addr, (long) len);
       sim_do_command (sd, buf);
@@ -102,15 +114,110 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
 	sd->elf_brk = addr + len;
     }
 
-  /* TODO: Handle PT_INTERP.  */
-
   SIM_ASSERT (sd->elf_brk < sd->unmapped && sd->unmapped < sd->elf_sp);
+
+  if (!interp_phdr)
+    return;
+
+  /* Read path of interp.  */
+  off = interp_phdr->p_offset;
+  len = interp_phdr->p_filesz;
+  sysroot_len = strlen (simulator_sysroot);
+
+  strcpy (buf, simulator_sysroot);
+  if (buf[sysroot_len - 1] == '/')
+    buf[--sysroot_len] = '\0';
+
+  if (bfd_seek (abfd, off, SEEK_SET) != 0
+      || bfd_bread (buf + sysroot_len, len, abfd) != len)
+    return;
+
+  sd->interp_bfd = bfd_openr (buf, 0);
+
+  if (sd->interp_bfd == NULL)
+    return;
+
+  bfd_check_format (sd->interp_bfd, bfd_object);
+
+  /* Add memory for interp.  */
+  phdr = elf_tdata (sd->interp_bfd)->phdr;
+  interp_base = sd->unmapped;
+  for (i = 0; i < elf_elfheader (sd->interp_bfd)->e_phnum; i++)
+    {
+      uint32_t addr, len;
+
+      if (phdr[i].p_type != PT_LOAD || phdr[i].p_memsz == 0)
+	continue;
+
+      addr = interp_base + phdr[i].p_vaddr;
+      len = addr + phdr[i].p_memsz - PAGE_ALIGN (addr);
+      len = PAGE_ROUNDUP (len);
+      addr = PAGE_ALIGN (addr);
+      sd->unmapped = PAGE_ROUNDUP (addr + len);
+
+      snprintf (buf, sizeof (buf), "memory region 0x%lx,0x%lx",
+		(long) addr, (long) len);
+      sim_do_command (sd, buf);
+    }
+
+  sd->interp_base = interp_base;
+}
+
+static void
+nds32_load_interp (SIM_DESC sd, bfd *prog_bfd, uint32_t load_base,
+		   int verbose_p, sim_write_fn do_write)
+{
+  asection *s;
+
+  for (s = prog_bfd->sections; s; s = s->next)
+    {
+      if (s->flags & SEC_LOAD)
+	{
+	  bfd_size_type size;
+
+	  size = bfd_get_section_size (s);
+	  if (size > 0)
+	    {
+	      unsigned char *buffer;
+	      bfd_vma lma;
+
+	      buffer = malloc (size);
+	      if (buffer == NULL)
+		{
+		  sim_io_printf (sd, "Insufficient memory to load INTERP, %s\n",
+				 bfd_get_filename (prog_bfd));
+		  return;
+		}
+
+	      lma = bfd_section_vma (prog_bfd, s) + load_base;
+
+	      if (verbose_p)
+		{
+		  sim_io_printf (sd, "Loading section %s, size 0x%lx vma 0x%lx\n",
+				 bfd_get_section_name (prog_bfd, s),
+				 (unsigned long) size, (unsigned long) lma);
+		}
+	      bfd_get_section_contents (prog_bfd, s, buffer, 0, size);
+	      do_write (sd, lma, buffer, size);
+	      free (buffer);
+	    }
+	}
+    }
+
+  if (verbose_p)
+    sim_io_printf (sd, "Start address 0x%lx\n",
+		   load_base + bfd_get_start_address (prog_bfd));
+
+  return;
 }
 
 SIM_RC
 sim_load (SIM_DESC sd, char *prog_name, struct bfd *prog_bfd, int from_tty)
 {
   bfd *result_bfd;
+
+  if (prog_bfd == NULL)
+    prog_bfd = STATE_PROG_BFD (sd);
 
   SIM_ASSERT (STATE_MAGIC (sd) == SIM_MAGIC_NUMBER);
   if (sim_analyze_program (sd, prog_name, prog_bfd) != SIM_RC_OK)
@@ -139,6 +246,12 @@ sim_load (SIM_DESC sd, char *prog_name, struct bfd *prog_bfd, int from_tty)
       STATE_PROG_BFD (sd) = NULL;
       return SIM_RC_FAIL;
     }
+
+  if (sd->interp_bfd)
+    nds32_load_interp (sd, sd->interp_bfd, sd->interp_base,
+		       0 /* STATE_OPEN_KIND (sd) == SIM_OPEN_DEBUG */,
+		       sim_write);
+
   return SIM_RC_OK;
 }
 
@@ -228,6 +341,14 @@ nds32_init_linux (SIM_DESC sd, struct bfd *abfd, char **argv, char **env)
   sim_write (sd, sp + (1 + argc + 1 + envc + 1) * 4 + (auxvc) * 8, buf, 8);
 
   CCPU_GPR[NG_SP].u = sp;
+
+  if (sd->interp_bfd)
+    {
+      CPU_PC_STORE (cpu) (cpu, sd->interp_base
+			       + bfd_get_start_address (sd->interp_bfd));
+      sim_io_printf (sd, " interp entry : 0x%lx\n",
+		     sd->interp_base + bfd_get_start_address (sd->interp_bfd));
+    }
 
   return;
 }

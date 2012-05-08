@@ -83,6 +83,8 @@ struct sim_state {
   char cmdline[256];		/* cmdline buffer for -mcrt-arg hacking. */
 
   struct bfd *interp_bfd;	/* For Linux dynamic linker.  */
+  uint32_t interp_base;		/* Base address of where interp is loaded. */
+  uint32_t exec_base;		/* Base address of where interp is loaded. */
   uint32_t elf_brk;		/* for brk */
   uint32_t elf_sp;		/* for expand stack */
   uint32_t unmapped;		/* for mmap */
