@@ -91,6 +91,7 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
 
   /* FIXME: Handle ET_DYN and ET_EXEC.  */
   phdr = elf_tdata (abfd)->phdr;
+  sd->exec_base = -1;
   for (i = 0; i < elf_elfheader (abfd)->e_phnum; i++)
     {
       uint32_t addr, len;
@@ -105,6 +106,9 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
       len = addr + phdr[i].p_memsz - PAGE_ALIGN (addr);
       len = PAGE_ROUNDUP (len);
       addr = PAGE_ALIGN (addr);
+
+      if (sd->exec_base == -1)
+	sd->exec_base = addr;
 
       snprintf (buf, sizeof (buf), "memory region 0x%lx,0x%lx",
 		(long) addr, (long) len);
@@ -164,49 +168,49 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
 }
 
 static void
-nds32_load_interp (SIM_DESC sd, bfd *prog_bfd, uint32_t load_base,
-		   int verbose_p, sim_write_fn do_write)
+nds32_load_segments (SIM_DESC sd, bfd *abfd, uint32_t load_base)
 {
-  asection *s;
+  Elf_Internal_Phdr *phdr;
+  int i;
+  int bias = -1;
+  int bias_set = 0;
 
-  for (s = prog_bfd->sections; s; s = s->next)
+  phdr = elf_tdata (abfd)->phdr;
+
+  for (i = 0; i < elf_elfheader (abfd)->e_phnum; i++)
     {
-      if (s->flags & SEC_LOAD)
+      uint32_t addr, filesz, memsz;
+      char *data = NULL;
+
+      if (phdr[i].p_type != PT_LOAD || phdr[i].p_memsz == 0)
+	continue;
+
+      addr = phdr[i].p_vaddr;
+      filesz = phdr[i].p_filesz;
+      memsz = phdr[i].p_memsz;
+
+      if (bias_set == 0)
 	{
-	  bfd_size_type size;
-
-	  size = bfd_get_section_size (s);
-	  if (size > 0)
-	    {
-	      unsigned char *buffer;
-	      bfd_vma lma;
-
-	      buffer = malloc (size);
-	      if (buffer == NULL)
-		{
-		  sim_io_printf (sd, "Insufficient memory to load INTERP, %s\n",
-				 bfd_get_filename (prog_bfd));
-		  return;
-		}
-
-	      lma = bfd_section_vma (prog_bfd, s) + load_base;
-
-	      if (verbose_p)
-		{
-		  sim_io_printf (sd, "Loading section %s, size 0x%lx vma 0x%lx\n",
-				 bfd_get_section_name (prog_bfd, s),
-				 (unsigned long) size, (unsigned long) lma);
-		}
-	      bfd_get_section_contents (prog_bfd, s, buffer, 0, size);
-	      do_write (sd, lma, buffer, size);
-	      free (buffer);
-	    }
+	  bias = load_base - addr;
+	  bias_set = 1;
 	}
-    }
 
-  if (verbose_p)
-    sim_io_printf (sd, "Start address 0x%lx\n",
-		   load_base + bfd_get_start_address (prog_bfd));
+      if (STATE_OPEN_KIND (sd) == SIM_OPEN_DEBUG)
+	sim_io_printf (sd, "Load segment, size 0x%x addr 0x%x\n",
+		       addr + bias, memsz);
+
+      data = xmalloc (memsz);
+      /* Clear for .bss or something else. */
+      if (memsz != filesz)
+	memset (data + filesz, 0, memsz - filesz);
+
+      if (bfd_seek (abfd, phdr[i].p_offset, SEEK_SET) == 0
+	  && bfd_bread (data, filesz, abfd) == filesz)
+	sim_write (sd, addr + bias, data, memsz);
+
+      free (data);
+
+    }
 
   return;
 }
@@ -228,29 +232,36 @@ sim_load (SIM_DESC sd, char *prog_name, struct bfd *prog_bfd, int from_tty)
   if (STATE_MEMOPT (sd) == NULL && prog_bfd != NULL)
     nds32_alloc_memory (sd, prog_bfd);
 
-  /* NOTE: For historical reasons, older hardware simulators
-     incorrectly write the program sections at LMA interpreted as a
-     virtual address.  This is still accommodated for backward
-     compatibility reasons. */
-
-  result_bfd = sim_load_file (sd, STATE_MY_NAME (sd),
-			      STATE_CALLBACK (sd),
-			      prog_name,
-			      STATE_PROG_BFD (sd),
-			      STATE_OPEN_KIND (sd) == SIM_OPEN_DEBUG,
-			      STATE_LOAD_AT_LMA_P (sd),
-			      sim_write);
-  if (result_bfd == NULL)
+  if (STATE_ENVIRONMENT (sd) != USER_ENVIRONMENT)
     {
-      bfd_close (STATE_PROG_BFD (sd));
-      STATE_PROG_BFD (sd) = NULL;
-      return SIM_RC_FAIL;
-    }
+      /* NOTE: For historical reasons, older hardware simulators
+	 incorrectly write the program sections at LMA interpreted as a
+	 virtual address.  This is still accommodated for backward
+	 compatibility reasons. */
 
-  if (sd->interp_bfd)
-    nds32_load_interp (sd, sd->interp_bfd, sd->interp_base,
-		       0 /* STATE_OPEN_KIND (sd) == SIM_OPEN_DEBUG */,
-		       sim_write);
+      result_bfd = sim_load_file (sd, STATE_MY_NAME (sd),
+				  STATE_CALLBACK (sd),
+				  prog_name,
+				  STATE_PROG_BFD (sd),
+				  STATE_OPEN_KIND (sd) == SIM_OPEN_DEBUG,
+				  STATE_LOAD_AT_LMA_P (sd),
+				  sim_write);
+      if (result_bfd == NULL)
+	{
+	  bfd_close (STATE_PROG_BFD (sd));
+	  STATE_PROG_BFD (sd) = NULL;
+	  return SIM_RC_FAIL;
+	}
+    }
+  else
+    {
+      /* For Linux programs, we should load ELF based on loadable
+	 segments, not sections.  Otherwise, ELF/Program headers will
+	 not be loaded which are needed by dynamic linker.  */
+      nds32_load_segments (sd, prog_bfd, sd->exec_base);
+      if (sd->interp_bfd)
+	nds32_load_segments (sd, sd->interp_bfd, sd->interp_base);
+    }
 
   return SIM_RC_OK;
 }
@@ -368,7 +379,7 @@ nds32_init_linux (SIM_DESC sd, struct bfd *abfd, char **argv, char **env)
       Elf_Internal_Ehdr *exec = elf_elfheader (abfd);
 
       sp_auxv = nds32_push_auxv (sd, abfd, sp_auxv, AT_PAGESZ, PAGE_SIZE);
-      sp_auxv = nds32_push_auxv (sd, abfd, sp_auxv, AT_PHDR, exec->e_phoff);
+      sp_auxv = nds32_push_auxv (sd, abfd, sp_auxv, AT_PHDR, sd->exec_base + exec->e_phoff);
       sp_auxv = nds32_push_auxv (sd, abfd, sp_auxv, AT_PHENT, sizeof (Elf32_Phdr));
       sp_auxv = nds32_push_auxv (sd, abfd, sp_auxv, AT_PHNUM, exec->e_phnum);
       sp_auxv = nds32_push_auxv (sd, abfd, sp_auxv, AT_BASE, sd->interp_base);
