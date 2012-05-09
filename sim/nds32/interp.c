@@ -213,6 +213,48 @@ syscall_write_mem (host_callback *cb, struct cb_syscall *sc,
   return sim_core_write_buffer (sd, cpu, write_map, buf, taddr, bytes);
 }
 
+static void *
+nds32_mmap (SIM_DESC sd, sim_cpu *cpu, uint32_t addr, size_t len,
+	    int prot, int flags, int fd, off_t offset)
+{
+  host_callback *cb = STATE_CALLBACK (sd);
+  void *phy = NULL;
+  int i, p;
+
+  if (flags & MAP_ANONYMOUS)
+    phy = mmap (NULL, len, prot, flags, fd, offset);
+  else if (fd < 0 || fd > MAX_CALLBACK_FDS || cb->fd_buddy[fd] < 0)
+    return (void *) EBADF;
+  else
+    {
+      fd = cb->fdmap[fd];
+      phy = mmap (NULL, len, prot, flags & ~MAP_FIXED, fd, offset);
+    }
+
+  if (phy == MAP_FAILED)
+    return phy;
+
+  if (flags & MAP_FIXED)
+    {
+      /* Detach before attach.  */
+      for (p = addr; p < addr + len; p += PAGE_SIZE)
+	sim_core_detach (sd, cpu, 0, 0, p);
+    }
+  else
+    addr = sd->unmapped;
+
+  if (PAGE_ROUNDUP (addr + len) > sd->unmapped)
+    sd->unmapped = PAGE_ROUNDUP (addr + len);
+
+  /* FIXME: It just works. Make it solid.
+	    It should return MAP_FAILED when fail.  */
+  for (i = 0, p = PAGE_ALIGN (addr); p < addr + len; p += PAGE_SIZE)
+    sim_core_attach (sd, NULL, 0, access_read_write_exec, 0, p, PAGE_SIZE, 0,
+		     NULL, (char *) phy + i * PAGE_SIZE);
+
+  return (void *) PAGE_ALIGN (addr);
+}
+
 static sim_cia
 nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 {
@@ -378,50 +420,16 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
        /* void *mmap2 (void *addr, size_t length, int prot,
 		       int flags, int fd, off_t pgoffset);  */
       {
-	address_word addr = CCPU_GPR[0].u;
-	address_word len = CCPU_GPR[1].s;
+	uint32_t addr = CCPU_GPR[0].u;
+	size_t len = CCPU_GPR[1].s;
 	int prot = CCPU_GPR[2].s;
 	int flags = CCPU_GPR[3].s;
 	int fd = CCPU_GPR[4].s;
 	off_t pgoffset = CCPU_GPR[5].u;
-	void *phy = NULL;
 
-	if (flags & MAP_ANONYMOUS)
-	  phy = mmap (NULL, len, prot, flags, fd, pgoffset * PAGE_SIZE);
-	else if (fd < 0 || fd > MAX_CALLBACK_FDS || cb->fd_buddy[fd] < 0)
-	  {
-	    sc.result = EBADF;
-	    goto out;
-	  }
-	else
-	  {
-	    fd = cb->fdmap[fd];
-	    phy = mmap (NULL, len, prot, flags & ~MAP_FIXED, fd, pgoffset * PAGE_SIZE);
-	  }
-
-	if (phy == MAP_FAILED)
-	  goto out;
-
-	sc.result = (long) phy;
-
-	if ((flags & MAP_FIXED) == 0)
-	  {
-	    addr = sd->unmapped;
-	    sd->unmapped = PAGE_ROUNDUP (addr + len);
-	  }
-	else if (addr > sd->unmapped)
-	  {
-	    sd->unmapped = PAGE_ROUNDUP (addr + len);
-	  }
-
-	/* FIXME: It just works. Make it solid.
-		  It should return MAP_FAILED for fail.  */
-	sim_core_attach (sd, NULL, 0, access_read_write_exec, 0,
-			 PAGE_ALIGN (addr), PAGE_ROUNDUP (len), 0, NULL, phy);
-
-	sc.result = PAGE_ALIGN (addr);
+	sc.result = (long) nds32_mmap (sd, cpu, addr, len, prot, flags, fd,
+				       pgoffset * PAGE_SIZE);
       }
-
       break;
 #endif
 
