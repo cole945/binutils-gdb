@@ -8,6 +8,7 @@
 
 #define CB_SYS_BASE		0x1000
 #define CB_SYS_link		(CB_SYS_BASE + 9)
+#define CB_SYS_access		(CB_SYS_BASE + 33)
 #define CB_SYS_times		(CB_SYS_BASE + 43)
 #define CB_SYS_brk		(CB_SYS_BASE + 45)
 #define CB_SYS_gettimeofday	(CB_SYS_BASE + 78)
@@ -89,6 +90,8 @@ static CB_TARGET_DEFS_MAP cb_nds32_syscall_map[] =
   {CB_SYS_write,	LINUX_SYS_BASE + 4},
   {CB_SYS_open,		LINUX_SYS_BASE + 5},
   {CB_SYS_close,	LINUX_SYS_BASE + 6},
+  {CB_SYS_lseek,	LINUX_SYS_BASE + 19},
+  {CB_SYS_access,	LINUX_SYS_BASE + 33},
   {CB_SYS_brk,		LINUX_SYS_BASE + 45},
 #define TARGET_LINUX_SYS_stat	(LINUX_SYS_BASE + 106)
 #define TARGET_LINUX_SYS_lstat	(LINUX_SYS_BASE + 107)
