@@ -122,24 +122,45 @@ store_unsigned_integer (unsigned char *addr, int len,
     }
 }
 
-/* Read a null terminated string from memory, return in a buffer */
+/* Utility of cb_syscall to fetch a path name.
+   The buffer is malloc'd and the address is stored in BUFP.
+   The result is that of get_string, but prepended with
+   simulator_sysroot if the string starts with '/'.
+   If an error occurs, no buffer is left malloc'd.
 
-static char *
-fetch_str (SIM_DESC sd, address_word addr)
+   This code is copied from comm/syscall.c,
+   because it's a static function. */
+
+static int
+get_path (host_callback *cb, CB_SYSCALL *sc, uint32_t addr, char **bufp)
 {
-  char *buf;
-  int nr = 0;
-  char null;
+  const int max_path_len = 1024;
+  char *buf = xmalloc (max_path_len);
+  int result;
+  int sysroot_len = strlen (simulator_sysroot);
 
-  if (addr == 0)
-    return NULL;
+  result = cb_get_string (cb, sc, buf, max_path_len - sysroot_len, addr);
+  if (result == 0)
+    {
+      /* Prepend absolute paths with simulator_sysroot.  Relative paths
+	 are supposed to be relative to a chdir within that path, but at
+	 this point unknown where.  */
+      if (simulator_sysroot[0] != '\0' && *buf == '/')
+	{
+	  /* Considering expected rareness of syscalls with absolute
+	     file paths (compared to relative file paths and insn
+	     execution), it does not seem worthwhile to rearrange things
+	     to get rid of the string moves here; we'd need at least an
+	     extra call to check the initial '/' in the path.  */
+	  memmove (buf + sysroot_len, buf, sysroot_len);
+	  memcpy (buf, simulator_sysroot, sysroot_len);
+	}
 
-  while (sim_read (sd, addr + nr, (unsigned char *) &null, 1) == 1 && null != 0)
-    nr++;
-  buf = NZALLOC (char, nr + 1);
-  sim_read (sd, addr, (unsigned char *) buf, nr);
-
-  return buf;
+      *bufp = buf;
+    }
+  else
+    free (buf);
+  return result;
 }
 
 enum nds32_exceptions
@@ -300,10 +321,22 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
       }
       break;
 
+    case CB_SYS_access:
+      {
+	char *path;
+	get_path (cb, &sc, CCPU_GPR[0].u, &path);
+	sc.result = access (path, CCPU_GPR[1].u);
+	free (path);
+      }
+      break;
+
     case CB_SYS_link:
       {
-	char *oldpath = fetch_str (sd, CCPU_GPR[0].u);
-	char *newpath = fetch_str (sd, CCPU_GPR[1].u);
+	char *oldpath;
+	char *newpath;
+
+	get_path (cb, &sc, CCPU_GPR[0].u, &oldpath);
+	get_path (cb, &sc, CCPU_GPR[1].u, &newpath);
 
 	sc.result = link (oldpath, newpath);
 	free (oldpath);
@@ -363,7 +396,7 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 	else
 	  {
 	    fd = cb->fdmap[fd];
-	    phy = mmap (NULL, len, prot, flags, fd, pgoffset * PAGE_SIZE);
+	    phy = mmap (NULL, len, prot, flags & ~MAP_FIXED, fd, pgoffset * PAGE_SIZE);
 	  }
 
 	if (phy == MAP_FAILED)
@@ -371,9 +404,13 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 
 	sc.result = (long) phy;
 
-	if (addr == 0)
+	if ((flags & MAP_FIXED) == 0)
 	  {
 	    addr = sd->unmapped;
+	    sd->unmapped = PAGE_ROUNDUP (addr + len);
+	  }
+	else if (addr > sd->unmapped)
+	  {
 	    sd->unmapped = PAGE_ROUNDUP (addr + len);
 	  }
 
