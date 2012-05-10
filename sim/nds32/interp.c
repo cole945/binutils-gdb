@@ -222,7 +222,7 @@ nds32_mmap (SIM_DESC sd, sim_cpu *cpu, uint32_t addr, size_t len,
   int i, p;
 
   if (flags & MAP_ANONYMOUS)
-    phy = mmap (NULL, len, prot, flags, fd, offset);
+    phy = mmap (NULL, len, prot, flags & ~MAP_FIXED, fd, offset);
   else if (fd < 0 || fd > MAX_CALLBACK_FDS || cb->fd_buddy[fd] < 0)
     return (void *) EBADF;
   else
@@ -248,7 +248,7 @@ nds32_mmap (SIM_DESC sd, sim_cpu *cpu, uint32_t addr, size_t len,
 
   /* FIXME: It just works. Make it solid.
 	    It should return MAP_FAILED when fail.  */
-  for (i = 0, p = PAGE_ALIGN (addr); p < addr + len; p += PAGE_SIZE)
+  for (i = 0, p = PAGE_ALIGN (addr); p < addr + len; p += PAGE_SIZE, i++)
     sim_core_attach (sd, NULL, 0, access_read_write_exec, 0, p, PAGE_SIZE, 0,
 		     NULL, (char *) phy + i * PAGE_SIZE);
 
@@ -430,6 +430,9 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 	sc.result = (long) nds32_mmap (sd, cpu, addr, len, prot, flags, fd,
 				       pgoffset * PAGE_SIZE);
       }
+      break;
+    case CB_SYS_mprotect:
+      sc.result = 0; /* Just do nothing now. */
       break;
 #endif
 
