@@ -15,6 +15,7 @@
 #define CB_SYS_mmap		(CB_SYS_BASE + 90)
 #define CB_SYS_munmap		(CB_SYS_BASE + 91)
 #define CB_SYS_uname		(CB_SYS_BASE + 122)
+#define CB_SYS_mprotect		(CB_SYS_BASE + 125)
 #define CB_SYS_getpagesize	(CB_SYS_BASE + 166)
 #define CB_SYS_mmap2		(CB_SYS_BASE + 192)
 #define CB_SYS_stat64		(CB_SYS_BASE + 195)
@@ -104,6 +105,7 @@ static CB_TARGET_DEFS_MAP cb_nds32_syscall_map[] =
   {CB_SYS_lstat,	LINUX_SYS_BASE + 107},
   {CB_SYS_fstat,	LINUX_SYS_BASE + 108},
   {CB_SYS_uname,	LINUX_SYS_BASE + 122},
+  {CB_SYS_mprotect,	LINUX_SYS_BASE + 125},
   {CB_SYS_getpagesize,	LINUX_SYS_BASE + 166},
   {CB_SYS_mmap2,	LINUX_SYS_BASE + 192},
   {CB_SYS_stat64,	LINUX_SYS_BASE + 195},
