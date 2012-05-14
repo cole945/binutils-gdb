@@ -449,8 +449,9 @@ nds32_decode32_mem (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0x5:			/* lh.bi */
     case 0x6:			/* lw.bi */
     case 0x7:			/* ld.bi */
-      CCPU_GPR[rt].u = nds32_ld_aligned (cpu, CCPU_GPR[ra].u, 1 << (op & 0x3));
-      CCPU_GPR[ra].u += (CCPU_GPR[rb].u << sv);
+      addr = CCPU_GPR[ra].u + (CCPU_GPR[rb].u << sv);
+      CCPU_GPR[rt].u = nds32_ld_aligned (cpu, CCPU_GPR[ra].u, (1 << (op & 0x3)));
+      CCPU_GPR[ra].u = addr;
       break;
     case 0x8:			/* sb */
     case 0x9:			/* sh */
