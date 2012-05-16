@@ -213,7 +213,7 @@ syscall_write_mem (host_callback *cb, struct cb_syscall *sc,
   return sim_core_write_buffer (sd, cpu, write_map, buf, taddr, bytes);
 }
 
-static void *
+void *
 nds32_mmap (SIM_DESC sd, sim_cpu *cpu, uint32_t addr, size_t len,
 	    int prot, int flags, int fd, off_t offset)
 {
@@ -240,10 +240,11 @@ nds32_mmap (SIM_DESC sd, sim_cpu *cpu, uint32_t addr, size_t len,
       for (p = addr; p < addr + len; p += PAGE_SIZE)
 	sim_core_detach (sd, cpu, 0, 0, p);
     }
-  else
+  else if ((flags & MAP_STACK) == 0)
     addr = sd->unmapped;
 
-  if (PAGE_ROUNDUP (addr + len) > sd->unmapped)
+  if (PAGE_ROUNDUP (addr + len) > sd->unmapped
+      && (flags & MAP_STACK) == 0)
     sd->unmapped = PAGE_ROUNDUP (addr + len);
 
   /* FIXME: It just works. Make it solid.
@@ -490,6 +491,21 @@ __nds32_ld (sim_cpu *cpu, SIM_ADDR addr, int size, int aligned_p)
 }
 
 void
+nds32_expand_stack (sim_cpu *cpu, int size)
+{
+  SIM_DESC sd = CPU_STATE (cpu);
+
+  /* FIXME and TODO: Study how kernel really handle this.  */
+
+  size = PAGE_ROUNDUP (size);
+  sd->elf_sp -= size;
+  nds32_mmap (sd, cpu, sd->elf_sp, size,
+		PROT_READ | PROT_WRITE | PROT_EXEC,
+		MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK,
+		-1, 0);
+}
+
+void
 __nds32_st (sim_cpu *cpu, SIM_ADDR addr, int size, ulongest_t val,
 	    int aligned_p)
 {
@@ -497,6 +513,7 @@ __nds32_st (sim_cpu *cpu, SIM_ADDR addr, int size, ulongest_t val,
   int order;
   SIM_DESC sd = CPU_STATE (cpu);
   uint32_t cia = CCPU_USR[NC_PC].u;
+  int again = 0;
 
   SIM_ASSERT (size <= sizeof (ulongest_t));
 
@@ -509,9 +526,19 @@ __nds32_st (sim_cpu *cpu, SIM_ADDR addr, int size, ulongest_t val,
 
   order = CCPU_SR_TEST (PSW, PSW_BE) ? BIG_ENDIAN : LITTLE_ENDIAN;
   store_unsigned_integer ((unsigned char *) &val, size, order, val);
+try_again:
   r = sim_write (sd, addr, (unsigned char *) &val, size);
 
-  if (r != size)
+  if (r == size)
+    return;
+
+  if (addr + 8 * PAGE_SIZE >= sd->elf_sp && again == 0)
+    {
+      nds32_expand_stack (cpu, sd->elf_sp - addr);
+      again = 1;
+      goto try_again;
+    }
+  else
     {
       /* TODO: Handle expand-stack for Linux programs.  */
       sim_io_eprintf (sd, "Access violation at 0x%08x. "
