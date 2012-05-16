@@ -21,6 +21,7 @@
 #include "config.h"
 
 #include <stdlib.h>
+#include <sys/mman.h>
 
 #include "bfd.h"
 #include "elf-bfd.h"
@@ -49,13 +50,14 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
   int osabi = 0;
   int i;
   char buf[1024];
-  const int init_sp_size = 0x4000;
+  const int init_sp_size = 2 * PAGE_SIZE;
   Elf_Internal_Phdr *phdr;
   Elf_Internal_Phdr *interp_phdr = NULL;
   uint32_t off;
   uint32_t len;
   int sysroot_len;
   uint32_t interp_base;
+  SIM_CPU *cpu = STATE_CPU (sd, 0);
 
   bfd_map_over_sections (abfd, nds32_simple_osabi_sniff_sections, &osabi);
   if (osabi)
@@ -84,10 +86,8 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
   sd->unmapped = TASK_UNMAPPED_BASE;
 
   /* Create stack page for argv/env.  */
-  sd->elf_sp = (long) STACK_TOP - init_sp_size;
-  snprintf (buf, sizeof (buf), "memory region 0x%lx,0x%lx",
-	    (long) sd->elf_sp, (long) init_sp_size);
-  sim_do_command (sd, buf);
+  sd->elf_sp = STACK_TOP;
+  nds32_expand_stack (cpu, init_sp_size);
 
   /* FIXME: Handle ET_DYN and ET_EXEC.  */
   phdr = elf_tdata (abfd)->phdr;
@@ -110,9 +110,10 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
       if (sd->exec_base == -1)
 	sd->exec_base = addr;
 
-      snprintf (buf, sizeof (buf), "memory region 0x%lx,0x%lx",
-		(long) addr, (long) len);
-      sim_do_command (sd, buf);
+      nds32_mmap (sd, cpu, addr, len,
+		  PROT_READ | PROT_WRITE | PROT_EXEC,
+		  MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED,
+		  -1, 0);
 
       if (addr + len > sd->elf_brk)
 	sd->elf_brk = addr + len;
@@ -159,9 +160,10 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
       addr = PAGE_ALIGN (addr);
       sd->unmapped = PAGE_ROUNDUP (addr + len);
 
-      snprintf (buf, sizeof (buf), "memory region 0x%lx,0x%lx",
-		(long) addr, (long) len);
-      sim_do_command (sd, buf);
+      nds32_mmap (sd, cpu, addr, len,
+		  PROT_READ | PROT_WRITE | PROT_EXEC,
+		  MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED,
+		  -1, 0);
     }
 
   sd->interp_base = interp_base;
@@ -209,7 +211,6 @@ nds32_load_segments (SIM_DESC sd, bfd *abfd, uint32_t load_base)
 	sim_write (sd, addr + bias, data, memsz);
 
       free (data);
-
     }
 
   return;

@@ -86,6 +86,12 @@ void nds32_bad_op (sim_cpu *cpu, uint32_t cia, uint32_t insn, char *tag);
 
 void nds32_bad_op (sim_cpu *cpu, uint32_t cia, uint32_t insn, char *tag);
 
+void nds32_expand_stack (sim_cpu *cpu, int size);
+int nds32_munmap (SIM_DESC sd, sim_cpu *cpu, uint32_t addr, size_t len);
+void *nds32_mmap (SIM_DESC sd, sim_cpu *cpu, uint32_t addr, size_t len,
+		  int prot, int flags, int fd, off_t offset);
+
+
 #if 1
 #define SIM_IO_DPRINTF(sd, fmt, args...)   sim_io_printf (sd, fmt, ## args)
 #else
