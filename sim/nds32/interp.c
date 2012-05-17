@@ -532,7 +532,10 @@ try_again:
   if (r == size)
     return;
 
-  if (addr + 8 * PAGE_SIZE >= sd->elf_sp && again == 0)
+  /* Linux checks RLIMIT_STACK for stack size limitation.
+     Be default, it is initialized to INIT_RLIMITS[RLIMIT_STACK] = _STK_LIM = 8MB.
+     See GETRLIMIT(2) and include/asm-generic/resource.h for details.  */
+  if ((STACK_TOP - PAGE_ALIGN (addr)) <= RLIMIT_STACK && again == 0)
     {
       nds32_expand_stack (cpu, sd->elf_sp - addr);
       again = 1;

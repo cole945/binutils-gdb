@@ -10,6 +10,7 @@
 
 #define TASK_SIZE		0xbf000000
 #define STACK_TOP		TASK_SIZE
+#define RLIMIT_STACK		(8 * 1024 * 1024)
 #define TASK_UNMAPPED_BASE	PAGE_ALIGN (TASK_SIZE / 3)
 
 #endif
