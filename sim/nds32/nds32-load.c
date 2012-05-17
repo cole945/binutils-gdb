@@ -50,7 +50,7 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
   int osabi = 0;
   int i;
   char buf[1024];
-  const int init_sp_size = 2 * PAGE_SIZE;
+  const int init_sp_size = 16 * PAGE_SIZE;
   Elf_Internal_Phdr *phdr;
   Elf_Internal_Phdr *interp_phdr = NULL;
   uint32_t off;
