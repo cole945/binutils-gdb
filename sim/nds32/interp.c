@@ -213,6 +213,17 @@ syscall_write_mem (host_callback *cb, struct cb_syscall *sc,
   return sim_core_write_buffer (sd, cpu, write_map, buf, taddr, bytes);
 }
 
+int
+nds32_munmap (SIM_DESC sd, sim_cpu *cpu, uint32_t addr, size_t len)
+{
+  uint32_t p;
+
+  for (p = PAGE_ALIGN (addr); p < addr + len; p += PAGE_SIZE)
+    sim_core_detach (sd, cpu, 0, 0, p);
+
+  return 0; /* FIXME? */
+}
+
 void *
 nds32_mmap (SIM_DESC sd, sim_cpu *cpu, uint32_t addr, size_t len,
 	    int prot, int flags, int fd, off_t offset)
@@ -432,9 +443,42 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 				       pgoffset * PAGE_SIZE);
       }
       break;
+    case CB_SYS_munmap:
+      {
+	uint32_t addr = CCPU_GPR[0].u;
+	size_t len = CCPU_GPR[1].s;
+
+	sc.result = nds32_munmap (sd, cpu, addr, len);
+      }
+      break;
+
     case CB_SYS_mprotect:
       sc.result = 0; /* Just do nothing now. */
       break;
+
+    case CB_SYS_llseek:
+      {
+	unsigned int fd = CCPU_GPR[0].u;
+	unsigned long offhi = CCPU_GPR[1].u;
+	unsigned long offlo = CCPU_GPR[2].u;
+	unsigned int whence = CCPU_GPR[4].u;
+	loff_t roff;
+
+	sc.func = swid;
+	sc.arg1 = fd;
+	sc.arg2 = offlo;
+	sc.arg3 = whence;
+
+	SIM_ASSERT (offhi == 0);
+
+	sc.func = TARGET_LINUX_SYS_lseek;
+	cb_syscall (cb, &sc);
+	roff = sc.result;
+
+	/* Copy the result only if user really passes other then NULL.  */
+	if (sc.result != -1 && CCPU_GPR[3].u)
+	  sim_write (sd, CCPU_GPR[3].u, (const unsigned char *) &roff, sizeof (loff_t));
+      }
 #endif
 
     case CB_SYS_NDS32_isatty:
