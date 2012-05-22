@@ -245,6 +245,19 @@ nds32_mmap (SIM_DESC sd, sim_cpu *cpu, uint32_t addr, size_t len,
   if (phy == MAP_FAILED)
     return phy;
 
+  /* FIXME: FIXME FIXME:
+
+     I implemented this way because I want to emulate Linux mmap,
+     "overlapped part of the existing mapping(s) will be discarded."
+
+     But I found it became a VERY severe performance bottleneck,
+     since sim_core_find_mapping searches sequentially.
+     The same program with dynamically linked could be 9 times slower
+     than statically linked one.
+
+     I should study how Linux manage process address space (e.g., vm_struct),
+     and implement it here instead of using GDB sim-core.  */
+
   if (flags & MAP_FIXED)
     {
       /* Detach before attach.  */
