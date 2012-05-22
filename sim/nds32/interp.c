@@ -345,6 +345,7 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
       break;
 
     case CB_SYS_brk:
+      /* FIXME: Check sys_brk () in kernel/mm/mmap.c for details.  */
       if (sd->elf_brk == 0)
 	sc.result = 0;
       else if (CCPU_GPR[0].u <= sd->elf_brk)
