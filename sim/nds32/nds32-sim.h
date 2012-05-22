@@ -152,12 +152,20 @@ nds32_psw_ifc_off ()
 
 enum
 {
-  PSW_BE = 5,
-  PSW_IFCON = 15,
+  SRIDX_PSW	= SRIDX (1, 0, 0),
+  PSW_BE	= 5,
+  PSW_IFCON	= 15,
+
+  SRIDX_MSC_CFG	= SRIDX (0, 4, 0),
+  MSC_CFG_PFM	= 2,
+  MSC_CFG_DIV	= 5,
+  MSC_CFG_MAC	= 6,
+  MSC_CFG_IFC	= 19,
+  MSC_CFG_EIT	= 24,
 };
 
-#define CCPU_PSW_TEST(BIT)	(cpu->reg_sr[SRIDX (1, 0, 0)].u & (1 << BIT))
-#define CCPU_PSW_SET(BIT)	do { cpu->reg_sr[SRIDX (1, 0, 0)].u |= (1 << BIT); } while (0)
-#define CCPU_PSW_CLEAR(BIT)	do { cpu->reg_sr[SRIDX (1, 0, 0)].u &= ~(1 << 15); } while (0)
+#define CCPU_SR_TEST(SREG,BIT)	(cpu->reg_sr[SRIDX_##SREG].u & (1 << BIT))
+#define CCPU_SR_SET(SREG,BIT)	do { cpu->reg_sr[SRIDX_##SREG].u |= (1 << BIT); } while (0)
+#define CCPU_SR_CLEAR(SREG,BIT)	do { cpu->reg_sr[SRIDX_##SREG].u &= ~(1 << BIT); } while (0)
 
 #endif

@@ -399,7 +399,7 @@ nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0x41:			/* fmfdr */
       {
 	int rt_ = rt & ~1;
-	if (CCPU_PSW_TEST (PSW_BE))
+	if (CCPU_SR_TEST (PSW, PSW_BE))
 	  {
 	    CCPU_GPR[rt_] = CCPU_FPR[fda_];
 	    CCPU_GPR[rt_ + 1] = CCPU_FPR[fda_ + 1];
@@ -414,7 +414,7 @@ nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0x49:			/* fmtdr */
       {
 	int rt_ = rt & ~1;
-	if (CCPU_PSW_TEST (PSW_BE))
+	if (CCPU_SR_TEST (PSW, PSW_BE))
 	  {
 	    CCPU_FPR[fda_ + 1] = CCPU_GPR[rt_ + 1];
 	    CCPU_FPR[fda_] = CCPU_GPR[rt_];

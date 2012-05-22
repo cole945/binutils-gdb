@@ -366,7 +366,7 @@ __nds32_ld (sim_cpu *cpu, SIM_ADDR addr, int size, int aligned_p)
     }
 
   r = sim_read (sd, addr, (unsigned char *) &val, size);
-  order = CCPU_PSW_TEST (PSW_BE) ? BIG_ENDIAN : LITTLE_ENDIAN;
+  order = CCPU_SR_TEST (PSW, PSW_BE) ? BIG_ENDIAN : LITTLE_ENDIAN;
   val = extract_unsigned_integer ((unsigned char *) &val, size, order);
 
   if (r != size)
@@ -397,7 +397,7 @@ __nds32_st (sim_cpu *cpu, SIM_ADDR addr, int size, ulongest_t val,
       sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_stopped, SIM_SIGSEGV);
     }
 
-  order = CCPU_PSW_TEST (PSW_BE) ? BIG_ENDIAN : LITTLE_ENDIAN;
+  order = CCPU_SR_TEST (PSW, PSW_BE) ? BIG_ENDIAN : LITTLE_ENDIAN;
   store_unsigned_integer ((unsigned char *) &val, size, order, val);
   r = sim_write (sd, addr, (unsigned char *) &val, size);
 
@@ -961,7 +961,7 @@ nds32_decode32_alu2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	int64_t r = (int64_t) CCPU_GPR[ra].s * (int64_t) CCPU_GPR[rb].s;
 	int d = rt & ~1;
 
-	if (CCPU_PSW_TEST (PSW_BE))
+	if (CCPU_SR_TEST (PSW, PSW_BE))
 	  {
 	    CCPU_GPR[d].u = (r >> 32) & 0xFFFFFFFF;
 	    CCPU_GPR[d + 1].u = r & 0xFFFFFFFF;
@@ -978,7 +978,7 @@ nds32_decode32_alu2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	uint64_t r = (uint64_t) CCPU_GPR[ra].u * (uint64_t) CCPU_GPR[rb].u;
 	int d = rt & ~1;
 
-	if (CCPU_PSW_TEST (PSW_BE))
+	if (CCPU_SR_TEST (PSW, PSW_BE))
 	  {
 	    CCPU_GPR[d].u = (r >> 32) & 0xFFFFFFFF;
 	    CCPU_GPR[d + 1].u = r & 0xFFFFFFFF;
@@ -1026,7 +1026,7 @@ nds32_decode32_jreg (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       if (__GF (insn, 5, 2) == 0x3)
 	{
 	  /* ifret. IFC + RET */
-	  if (CCPU_PSW_TEST (PSW_IFCON))
+	  if (CCPU_SR_TEST (PSW, PSW_IFCON))
 	    cia = CCPU_USR[NC_IFCLP].u;
 	  else
 	    cia += 4;	/* Do nothing */
@@ -1035,7 +1035,7 @@ nds32_decode32_jreg (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	/* jr or ret */
 	cia = CCPU_GPR[rb].u;
 
-      CCPU_PSW_CLEAR (PSW_IFCON);
+      CCPU_SR_CLEAR (PSW, PSW_IFCON);
       /* SIM_IO_DPRINTF (sd, "set $pc to 0x%x\n", CCPU_USR[NC_PC].u); */
       cpu->iflags &= ~NIF_EX9;	/* Check ex9.it for details. */
       return cia;
@@ -1048,10 +1048,10 @@ nds32_decode32_jreg (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 
       cia = CCPU_GPR[rb].u;
       /* SIM_IO_DPRINTF (sd, "set $pc to 0x%x, save ra to $r%d\n", CCPU_USR[NC_PC].u, rb); */
-      if (CCPU_PSW_TEST (PSW_IFCON))
+      if (CCPU_SR_TEST (PSW, PSW_IFCON))
 	{
 	  CCPU_GPR[rt] = CCPU_USR[NC_IFCLP];
-	  CCPU_PSW_CLEAR (PSW_IFCON);
+	  CCPU_SR_CLEAR (PSW, PSW_IFCON);
 	}
 
       cpu->iflags &= ~NIF_EX9;	/* Check ex9.it for details. */
@@ -1060,7 +1060,7 @@ nds32_decode32_jreg (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 2:			/* jrnez */
       if (CCPU_GPR[rb].u != 0)	/* taken */
 	{
-	  CCPU_PSW_CLEAR (PSW_IFCON);
+	  CCPU_SR_CLEAR (PSW, PSW_IFCON);
 	  cpu->iflags &= ~NIF_EX9;	/* Check ex9.it for details. */
 	  return CCPU_GPR[rb].u;
 	}
@@ -1075,10 +1075,10 @@ nds32_decode32_jreg (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 
       if (CCPU_GPR[rb].u != 0)	/* taken */
 	{
-	  if (CCPU_PSW_TEST (PSW_IFCON))
+	  if (CCPU_SR_TEST (PSW, PSW_IFCON))
 	    {
 	      CCPU_GPR[rt] = CCPU_USR[NC_IFCLP];
-	      CCPU_PSW_CLEAR (PSW_IFCON);
+	      CCPU_SR_CLEAR (PSW, PSW_IFCON);
 	    }
 	  cpu->iflags &= ~NIF_EX9;	/* Check ex9.it for details. */
 	  return CCPU_GPR[rb].u;
@@ -1131,14 +1131,14 @@ nds32_decode32_br2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
   switch (__GF (insn, 16, 4))
     {
     case 0x0:			/* ifcall */
-      if (!CCPU_PSW_TEST (PSW_IFCON))
+      if (!CCPU_SR_TEST (PSW, PSW_IFCON))
 	{
 	  if (cpu->iflags & NIF_EX9)
 	    CCPU_USR[NC_IFCLP].u = cia + 2;
 	  else
 	    CCPU_USR[NC_IFCLP].u = cia + 4;
 
-	  CCPU_PSW_SET (PSW_IFCON);
+	  CCPU_SR_SET (PSW, PSW_IFCON);
 	  cpu->iflags &= ~NIF_EX9;	/* Check ex9.it for details. */
 	  return cia + (N32_IMMS (insn, 16) << 1);
 	}
@@ -1428,10 +1428,10 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	  cia = cia + (N32_IMMS (insn, 24) << 1);
 	}
 
-      if (CCPU_PSW_TEST (PSW_IFCON))
+      if (CCPU_SR_TEST (PSW, PSW_IFCON))
 	{
 	  CCPU_GPR[NG_LP] = CCPU_USR[NC_IFCLP];
-	  CCPU_PSW_CLEAR (PSW_IFCON);
+	  CCPU_SR_CLEAR (PSW, PSW_IFCON);
 	}
 
       cpu->iflags &= ~NIF_EX9;
@@ -1557,7 +1557,7 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
 	CCPU_GPR[NG_SP].u += (imm5u << 3);
 	nds32_decode32_lsmw (cpu, lmw_bim, cia);
 	cia = CCPU_GPR[NG_LP].u;
-	CCPU_PSW_CLEAR (PSW_IFCON);
+	CCPU_SR_CLEAR (PSW, PSW_IFCON);
 	return cia;
       }
     }
@@ -1684,10 +1684,10 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
       insn = extract_unsigned_integer ((unsigned char *) &insn, 4, BIG_ENDIAN);
       return nds32_decode16_ex9 (cpu, insn, cia);
     case 0x3c:			/* ifcall9 */
-      if (!CCPU_PSW_TEST (PSW_IFCON))
+      if (!CCPU_SR_TEST (PSW, PSW_IFCON))
 	{
 	  CCPU_USR[NC_IFCLP].u = cia + 2;
-	  CCPU_PSW_SET (PSW_IFCON);
+	  CCPU_SR_SET (PSW, PSW_IFCON);
 	  return cia + (N16_IMM9U (insn) << 1);
 	}
       else
@@ -1757,9 +1757,9 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
   switch (__GF (insn, 10, 5))
     {
     case 0x0:			/* mov55 or ifret16 */
-      if (CCPU_PSW_TEST (PSW_IFCON) && rt5 == ra5 && rt5 == 31)
+      if (CCPU_SR_TEST (PSW, PSW_IFCON) && rt5 == ra5 && rt5 == 31)
 	{
-	  CCPU_PSW_CLEAR (PSW_IFCON);
+	  CCPU_SR_CLEAR (PSW, PSW_IFCON);
 	  return CCPU_USR[NC_IFCLP].u;
 	}
       else
@@ -1793,7 +1793,7 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
     case 0xa:			/* beqs38/j8, implied r5 */
       if (CCPU_GPR[rt38].u == CCPU_GPR[5].u)	/* rt38 == 5 means j8 */
 	{
-	  CCPU_PSW_CLEAR (PSW_IFCON);
+	  CCPU_SR_CLEAR (PSW, PSW_IFCON);
 	  return cia + (N16_IMM8S (insn) << 1);
 	}
       goto done;
@@ -1804,14 +1804,14 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
 	    {
 	    case 0:		/* jr5 */
 	    case 4:		/* ret5 */
-	      CCPU_PSW_CLEAR (PSW_IFCON);
+	      CCPU_SR_CLEAR (PSW, PSW_IFCON);
 	      return CCPU_GPR[ra5].u;
 	    case 1:		/* jral5 */
 	      CCPU_GPR[NG_LP].u = cia + 2;
-	      if (CCPU_PSW_TEST (PSW_IFCON))
+	      if (CCPU_SR_TEST (PSW, PSW_IFCON))
 		{
 		  CCPU_GPR[NG_LP] = CCPU_USR[NC_IFCLP];
-		  CCPU_PSW_CLEAR (PSW_IFCON);
+		  CCPU_SR_CLEAR (PSW, PSW_IFCON);
 		}
 	      return CCPU_GPR[ra5].u;
 	    case 2:		/* ex9.it imm5 */
@@ -1959,7 +1959,8 @@ nds32_fetch_register (sim_cpu *cpu, int rn, unsigned char *memory, int length)
 
 do_fetch:
   store_unsigned_integer (memory, length,
-			  CCPU_PSW_TEST (PSW_BE) ? BIG_ENDIAN : LITTLE_ENDIAN,
+			  CCPU_SR_TEST (PSW, PSW_BE)
+			  ? BIG_ENDIAN : LITTLE_ENDIAN,
 			  val);
   return 4;
 }
@@ -1970,7 +1971,7 @@ nds32_store_register (sim_cpu *cpu, int rn, unsigned char *memory, int length)
   ulongest_t val;
 
   val = extract_unsigned_integer (memory, length,
-				  CCPU_PSW_TEST (PSW_BE)
+				  CCPU_SR_TEST (PSW, PSW_BE)
 				  ? BIG_ENDIAN : LITTLE_ENDIAN);
 
   /* General purpose registers.  */
@@ -2037,8 +2038,16 @@ nds32_initialize_cpu (SIM_DESC sd, sim_cpu *cpu, struct bfd *abfd)
   CPU_PC_FETCH (cpu) = nds32_pc_get;
   CPU_PC_STORE (cpu) = nds32_pc_set;
 
-  /* CPU_VER */
+  /* CPU_VER: N12 + COP/FPU */
   CCPU_SR[SRIDX (0, 0, 0)].u = (0xc << 24) | 3;
+
+  /* MSC_CFG */
+  /* User code may need this for specialized code. e.g., set $ITB.  */
+  CCPU_SR_SET (MSC_CFG, MSC_CFG_PFM);
+  CCPU_SR_SET (MSC_CFG, MSC_CFG_DIV);
+  CCPU_SR_SET (MSC_CFG, MSC_CFG_MAC);
+  CCPU_SR_SET (MSC_CFG, MSC_CFG_IFC);
+  CCPU_SR_SET (MSC_CFG, MSC_CFG_EIT);
 }
 
 SIM_DESC
@@ -2150,9 +2159,9 @@ sim_create_inferior (SIM_DESC sd, struct bfd *prog_bfd, char **argv,
 
       /* Set default endian. */
       if (bfd_big_endian (prog_bfd))
-	CCPU_PSW_SET (PSW_BE);
+	CCPU_SR_SET (PSW, PSW_BE);
       else
-	CCPU_PSW_CLEAR (PSW_BE);
+	CCPU_SR_CLEAR (PSW, PSW_BE);
     }
 
   return SIM_RC_OK;
