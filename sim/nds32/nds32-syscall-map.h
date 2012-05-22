@@ -8,17 +8,18 @@
 
 #define CB_SYS_BASE		0x1000
 #define CB_SYS_link		(CB_SYS_BASE + 9)
-/* #define CB_SYS_time		(CB_SYS_BASE + 13)  defined in gdb/callback.h */
 #define CB_SYS_access		(CB_SYS_BASE + 33)
 #define CB_SYS_times		(CB_SYS_BASE + 43)
 #define CB_SYS_brk		(CB_SYS_BASE + 45)
 #define CB_SYS_gettimeofday	(CB_SYS_BASE + 78)
+#define CB_SYS_settimeofday	(CB_SYS_BASE + 79)
 #define CB_SYS_mmap		(CB_SYS_BASE + 90)
 #define CB_SYS_munmap		(CB_SYS_BASE + 91)
 #define CB_SYS_uname		(CB_SYS_BASE + 122)
 #define CB_SYS_mprotect		(CB_SYS_BASE + 125)
 #define CB_SYS_llseek		(CB_SYS_BASE + 140)
 #define CB_SYS_getpagesize	(CB_SYS_BASE + 166)
+#define CB_SYS_sigaction	(CB_SYS_BASE + 174)
 #define CB_SYS_mmap2		(CB_SYS_BASE + 192)
 #define CB_SYS_stat64		(CB_SYS_BASE + 195)
 #define CB_SYS_lstat64		(CB_SYS_BASE + 196)
@@ -95,12 +96,21 @@ static CB_TARGET_DEFS_MAP cb_nds32_syscall_map[] =
   {CB_SYS_write,	LINUX_SYS_BASE + 4},
   {CB_SYS_open,		LINUX_SYS_BASE + 5},
   {CB_SYS_close,	LINUX_SYS_BASE + 6},
+  {CB_SYS_link,		LINUX_SYS_BASE + 9},
+  {CB_SYS_unlink,	LINUX_SYS_BASE + 10},
+  {CB_SYS_chdir,	LINUX_SYS_BASE + 12},
   {CB_SYS_time,		LINUX_SYS_BASE + 13},
+  {CB_SYS_chmod,	LINUX_SYS_BASE + 15},
 #define TARGET_LINUX_SYS_lseek	(LINUX_SYS_BASE + 19)
   {CB_SYS_lseek,	LINUX_SYS_BASE + 19},
+  {CB_SYS_getpid,	LINUX_SYS_BASE + 20},
+  {CB_SYS_utime,	LINUX_SYS_BASE + 30},
   {CB_SYS_access,	LINUX_SYS_BASE + 33},
+  {CB_SYS_rename,	LINUX_SYS_BASE + 38},
   {CB_SYS_times,	LINUX_SYS_BASE + 43},
   {CB_SYS_brk,		LINUX_SYS_BASE + 45},
+  {CB_SYS_gettimeofday,	LINUX_SYS_BASE + 78},
+  /* {CB_SYS_settimeofday,	LINUX_SYS_BASE + 79}, */
   {CB_SYS_mmap,		LINUX_SYS_BASE + 90},
   {CB_SYS_munmap,	LINUX_SYS_BASE + 91},
 #define TARGET_LINUX_SYS_stat	(LINUX_SYS_BASE + 106)
