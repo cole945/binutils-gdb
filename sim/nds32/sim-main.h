@@ -34,6 +34,8 @@ typedef unsigned32 sim_cia;
 
 #include "sim-base.h"
 
+#include "nds32-mm.h"
+
 typedef union {
   uint32_t u;
   int32_t s;
@@ -84,10 +86,10 @@ struct sim_state {
 
   struct bfd *interp_bfd;	/* For Linux dynamic linker.  */
   uint32_t interp_base;		/* Base address of where interp is loaded. */
-  uint32_t exec_base;		/* Base address of where interp is loaded. */
-  uint32_t elf_brk;		/* for brk */
-  uint32_t elf_sp;		/* for expand stack */
-  uint32_t unmapped;		/* for mmap */
+  uint32_t exec_base;		/* Base address of where executable is loaded. */
+
+  struct nds32_mm mm;
+#define STATE_MM(sd) (&(sd)->mm)
 
   sim_state_base base;
 };
