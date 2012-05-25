@@ -31,7 +31,7 @@
 #include "sim-assert.h"
 
 #include "nds32-sim.h"
-#include "nds32-linux.h"
+#include "nds32-mm.h"
 
 static void
 nds32_simple_osabi_sniff_sections (bfd *abfd, asection *sect, void *obj)
@@ -58,6 +58,7 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
   int sysroot_len;
   uint32_t interp_base;
   SIM_CPU *cpu = STATE_CPU (sd, 0);
+  struct nds32_mm *mm = STATE_MM (sd);
 
   bfd_map_over_sections (abfd, nds32_simple_osabi_sniff_sections, &osabi);
   if (osabi)
@@ -82,11 +83,11 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
       return;
     }
 
-  sd->elf_brk = 0;
-  sd->unmapped = TASK_UNMAPPED_BASE;
+  mm->brk = 0;
+  mm->unmapped = TASK_UNMAPPED_BASE;
 
   /* Create stack page for argv/env.  */
-  sd->elf_sp = STACK_TOP;
+  mm->sp = mm->start_sp = STACK_TOP;
   nds32_expand_stack (cpu, init_sp_size);
 
   /* FIXME: Handle ET_DYN and ET_EXEC.  */
@@ -110,16 +111,16 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
       if (sd->exec_base == -1)
 	sd->exec_base = addr;
 
-      nds32_mmap (sd, cpu, addr, len,
+      nds32_mmap (cpu, addr, len,
 		  PROT_READ | PROT_WRITE | PROT_EXEC,
 		  MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED,
 		  -1, 0);
 
-      if (addr + len > sd->elf_brk)
-	sd->elf_brk = addr + len;
+      if (addr + len > mm->brk)
+	mm->brk = addr + len;
     }
 
-  SIM_ASSERT (sd->elf_brk < sd->unmapped && sd->unmapped < sd->elf_sp);
+  SIM_ASSERT (mm->brk < mm->unmapped && mm->unmapped < mm->sp);
 
   if (!interp_phdr)
     return;
@@ -146,7 +147,7 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
 
   /* Add memory for interp.  */
   phdr = elf_tdata (sd->interp_bfd)->phdr;
-  interp_base = sd->unmapped;
+  interp_base = mm->unmapped;
   for (i = 0; i < elf_elfheader (sd->interp_bfd)->e_phnum; i++)
     {
       uint32_t addr, len;
@@ -158,9 +159,9 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
       len = addr + phdr[i].p_memsz - PAGE_ALIGN (addr);
       len = PAGE_ROUNDUP (len);
       addr = PAGE_ALIGN (addr);
-      sd->unmapped = PAGE_ROUNDUP (addr + len);
+      mm->unmapped = PAGE_ROUNDUP (addr + len);
 
-      nds32_mmap (sd, cpu, addr, len,
+      nds32_mmap (cpu, addr, len,
 		  PROT_READ | PROT_WRITE | PROT_EXEC,
 		  MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED,
 		  -1, 0);

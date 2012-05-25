@@ -39,7 +39,7 @@
 
 #include "opcode/nds32.h"
 #include "nds32-sim.h"
-#include "nds32-linux.h"
+#include "nds32-mm.h"
 #include "nds32-syscall-map.h"
 
 #ifdef __linux__
@@ -213,73 +213,6 @@ syscall_write_mem (host_callback *cb, struct cb_syscall *sc,
   return sim_core_write_buffer (sd, cpu, write_map, buf, taddr, bytes);
 }
 
-int
-nds32_munmap (SIM_DESC sd, sim_cpu *cpu, uint32_t addr, size_t len)
-{
-  uint32_t p;
-
-  for (p = PAGE_ALIGN (addr); p < addr + len; p += PAGE_SIZE)
-    sim_core_detach (sd, cpu, 0, 0, p);
-
-  return 0; /* FIXME? */
-}
-
-void *
-nds32_mmap (SIM_DESC sd, sim_cpu *cpu, uint32_t addr, size_t len,
-	    int prot, int flags, int fd, off_t offset)
-{
-  host_callback *cb = STATE_CALLBACK (sd);
-  void *phy = NULL;
-  int i, p;
-
-  if (flags & MAP_ANONYMOUS)
-    phy = mmap (NULL, len, prot, flags & ~MAP_FIXED, fd, offset);
-  else if (fd < 0 || fd > MAX_CALLBACK_FDS || cb->fd_buddy[fd] < 0)
-    return (void *) EBADF;
-  else
-    {
-      fd = cb->fdmap[fd];
-      phy = mmap (NULL, len, prot, flags & ~MAP_FIXED, fd, offset);
-    }
-
-  if (phy == MAP_FAILED)
-    return phy;
-
-  /* FIXME: FIXME FIXME:
-
-     I implemented this way because I want to emulate Linux mmap,
-     "overlapped part of the existing mapping(s) will be discarded."
-
-     But I found it became a VERY severe performance bottleneck,
-     since sim_core_find_mapping searches sequentially.
-     The same program with dynamically linked could be 9 times slower
-     than statically linked one.
-
-     I should study how Linux manage process address space (e.g., vm_struct),
-     and implement it here instead of using GDB sim-core.  */
-
-  if (flags & MAP_FIXED)
-    {
-      /* Detach before attach.  */
-      for (p = addr; p < addr + len; p += PAGE_SIZE)
-	sim_core_detach (sd, cpu, 0, 0, p);
-    }
-  else if ((flags & MAP_STACK) == 0)
-    addr = sd->unmapped;
-
-  if (PAGE_ROUNDUP (addr + len) > sd->unmapped
-      && (flags & MAP_STACK) == 0)
-    sd->unmapped = PAGE_ROUNDUP (addr + len);
-
-  /* FIXME: It just works. Make it solid.
-	    It should return MAP_FAILED when fail.  */
-  for (i = 0, p = PAGE_ALIGN (addr); p < addr + len; p += PAGE_SIZE, i++)
-    sim_core_attach (sd, NULL, 0, access_read_write_exec, 0, p, PAGE_SIZE, 0,
-		     NULL, (char *) phy + i * PAGE_SIZE);
-
-  return (void *) PAGE_ALIGN (addr);
-}
-
 static sim_cia
 nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 {
@@ -345,21 +278,7 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
       break;
 
     case CB_SYS_brk:
-      /* FIXME: Check sys_brk () in kernel/mm/mmap.c for details.  */
-      if (sd->elf_brk == 0)
-	sc.result = 0;
-      else if (CCPU_GPR[0].u <= sd->elf_brk)
-	sc.result = sd->elf_brk;
-      else
-	{
-	  char buf[256];
-	  long len = CCPU_GPR[0].u - sd->elf_brk;
-
-	  snprintf (buf, sizeof (buf), "memory region 0x%lx,0x%lx",
-		(long) sd->elf_brk, (long) len);
-	  sim_do_command (sd, buf);
-	  sc.result = CCPU_GPR[0].u;
-	}
+      sc.result = nds32_sys_brk (cpu, CCPU_GPR[0].u);
       break;
 
 #ifdef __linux__
@@ -453,8 +372,8 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 	int fd = CCPU_GPR[4].s;
 	off_t pgoffset = CCPU_GPR[5].u;
 
-	sc.result = (long) nds32_mmap (sd, cpu, addr, len, prot, flags, fd,
-				       pgoffset * PAGE_SIZE);
+	sc.result = (long) nds32_mmap (cpu, addr, len, prot, flags,
+				       fd, pgoffset * PAGE_SIZE);
       }
       break;
     case CB_SYS_munmap:
@@ -462,7 +381,7 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 	uint32_t addr = CCPU_GPR[0].u;
 	size_t len = CCPU_GPR[1].s;
 
-	sc.result = nds32_munmap (sd, cpu, addr, len);
+	sc.result = nds32_munmap (cpu, addr, len);
       }
       break;
 
@@ -549,21 +468,6 @@ __nds32_ld (sim_cpu *cpu, SIM_ADDR addr, int size, int aligned_p)
 }
 
 void
-nds32_expand_stack (sim_cpu *cpu, int size)
-{
-  SIM_DESC sd = CPU_STATE (cpu);
-
-  /* FIXME and TODO: Study how kernel really handle this.  */
-
-  size = PAGE_ROUNDUP (size);
-  sd->elf_sp -= size;
-  nds32_mmap (sd, cpu, sd->elf_sp, size,
-		PROT_READ | PROT_WRITE | PROT_EXEC,
-		MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK,
-		-1, 0);
-}
-
-void
 __nds32_st (sim_cpu *cpu, SIM_ADDR addr, int size, ulongest_t val,
 	    int aligned_p)
 {
@@ -593,9 +497,9 @@ try_again:
   /* Linux checks RLIMIT_STACK for stack size limitation.
      Be default, it is initialized to INIT_RLIMITS[RLIMIT_STACK] = _STK_LIM = 8MB.
      See GETRLIMIT(2) and include/asm-generic/resource.h for details.  */
-  if ((STACK_TOP - PAGE_ALIGN (addr)) <= RLIMIT_STACK && again == 0)
+  if ((STACK_TOP - PAGE_ALIGN (addr)) <= RLIMIT_STACK_SIZE && again == 0)
     {
-      nds32_expand_stack (cpu, sd->elf_sp - addr);
+      nds32_expand_stack (cpu, STATE_MM (sd)->sp - addr);
       again = 1;
       goto try_again;
     }
