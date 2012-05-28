@@ -6,4 +6,7 @@
 /* See sim-hload.c.  */
 #define SIM_HANDLES_LMA 1
 
+/* Fox Linux VMA support.  */
+#define WITH_DEVICES 1
+
 #endif
