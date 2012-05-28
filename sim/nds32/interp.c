@@ -457,12 +457,12 @@ __nds32_ld (sim_cpu *cpu, SIM_ADDR addr, int size, int aligned_p)
   order = CCPU_SR_TEST (PSW, PSW_BE) ? BIG_ENDIAN : LITTLE_ENDIAN;
   val = extract_unsigned_integer ((unsigned char *) &val, size, order);
 
-  if (r != size)
-    {
-      sim_io_eprintf (sd, "Access violation at 0x%08x. "
-			  "Read of address 0x%08x\n", cia, addr);
-      sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_stopped, SIM_SIGSEGV);
-    }
+  if (r == size)
+    return val;
+
+  sim_io_eprintf (sd, "Access violation at 0x%08x. Read of address 0x%08x\n",
+		  cia, addr);
+  sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_stopped, SIM_SIGSEGV);
 
   return val;
 }
@@ -475,7 +475,6 @@ __nds32_st (sim_cpu *cpu, SIM_ADDR addr, int size, ulongest_t val,
   int order;
   SIM_DESC sd = CPU_STATE (cpu);
   uint32_t cia = CCPU_USR[NC_PC].u;
-  int again = 0;
 
   SIM_ASSERT (size <= sizeof (ulongest_t));
 
@@ -488,28 +487,14 @@ __nds32_st (sim_cpu *cpu, SIM_ADDR addr, int size, ulongest_t val,
 
   order = CCPU_SR_TEST (PSW, PSW_BE) ? BIG_ENDIAN : LITTLE_ENDIAN;
   store_unsigned_integer ((unsigned char *) &val, size, order, val);
-try_again:
   r = sim_write (sd, addr, (unsigned char *) &val, size);
 
   if (r == size)
     return;
 
-  /* Linux checks RLIMIT_STACK for stack size limitation.
-     Be default, it is initialized to INIT_RLIMITS[RLIMIT_STACK] = _STK_LIM = 8MB.
-     See GETRLIMIT(2) and include/asm-generic/resource.h for details.  */
-  if ((STACK_TOP - PAGE_ALIGN (addr)) <= RLIMIT_STACK_SIZE && again == 0)
-    {
-      nds32_expand_stack (cpu, STATE_MM (sd)->sp - addr);
-      again = 1;
-      goto try_again;
-    }
-  else
-    {
-      /* TODO: Handle expand-stack for Linux programs.  */
-      sim_io_eprintf (sd, "Access violation at 0x%08x. "
-			  "Write of address 0x%08x\n", cia, addr);
-      sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_stopped, SIM_SIGSEGV);
-    }
+  sim_io_eprintf (sd, "Access violation at 0x%08x. "
+		      "Write of address 0x%08x\n", cia, addr);
+  sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_stopped, SIM_SIGSEGV);
 
   return;
 }
@@ -1954,6 +1939,7 @@ done:
 void
 sim_engine_run (SIM_DESC sd, int next_cpu_nr, int nr_cpus, int siggnal)
 {
+  int r;
   sim_cia cia;
   sim_cpu *cpu;
   SIM_ASSERT (STATE_MAGIC (sd) == SIM_MAGIC_NUMBER);
@@ -1964,9 +1950,11 @@ sim_engine_run (SIM_DESC sd, int next_cpu_nr, int nr_cpus, int siggnal)
     {
       uint32_t insn;
 
-      sim_read (sd, cia, (unsigned char *) &insn, 4);
+      r = sim_read (sd, cia, (unsigned char *) &insn, 4);
       insn = extract_unsigned_integer ((unsigned char *) &insn, 4,
 				       BIG_ENDIAN);
+
+      SIM_ASSERT (r == 4);
 
       if (TRACE_LINENUM_P (cpu))
 	{

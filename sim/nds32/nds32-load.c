@@ -44,13 +44,36 @@ nds32_simple_osabi_sniff_sections (bfd *abfd, asection *sect, void *obj)
     *osabi = 1;
 }
 
+/* Calculate the total size for mapping an ELF.  */
+
+static int
+total_mapping_size (Elf_Internal_Phdr *phdr, int n)
+{
+  int i;
+  int first = -1;
+  int last = - 1;
+
+  for (i = 0; i < n; i++)
+    {
+      if (phdr[i].p_type != PT_LOAD || phdr[i].p_memsz == 0)
+	continue;
+
+      if (first == -1)
+	first = i;
+      last = i;
+    }
+
+  return phdr[last].p_vaddr +  phdr[last].p_memsz - phdr[first].p_vaddr;
+}
+
+
 static void
 nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
 {
   int osabi = 0;
   int i;
   char buf[1024];
-  const int init_sp_size = 16 * PAGE_SIZE;
+  const int init_sp_size = 16 * PAGE_SIZE;	/* FIXME */
   Elf_Internal_Phdr *phdr;
   Elf_Internal_Phdr *interp_phdr = NULL;
   uint32_t off;
@@ -83,12 +106,15 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
       return;
     }
 
-  mm->brk = 0;
-  mm->unmapped = TASK_UNMAPPED_BASE;
+  /* For emulating Linux VMA.  */
+  sim_core_attach (sd, NULL, 0, access_read_write_exec, 0, 0x00004000,
+		   0xFFFF8000, 0, &nds32_mm_devices, NULL);
 
-  /* Create stack page for argv/env.  */
-  mm->sp = mm->start_sp = STACK_TOP;
-  nds32_expand_stack (cpu, init_sp_size);
+  nds32_mm_init (mm);
+
+  nds32_mmap (cpu, mm->start_sp - init_sp_size, init_sp_size,
+	      PROT_READ | PROT_WRITE | PROT_EXEC,
+	      MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED | MAP_STACK, -1, 0);
 
   /* FIXME: Handle ET_DYN and ET_EXEC.  */
   phdr = elf_tdata (abfd)->phdr;
@@ -120,7 +146,7 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
 	mm->brk = addr + len;
     }
 
-  SIM_ASSERT (mm->brk < mm->unmapped && mm->unmapped < mm->sp);
+  /* SIM_ASSERT (mm->brk < mm->unmapped && mm->unmapped < mm->sp); */
 
   if (!interp_phdr)
     return;
@@ -147,7 +173,8 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
 
   /* Add memory for interp.  */
   phdr = elf_tdata (sd->interp_bfd)->phdr;
-  interp_base = mm->unmapped;
+  len = total_mapping_size (phdr, elf_elfheader (sd->interp_bfd)->e_phnum);
+  interp_base = nds32_get_unmapped_area (mm, 0, len);
   for (i = 0; i < elf_elfheader (sd->interp_bfd)->e_phnum; i++)
     {
       uint32_t addr, len;
@@ -159,7 +186,6 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
       len = addr + phdr[i].p_memsz - PAGE_ALIGN (addr);
       len = PAGE_ROUNDUP (len);
       addr = PAGE_ALIGN (addr);
-      mm->unmapped = PAGE_ROUNDUP (addr + len);
 
       nds32_mmap (cpu, addr, len,
 		  PROT_READ | PROT_WRITE | PROT_EXEC,

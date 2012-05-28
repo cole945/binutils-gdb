@@ -36,32 +36,38 @@
 #define STACK_TOP		TASK_SIZE
 #define RLIMIT_STACK_SIZE	(8 * 1024 * 1024)
 #define TASK_UNMAPPED_BASE	PAGE_ALIGN (TASK_SIZE / 3)
+#define MM_HEAD(mm)     (&(mm)->mmap)
 
-struct nds32_vm_area;
+extern struct _device nds32_mm_devices;
+
+struct nds32_vm_area
+{
+  uint32_t vm_start;			/* First address of this interval */
+  uint32_t vm_end;			/* First address after this interval */
+  struct nds32_vm_area *vm_next;
+  struct nds32_vm_area *vm_prev;
+  char *vm_buf;
+};
 
 struct nds32_mm
 {
-  struct nds32_vm_area *mmap;
-  struct nds32_vm_area *mmap_cache;	/* Last used memory */
+  struct nds32_vm_area mmap;		/* Head node for vm_area */
 
   uint32_t start_brk;			/* Start address of brk */
   uint32_t brk;				/* Final address of brk */
   uint32_t start_sp;			/* Start address of stack */
-  uint32_t sp;				/* Final address of stack (This might be unnecessary) */
-  uint32_t unmapped;			/* Last address for mmap. Remove this when mmap_cache is ready. */
+  uint32_t free_cache;			/* Last address for mmap. */
 };
 
-struct nds32_vm_area
-{
-  uint32_t start;			/* First address of this interval */
-  uint32_t end;				/* First address after this interval */
-  struct nds32_vm_area *next;
-};
-
-void nds32_expand_stack (sim_cpu *cpu, int size);
+void nds32_mm_init (struct nds32_mm *mm);
+int nds32_expand_stack (sim_cpu *cpu, uint32_t addr);
+struct nds32_vm_area *nds32_find_vma (struct nds32_mm *mm, uint32_t addr);
+void nds32_dump_vma (struct nds32_mm *mm);
 uint32_t nds32_sys_brk (sim_cpu *cpu, uint32_t addr);
 int nds32_munmap (sim_cpu *cpu, uint32_t addr, size_t len);
 void *nds32_mmap (sim_cpu *cpu, uint32_t addr, size_t len,
 	      int prot, int flags, int fd, off_t offset);
+uint32_t nds32_get_unmapped_area (struct nds32_mm *mm, uint32_t addr,
+				  uint32_t len);
 
 #endif
