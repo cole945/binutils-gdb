@@ -83,30 +83,40 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
   SIM_CPU *cpu = STATE_CPU (sd, 0);
   struct nds32_mm *mm = STATE_MM (sd);
 
-  bfd_map_over_sections (abfd, nds32_simple_osabi_sniff_sections, &osabi);
-  if (osabi)
-    STATE_ENVIRONMENT (sd) = USER_ENVIRONMENT;
-  else
-    STATE_ENVIRONMENT (sd) = OPERATING_ENVIRONMENT;
-
-  /* TODO: Allocate memory for
-     1. Loadable segments of the program.
-	a. LMA
-	b. VMA
-	c. They might be overlapped, so we should merge them before allocating.
-     2. Stack of the program.
-	a. _stack for ELF programs.
-	b. STACK_TOP for Linux programs.
-     3. Loadable segments of the interpreter (loader).  */
+  if (STATE_ENVIRONMENT (sd) == ALL_ENVIRONMENT)
+    {
+      bfd_map_over_sections (abfd, nds32_simple_osabi_sniff_sections, &osabi);
+      if (osabi)
+	STATE_ENVIRONMENT (sd) = USER_ENVIRONMENT;
+      else
+	STATE_ENVIRONMENT (sd) = OPERATING_ENVIRONMENT;
+    }
 
   if (STATE_ENVIRONMENT (sd) != USER_ENVIRONMENT)
     {
-      /* TODO: See above.  */
-      sim_do_command (sd, "memory region 0,0x4000000");	/* 64MB */
+      /* FIXME: We should only do this if user doesn't allocate one.
+		But how can we know it? */
+      sim_do_command (sd, "memory region 0,0x4000000"); /* 64 MB */
       return;
     }
 
-  /* For emulating Linux VMA.  */
+    /*
+    See sim-config.h for detailed explanation.
+	--environment user|virtual|operating
+
+    By default, the setting is 'all' for un-selected.
+
+    In my current design, USER_ENVIRONMENT is used for Linux application,
+    so
+	1. Load ELF by segment instead of by section.
+	2. Load dynamic-link (INTERP) if needed
+	3. Prepare stack for arguments, environments and AUXV.
+	4. Use nds32-mm for memory mapping
+    If the ENVIRONMENT is not USER, the I treat it as normal ELF application,
+    so only a single 64MB memory block is allocated,
+    and default sim_load_file () is used.  */
+
+  /* For emulating Linux VMA */
   sim_core_attach (sd, NULL, 0, access_read_write_exec, 0, 0x00004000,
 		   0xFFFF8000, 0, &nds32_mm_devices, NULL);
 
