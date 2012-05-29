@@ -430,9 +430,7 @@ nds32_init_linux (SIM_DESC sd, struct bfd *abfd, char **argv, char **env)
   if (sd->interp_bfd)
     {
       CPU_PC_STORE (cpu) (cpu, sd->interp_base
-			       + bfd_get_start_address (sd->interp_bfd));
-      sim_io_printf (sd, " interp entry : 0x%lx\n",
-		     sd->interp_base + bfd_get_start_address (sd->interp_bfd));
+			  + bfd_get_start_address (sd->interp_bfd));
     }
 
   return;

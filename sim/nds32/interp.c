@@ -1946,6 +1946,14 @@ sim_engine_run (SIM_DESC sd, int next_cpu_nr, int nr_cpus, int siggnal)
   cpu = STATE_CPU (sd, 0);
   cia = CIA_GET (cpu);
 
+  if (siggnal != 0)
+    {
+      /* FIXME: Study kernel to make sure this.  */
+      sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_exited,
+		       128 + siggnal);
+      return;
+    }
+
   while (1)
     {
       uint32_t insn;
