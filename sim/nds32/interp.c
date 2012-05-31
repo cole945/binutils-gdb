@@ -48,6 +48,8 @@
 #include <sys/times.h>
 #include <sys/utsname.h>
 #include <sys/mman.h>
+#include <sys/types.h>
+#include <sys/uio.h>
 #endif
 #include <unistd.h>
 #include <time.h>
@@ -359,6 +361,54 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 
     case CB_SYS_getegid32:
       sc.result = getegid ();
+      break;
+
+    case CB_SYS_setuid32:
+      sc.result = setuid (CCPU_GPR[0].u);
+      break;
+
+    case CB_SYS_setgid32:
+      sc.result = setgid (CCPU_GPR[0].u);
+      break;
+
+    /* case CB_SYS_readv: */
+    case CB_SYS_writev:
+      {
+	struct iovec *hiov;	/* iov for host */
+	struct iovec iov_tmp;	/* tmp iov read from target */
+	int fd = CCPU_GPR[0].u;
+	int iov = CCPU_GPR[1].u;
+	int iovcnt = CCPU_GPR[2].u;
+	int i;
+
+	if (fd < 0 || fd > MAX_CALLBACK_FDS || cb->fd_buddy[fd] < 0)
+	  {
+	    sc.result = EBADF;
+	    break;
+	  }
+	fd = cb->fdmap[fd];
+
+	/* ssize_t writev(int fd, const struct iovec *iov, int iovcnt); */
+	hiov = (struct iovec *) xmalloc (sizeof (struct iovec) * iovcnt);
+	for (i = 0; i < iovcnt; i++)
+	  {
+	    /* Read the iov struct from target.  */
+	    sim_read (sd, iov + i * sizeof (struct iovec),
+		      (unsigned char *) &iov_tmp, sizeof (struct iovec));
+	    /* Convert it to host iov struct.  */
+	    hiov[i].iov_len = iov_tmp.iov_len;
+	    hiov[i].iov_base = xmalloc (hiov[i].iov_len);
+	    /* Copy the iov buffer from target to host.  */
+	    sim_read (sd, (SIM_ADDR) iov_tmp.iov_base,
+		      (unsigned char *) hiov[i].iov_base, hiov[i].iov_len);
+	  }
+
+	sc.result = writev (fd, hiov, iovcnt);
+
+	for (i = 0; i < iovcnt; i++)
+	  free (hiov[i].iov_base);
+	free (hiov);
+      }
       break;
 
     case CB_SYS_mmap2:
