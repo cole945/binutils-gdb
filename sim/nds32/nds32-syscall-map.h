@@ -18,6 +18,8 @@
 #define CB_SYS_uname		(CB_SYS_BASE + 122)
 #define CB_SYS_mprotect		(CB_SYS_BASE + 125)
 #define CB_SYS_llseek		(CB_SYS_BASE + 140)
+#define CB_SYS_readv		(CB_SYS_BASE + 145)
+#define CB_SYS_writev		(CB_SYS_BASE + 146)
 #define CB_SYS_getpagesize	(CB_SYS_BASE + 166)
 #define CB_SYS_sigaction	(CB_SYS_BASE + 174)
 #define CB_SYS_mmap2		(CB_SYS_BASE + 192)
@@ -28,6 +30,8 @@
 #define CB_SYS_getgid32		(CB_SYS_BASE + 200)
 #define CB_SYS_geteuid32	(CB_SYS_BASE + 201)
 #define CB_SYS_getegid32	(CB_SYS_BASE + 202)
+#define CB_SYS_setuid32		(CB_SYS_BASE + 213)
+#define CB_SYS_setgid32		(CB_SYS_BASE + 214)
 #define CB_SYS_exit_group	(CB_SYS_BASE + 248)
 
 #define CB_SYS_NDS32_isatty	(CB_SYS_BASE + 0x202)
@@ -122,6 +126,8 @@ static CB_TARGET_DEFS_MAP cb_nds32_syscall_map[] =
   {CB_SYS_uname,	LINUX_SYS_BASE + 122},
   {CB_SYS_mprotect,	LINUX_SYS_BASE + 125},
   {CB_SYS_llseek,	LINUX_SYS_BASE + 140},
+  {CB_SYS_readv,	LINUX_SYS_BASE + 145},
+  {CB_SYS_writev,	LINUX_SYS_BASE + 146},
   {CB_SYS_getpagesize,	LINUX_SYS_BASE + 166},
   {CB_SYS_mmap2,	LINUX_SYS_BASE + 192},
   {CB_SYS_stat64,	LINUX_SYS_BASE + 195},
@@ -131,6 +137,8 @@ static CB_TARGET_DEFS_MAP cb_nds32_syscall_map[] =
   {CB_SYS_getgid32,	LINUX_SYS_BASE + 200},
   {CB_SYS_geteuid32,	LINUX_SYS_BASE + 201},
   {CB_SYS_getegid32,	LINUX_SYS_BASE + 202},
+  {CB_SYS_setuid32,	LINUX_SYS_BASE + 213},
+  {CB_SYS_setgid32,	LINUX_SYS_BASE + 214},
   {CB_SYS_exit_group,	LINUX_SYS_BASE + 248},
 
   {-1, -1}
