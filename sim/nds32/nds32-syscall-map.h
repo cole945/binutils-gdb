@@ -97,6 +97,7 @@ static CB_TARGET_DEFS_MAP cb_nds32_syscall_map[] =
    */
   {CB_SYS_exit,		LINUX_SYS_BASE + 1},
   {CB_SYS_read,		LINUX_SYS_BASE + 3},
+#define TARGET_LINUX_SYS_write	(LINUX_SYS_BASE + 4)
   {CB_SYS_write,	LINUX_SYS_BASE + 4},
   {CB_SYS_open,		LINUX_SYS_BASE + 5},
   {CB_SYS_close,	LINUX_SYS_BASE + 6},

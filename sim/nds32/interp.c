@@ -374,12 +374,13 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
     /* case CB_SYS_readv: */
     case CB_SYS_writev:
       {
-	struct iovec *hiov;	/* iov for host */
-	struct iovec iov_tmp;	/* tmp iov read from target */
+	/* ssize_t writev(int fd, const struct iovec *iov, int iovcnt); */
+	struct iovec iov;		/* tmp iov read from target */
 	int fd = CCPU_GPR[0].u;
-	int iov = CCPU_GPR[1].u;
+	int piov = CCPU_GPR[1].u;
 	int iovcnt = CCPU_GPR[2].u;
 	int i;
+	int ret = 0;
 
 	if (fd < 0 || fd > MAX_CALLBACK_FDS || cb->fd_buddy[fd] < 0)
 	  {
@@ -388,26 +389,26 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 	  }
 	fd = cb->fdmap[fd];
 
-	/* ssize_t writev(int fd, const struct iovec *iov, int iovcnt); */
-	hiov = (struct iovec *) xmalloc (sizeof (struct iovec) * iovcnt);
+	/* I'm not sure whether use write () to implement wrivev () is better or not.  */
 	for (i = 0; i < iovcnt; i++)
 	  {
 	    /* Read the iov struct from target.  */
-	    sim_read (sd, iov + i * sizeof (struct iovec),
-		      (unsigned char *) &iov_tmp, sizeof (struct iovec));
-	    /* Convert it to host iov struct.  */
-	    hiov[i].iov_len = iov_tmp.iov_len;
-	    hiov[i].iov_base = xmalloc (hiov[i].iov_len);
-	    /* Copy the iov buffer from target to host.  */
-	    sim_read (sd, (SIM_ADDR) iov_tmp.iov_base,
-		      (unsigned char *) hiov[i].iov_base, hiov[i].iov_len);
+	    sim_read (sd, piov + i * sizeof (struct iovec),
+		      (unsigned char *) &iov, sizeof (struct iovec));
+
+	    sc.func = TARGET_LINUX_SYS_write;
+	    sc.arg1 = fd;
+	    sc.arg2 = (long) iov.iov_base;
+	    sc.arg3 = iov.iov_len;
+	    cb_syscall (cb, &sc);
+
+	    ret += sc.result;
+	    if (sc.result < 0)	/* on error */
+	      goto out;
+	    else if (sc.result != iov.iov_len) /* fail to write whole buffer */
+	      break;
 	  }
-
-	sc.result = writev (fd, hiov, iovcnt);
-
-	for (i = 0; i < iovcnt; i++)
-	  free (hiov[i].iov_base);
-	free (hiov);
+	sc.result = ret;
       }
       break;
 
