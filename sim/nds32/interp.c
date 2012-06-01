@@ -49,10 +49,11 @@
 #include <sys/utsname.h>
 #include <sys/mman.h>
 #include <sys/types.h>
-#include <sys/uio.h>
+#include <sys/ioctl.h>
 #endif
 #include <unistd.h>
 #include <time.h>
+#include <fcntl.h>
 #include <errno.h>
 
 /* Check
@@ -283,6 +284,18 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
       sc.result = nds32_sys_brk (cpu, CCPU_GPR[0].u);
       break;
 
+    case CB_SYS_ioctl:
+      sc.result = ioctl (CCPU_GPR[0].s, CCPU_GPR[1].s, CCPU_GPR[2].s);
+      break;
+
+    case CB_SYS_getpid:
+      sc.result = getpid ();
+      break;
+
+    case CB_SYS_fcntl64:
+      sc.result = fcntl (CCPU_GPR[0].s, CCPU_GPR[1].s, CCPU_GPR[2].s);
+      break;
+
 #ifdef __linux__
     case CB_SYS_gettimeofday:
       {
@@ -375,7 +388,7 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
     case CB_SYS_writev:
       {
 	/* ssize_t writev(int fd, const struct iovec *iov, int iovcnt); */
-	struct iovec iov;		/* tmp iov read from target */
+	uint32_t iov_base = 0, iov_len = 0;
 	int fd = CCPU_GPR[0].u;
 	int piov = CCPU_GPR[1].u;
 	int iovcnt = CCPU_GPR[2].u;
@@ -393,19 +406,21 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 	for (i = 0; i < iovcnt; i++)
 	  {
 	    /* Read the iov struct from target.  */
-	    sim_read (sd, piov + i * sizeof (struct iovec),
-		      (unsigned char *) &iov, sizeof (struct iovec));
+	    sim_read (sd, piov + i * 8 /* sizeof (struct iovec) */,
+		      (unsigned char *) &iov_base, 4);
+	    sim_read (sd, piov + i * 8 + 4,
+		      (unsigned char *) &iov_len, 4);
 
 	    sc.func = TARGET_LINUX_SYS_write;
 	    sc.arg1 = fd;
-	    sc.arg2 = (long) iov.iov_base;
-	    sc.arg3 = iov.iov_len;
+	    sc.arg2 = iov_base;
+	    sc.arg3 = iov_len;
 	    cb_syscall (cb, &sc);
 
 	    ret += sc.result;
 	    if (sc.result < 0)	/* on error */
 	      goto out;
-	    else if (sc.result != iov.iov_len) /* fail to write whole buffer */
+	    else if (sc.result != iov_len) /* fail to write whole buffer */
 	      break;
 	  }
 	sc.result = ret;

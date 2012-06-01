@@ -11,6 +11,7 @@
 #define CB_SYS_access		(CB_SYS_BASE + 33)
 #define CB_SYS_times		(CB_SYS_BASE + 43)
 #define CB_SYS_brk		(CB_SYS_BASE + 45)
+#define CB_SYS_ioctl		(CB_SYS_BASE + 54)
 #define CB_SYS_gettimeofday	(CB_SYS_BASE + 78)
 #define CB_SYS_settimeofday	(CB_SYS_BASE + 79)
 #define CB_SYS_mmap		(CB_SYS_BASE + 90)
@@ -32,6 +33,7 @@
 #define CB_SYS_getegid32	(CB_SYS_BASE + 202)
 #define CB_SYS_setuid32		(CB_SYS_BASE + 213)
 #define CB_SYS_setgid32		(CB_SYS_BASE + 214)
+#define CB_SYS_fcntl64		(CB_SYS_BASE + 221)
 #define CB_SYS_exit_group	(CB_SYS_BASE + 248)
 
 #define CB_SYS_NDS32_isatty	(CB_SYS_BASE + 0x202)
@@ -114,6 +116,7 @@ static CB_TARGET_DEFS_MAP cb_nds32_syscall_map[] =
   {CB_SYS_rename,	LINUX_SYS_BASE + 38},
   {CB_SYS_times,	LINUX_SYS_BASE + 43},
   {CB_SYS_brk,		LINUX_SYS_BASE + 45},
+  {CB_SYS_ioctl,	LINUX_SYS_BASE + 54},
   {CB_SYS_gettimeofday,	LINUX_SYS_BASE + 78},
   /* {CB_SYS_settimeofday,	LINUX_SYS_BASE + 79}, */
   {CB_SYS_mmap,		LINUX_SYS_BASE + 90},
@@ -141,6 +144,7 @@ static CB_TARGET_DEFS_MAP cb_nds32_syscall_map[] =
   {CB_SYS_setuid32,	LINUX_SYS_BASE + 213},
   {CB_SYS_setgid32,	LINUX_SYS_BASE + 214},
   {CB_SYS_exit_group,	LINUX_SYS_BASE + 248},
+  {CB_SYS_fcntl64,	LINUX_SYS_BASE + 221},
 
   {-1, -1}
 };
