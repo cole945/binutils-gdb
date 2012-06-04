@@ -50,6 +50,8 @@
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
+#elif defined (__WIN32__)
+#include "mingw32-hdep.h"
 #endif
 #include <unistd.h>
 #include <time.h>
@@ -296,7 +298,6 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
       sc.result = fcntl (CCPU_GPR[0].s, CCPU_GPR[1].s, CCPU_GPR[2].s);
       break;
 
-#ifdef __linux__
     case CB_SYS_gettimeofday:
       {
 	struct timeval t;
@@ -357,7 +358,7 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
       break;
 
     case CB_SYS_getpagesize:
-      sc.result = getpagesize ();
+      sc.result = PAGE_SIZE;
       break;
 
     case CB_SYS_getuid32:
@@ -478,7 +479,6 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 	if (sc.result != -1 && CCPU_GPR[3].u)
 	  sim_write (sd, CCPU_GPR[3].u, (const unsigned char *) &roff, sizeof (loff_t));
       }
-#endif
 
     case CB_SYS_NDS32_isatty:
       sc.result = sim_io_isatty (sd, CCPU_GPR[0].s);
