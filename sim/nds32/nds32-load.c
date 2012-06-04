@@ -21,11 +21,14 @@
 #include "config.h"
 
 #include <stdlib.h>
+#if defined (__linux__)
 #include <sys/mman.h>
+#elif defined (__WIN32__)
+#include "mingw32-hdep.h"
+#endif
 
 #include "bfd.h"
 #include "elf-bfd.h"
-#include "elf.h"
 #include "sim-main.h"
 #include "sim-utils.h"
 #include "sim-assert.h"
@@ -376,7 +379,7 @@ nds32_init_linux (SIM_DESC sd, struct bfd *abfd, char **argv, char **env)
     sp						  flat
    */
   flat = sp - (argv_len + env_len);
-  sp = flat - (4 + (argc + 1) * 4 + (envc + 1) * 4 + (auxvc + 1) * sizeof (Elf32_auxv_t));
+  sp = flat - (4 + (argc + 1) * 4 + (envc + 1) * 4 + (auxvc + 1) * 8);
   sp = sp & ~0xf;
 
   sp_argv = sp + 4;
@@ -413,12 +416,11 @@ nds32_init_linux (SIM_DESC sd, struct bfd *abfd, char **argv, char **env)
 
   if (auxvc > 0)
     {
-      Elf32_auxv_t auxv;
       Elf_Internal_Ehdr *exec = elf_elfheader (abfd);
 
       sp_auxv = nds32_push_auxv (sd, abfd, sp_auxv, AT_PAGESZ, PAGE_SIZE);
       sp_auxv = nds32_push_auxv (sd, abfd, sp_auxv, AT_PHDR, sd->exec_base + exec->e_phoff);
-      sp_auxv = nds32_push_auxv (sd, abfd, sp_auxv, AT_PHENT, sizeof (Elf32_Phdr));
+      sp_auxv = nds32_push_auxv (sd, abfd, sp_auxv, AT_PHENT, sizeof (Elf_Internal_Phdr));
       sp_auxv = nds32_push_auxv (sd, abfd, sp_auxv, AT_PHNUM, exec->e_phnum);
       sp_auxv = nds32_push_auxv (sd, abfd, sp_auxv, AT_BASE, sd->interp_base);
       sp_auxv = nds32_push_auxv (sd, abfd, sp_auxv, AT_ENTRY, exec->e_entry);

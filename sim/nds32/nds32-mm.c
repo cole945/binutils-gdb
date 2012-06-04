@@ -20,12 +20,15 @@
 
 #include "config.h"
 
-#include <sys/mman.h>
 #include <errno.h>
+#if defined (__linux__)
+#include <sys/mman.h>
+#elif defined (__WIN32__)
+#include "mingw32-hdep.h"
+#endif
 
 #include "bfd.h"
 #include "elf-bfd.h"
-#include "elf.h"
 
 #include "nds32-sim.h"
 #include "nds32-mm.h"
