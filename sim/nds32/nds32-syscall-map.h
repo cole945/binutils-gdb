@@ -12,6 +12,8 @@
 #define CB_SYS_times		(CB_SYS_BASE + 43)
 #define CB_SYS_brk		(CB_SYS_BASE + 45)
 #define CB_SYS_ioctl		(CB_SYS_BASE + 54)
+#define CB_SYS_setrlimit	(CB_SYS_BASE + 75)
+#define CB_SYS_getrlimit	(CB_SYS_BASE + 76)
 #define CB_SYS_gettimeofday	(CB_SYS_BASE + 78)
 #define CB_SYS_settimeofday	(CB_SYS_BASE + 79)
 #define CB_SYS_mmap		(CB_SYS_BASE + 90)
@@ -23,6 +25,7 @@
 #define CB_SYS_writev		(CB_SYS_BASE + 146)
 #define CB_SYS_getpagesize	(CB_SYS_BASE + 166)
 #define CB_SYS_sigaction	(CB_SYS_BASE + 174)
+#define CB_SYS_ugetrlimit	(CB_SYS_BASE + 191)
 #define CB_SYS_mmap2		(CB_SYS_BASE + 192)
 #define CB_SYS_stat64		(CB_SYS_BASE + 195)
 #define CB_SYS_lstat64		(CB_SYS_BASE + 196)
@@ -133,6 +136,7 @@ static CB_TARGET_DEFS_MAP cb_nds32_syscall_map[] =
   {CB_SYS_readv,	LINUX_SYS_BASE + 145},
   {CB_SYS_writev,	LINUX_SYS_BASE + 146},
   {CB_SYS_getpagesize,	LINUX_SYS_BASE + 166},
+  {CB_SYS_ugetrlimit,	LINUX_SYS_BASE + 191},
   {CB_SYS_mmap2,	LINUX_SYS_BASE + 192},
   {CB_SYS_stat64,	LINUX_SYS_BASE + 195},
   {CB_SYS_lstat64,	LINUX_SYS_BASE + 196},
