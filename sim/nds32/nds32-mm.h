@@ -55,12 +55,13 @@ struct nds32_mm
 
   uint32_t start_brk;			/* Start address of brk */
   uint32_t brk;				/* Final address of brk */
+  uint32_t limit_data;			/* Limit of data */
   uint32_t start_sp;			/* Start address of stack */
+  uint32_t limit_sp;			/* Limit of stack */
   uint32_t free_cache;			/* Last address for mmap. */
 };
 
 void nds32_mm_init (struct nds32_mm *mm);
-int nds32_expand_stack (sim_cpu *cpu, uint32_t addr);
 struct nds32_vm_area *nds32_find_vma (struct nds32_mm *mm, uint32_t addr);
 void nds32_dump_vma (struct nds32_mm *mm);
 uint32_t nds32_sys_brk (sim_cpu *cpu, uint32_t addr);
