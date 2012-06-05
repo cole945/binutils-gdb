@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #if defined (__linux__)
 #include <sys/mman.h>
+#include <sys/resource.h>
 #elif defined (__WIN32__)
 #include "mingw32-hdep.h"
 #endif
@@ -76,7 +77,6 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
   int osabi = 0;
   int i;
   char buf[1024];
-  const int init_sp_size = 16 * PAGE_SIZE;	/* FIXME */
   Elf_Internal_Phdr *phdr;
   Elf_Internal_Phdr *interp_phdr = NULL;
   uint32_t off;
@@ -84,7 +84,13 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
   int sysroot_len;
   uint32_t interp_base;
   SIM_CPU *cpu = STATE_CPU (sd, 0);
+  struct rlimit limit;
   struct nds32_mm *mm = STATE_MM (sd);
+
+  getrlimit (RLIMIT_STACK, &limit);
+  mm->limit_sp = limit.rlim_cur;
+  getrlimit (RLIMIT_DATA, &limit);
+  mm->limit_data = limit.rlim_cur;
 
   if (STATE_ENVIRONMENT (sd) == ALL_ENVIRONMENT)
     {
@@ -125,7 +131,7 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
 
   nds32_mm_init (mm);
 
-  nds32_mmap (cpu, mm->start_sp - init_sp_size, init_sp_size,
+  nds32_mmap (cpu, mm->start_sp - mm->limit_sp, mm->limit_sp,
 	      PROT_READ | PROT_WRITE | PROT_EXEC,
 	      MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED | MAP_STACK, -1, 0);
 
@@ -159,7 +165,7 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
 	mm->brk = addr + len;
     }
 
-  /* SIM_ASSERT (mm->brk < mm->unmapped && mm->unmapped < mm->sp); */
+  /* TODO: Pre-map brk */
 
   if (!interp_phdr)
     return;

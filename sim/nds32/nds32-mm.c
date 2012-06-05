@@ -87,11 +87,6 @@ device_io_write_buffer (device *me ATTRIBUTE_UNUSED,
   cpu = STATE_CPU (sd, 0);
   cia = CIA_GET (cpu);
 
-  /* Check stack expand */
-  if (vma && addr < vma->vm_start)
-    if (nds32_expand_stack (cpu, addr))
-      vma = nds32_find_vma (mm, addr);
-
   if (vma == NULL || addr < vma->vm_start)
     {
       sim_io_eprintf (sd, "Access violation at 0x%08x. Read of address 0x%08x\n", cia, addr);
@@ -101,8 +96,6 @@ device_io_write_buffer (device *me ATTRIBUTE_UNUSED,
     }
 
   memcpy (vma->vm_buf + (addr - vma->vm_start), source, nr_bytes);
-
-  /* nds32_dump_vma (); */
 
   return nr_bytes;
 }
@@ -240,7 +233,7 @@ nds32_dump_vma (struct nds32_mm *mm)
   struct nds32_vm_area *vma;
 
   for (vma = MM_HEAD (mm)->vm_next; vma != MM_HEAD (mm); vma = vma->vm_next)
-    printf ("%x-%x\n", vma->vm_start, vma->vm_end);
+    printf ("%08x-%08x\n", vma->vm_start, vma->vm_end);
 }
 
 /* Find a suitable address for addr/len.  */
@@ -371,37 +364,4 @@ nds32_sys_brk (sim_cpu *cpu, uint32_t addr)
 		-1, 0);
       return mm->brk = addr;
     }
-}
-
-#define container_of(ptr, type, member) ({ \
-		const typeof( ((type *)0)->member ) *__mptr = (ptr); \
-		(type *)( (char *)__mptr - offsetof(type,member) );})
-
-int
-nds32_expand_stack (sim_cpu *cpu, uint32_t addr)
-{
-  struct nds32_vm_area *vma;
-  SIM_DESC sd = CPU_STATE (cpu);
-  struct nds32_mm *mm = STATE_MM (sd);
-  int grow = PAGE_SIZE * 32;
-
-  /* Linux checks RLIMIT_STACK for stack size limitation.
-     Be default, it is initialized to INIT_RLIMITS[RLIMIT_STACK] = _STK_LIM = 8MB.
-     See GETRLIMIT(2) and include/asm-generic/resource.h for details.  */
-
-  addr = PAGE_ALIGN (addr);
-
-  if (mm->start_sp - addr > RLIMIT_STACK_SIZE)
-    return 0;
-
-  vma = nds32_find_vma (mm, addr);
-
-  sd = container_of (mm, struct sim_state, mm);
-
-  nds32_mmap (cpu, addr - grow, vma->vm_start - addr + grow,
-		PROT_READ | PROT_WRITE | PROT_EXEC,
-		MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK,
-		-1, 0);
-
-  return 1;
 }
