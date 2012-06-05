@@ -48,6 +48,7 @@
 #include <sys/times.h>
 #include <sys/utsname.h>
 #include <sys/mman.h>
+#include <sys/resource.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #elif defined (__WIN32__)
@@ -236,6 +237,8 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 
   sc.p1 = (PTR) sd;
   sc.p2 = (PTR) cpu;
+  sc.result = -1;
+  sc.errcode = 0;
   sc.read_mem = syscall_read_mem;
   sc.write_mem = syscall_write_mem;
 
@@ -249,6 +252,43 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 	  nds32_bad_op (cpu, cia, swid, "syscall");
 	  return cia;
 	}
+      break;
+
+    /*
+     * System calls used by libgloss and Linux.
+     */
+
+    case CB_SYS_exit_group:
+    case CB_SYS_exit:
+      sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_exited, CCPU_GPR[0].s);
+      break;
+
+    case CB_SYS_llseek:
+      {
+	unsigned int fd = CCPU_GPR[0].u;
+	unsigned long offhi = CCPU_GPR[1].u;
+	unsigned long offlo = CCPU_GPR[2].u;
+	unsigned int whence = CCPU_GPR[4].u;
+	loff_t roff;
+
+	sc.func = swid;
+	sc.arg1 = fd;
+	sc.arg2 = offlo;
+	sc.arg3 = whence;
+
+	SIM_ASSERT (offhi == 0);
+
+	sc.func = TARGET_LINUX_SYS_lseek;
+	cb_syscall (cb, &sc);
+	roff = sc.result;
+
+	/* Copy the result only if user really passes other then NULL.  */
+	if (sc.result != -1 && CCPU_GPR[3].u)
+	  sim_write (sd, CCPU_GPR[3].u, (const unsigned char *) &roff, sizeof (loff_t));
+      }
+
+    case CB_SYS_getpid:
+      sc.result = getpid ();
       break;
 
     case CB_SYS_stat:
@@ -277,27 +317,6 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
       cb_syscall (cb, &sc);
       break;
 
-    case CB_SYS_exit_group:
-    case CB_SYS_exit:
-      sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_exited, CCPU_GPR[0].s);
-      break;
-
-    case CB_SYS_brk:
-      sc.result = nds32_sys_brk (cpu, CCPU_GPR[0].u);
-      break;
-
-    case CB_SYS_ioctl:
-      sc.result = ioctl (CCPU_GPR[0].s, CCPU_GPR[1].s, CCPU_GPR[2].s);
-      break;
-
-    case CB_SYS_getpid:
-      sc.result = getpid ();
-      break;
-
-    case CB_SYS_fcntl64:
-      sc.result = fcntl (CCPU_GPR[0].s, CCPU_GPR[1].s, CCPU_GPR[2].s);
-      break;
-
     case CB_SYS_gettimeofday:
       {
 	struct timeval t;
@@ -311,6 +330,29 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 	  sim_write (sd, CCPU_GPR[1].u, (const unsigned char *) &t,
 		     sizeof (tz));
       }
+      break;
+
+    /* glibc will try to use this, but we should reject it,
+       so getrlimit will be used instread.  */
+    case CB_SYS_ugetrlimit:
+      sc.result = -1;
+      sc.errcode = ENOSYS;
+      break;
+
+    /*
+     * System calls used by Linux only.
+     */
+
+    case CB_SYS_brk:
+      sc.result = nds32_sys_brk (cpu, CCPU_GPR[0].u);
+      break;
+
+    case CB_SYS_ioctl:
+      sc.result = ioctl (CCPU_GPR[0].s, CCPU_GPR[1].s, CCPU_GPR[2].s);
+      break;
+
+    case CB_SYS_fcntl64:
+      sc.result = fcntl (CCPU_GPR[0].s, CCPU_GPR[1].s, CCPU_GPR[2].s);
       break;
 
     case CB_SYS_times:
@@ -342,6 +384,7 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 	get_path (cb, &sc, CCPU_GPR[1].u, &newpath);
 
 	sc.result = link (oldpath, newpath);
+
 	free (oldpath);
 	free (newpath);
       }
@@ -398,7 +441,8 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 
 	if (fd < 0 || fd > MAX_CALLBACK_FDS || cb->fd_buddy[fd] < 0)
 	  {
-	    sc.result = EBADF;
+	    sc.result = -1;
+	    sc.errcode = EBADF;
 	    break;
 	  }
 	fd = cb->fdmap[fd];
@@ -452,33 +496,30 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
       }
       break;
 
+    case CB_SYS_setrlimit:
+      /* int setrlimit(int resource, const struct rlimit *rlim); */
+      {
+	struct rlimit rlim;
+
+	sim_read (sd, CCPU_GPR[1].u, (unsigned char *) &rlim, sizeof (rlim));
+	sc.result = setrlimit (CCPU_GPR[0].s, &rlim);
+      }
+      break;
+
+    case CB_SYS_getrlimit:
+      /* int getrlimit(int resource, struct rlimit *rlim); */
+      {
+	struct rlimit rlim;
+
+	sc.result = getrlimit (CCPU_GPR[0].s, &rlim);
+	if (sc.result >= 0)
+	  sim_write (sd, CCPU_GPR[1].u, (const unsigned char *) &rlim, sizeof (rlim));
+      }
+      break;
+
     case CB_SYS_mprotect:
       sc.result = 0; /* Just do nothing now. */
       break;
-
-    case CB_SYS_llseek:
-      {
-	unsigned int fd = CCPU_GPR[0].u;
-	unsigned long offhi = CCPU_GPR[1].u;
-	unsigned long offlo = CCPU_GPR[2].u;
-	unsigned int whence = CCPU_GPR[4].u;
-	loff_t roff;
-
-	sc.func = swid;
-	sc.arg1 = fd;
-	sc.arg2 = offlo;
-	sc.arg3 = whence;
-
-	SIM_ASSERT (offhi == 0);
-
-	sc.func = TARGET_LINUX_SYS_lseek;
-	cb_syscall (cb, &sc);
-	roff = sc.result;
-
-	/* Copy the result only if user really passes other then NULL.  */
-	if (sc.result != -1 && CCPU_GPR[3].u)
-	  sim_write (sd, CCPU_GPR[3].u, (const unsigned char *) &roff, sizeof (loff_t));
-      }
 
     case CB_SYS_NDS32_isatty:
       sc.result = sim_io_isatty (sd, CCPU_GPR[0].s);
@@ -491,13 +532,21 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
       sim_write (sd, CCPU_GPR[0].u, (unsigned char*)sd->cmdline, strlen (sd->cmdline) + 1);
       break;
 
+    /* This is used by libgloss only.  */
     case CB_SYS_NDS32_errno:
       sc.result = sim_io_get_errno (sd);
       break;
     }
 
 out:
-  CCPU_GPR[0].s = sc.result;
+  if (sc.result < 0)
+    {
+      if (sc.errcode == 0)
+	sc.errcode = errno;
+      CCPU_GPR[0].s = -sc.errcode;
+    }
+  else
+    CCPU_GPR[0].s = sc.result;
   return cia + 4;
 }
 
@@ -642,7 +691,15 @@ nds32_decode32_mem (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       CCPU_GPR[ra].u += (CCPU_GPR[rb].u << sv);
       break;
     case 0x18:			/* llw */
+      CCPU_GPR[rt].u =
+	nds32_ld_aligned (cpu, CCPU_GPR[ra].u + (CCPU_GPR[rb].u << sv), 4);
+      break;
     case 0x19:			/* scw */
+      /* SCW always successes.  */
+      nds32_st_aligned (cpu, CCPU_GPR[ra].u + (CCPU_GPR[rb].u << sv), 4,
+			CCPU_GPR[rt].u);
+      CCPU_GPR[rt].u = 1;
+      break;
     case 0x20:			/* lbup */
     case 0x22:			/* lwup */
     case 0x28:			/* sbup */
