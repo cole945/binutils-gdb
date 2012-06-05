@@ -87,5 +87,18 @@ struct utsname {
 #endif
 };
 
+/*
+ * rlimit
+ */
+struct rlimit {
+  rlim_t rlim_cur;  /* Soft limit */
+  rlim_t rlim_max;  /* Hard limit (ceiling for rlim_cur) */
+};
+
+#define RLIMIT_DATA		2	/* max data size */
+#define RLIMIT_STACK		3	/* max stack size */
+
+int getrlimit(int resource, struct rlimit *rlim);
+
 
 #endif
