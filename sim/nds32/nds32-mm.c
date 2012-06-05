@@ -307,6 +307,9 @@ nds32_mmap (sim_cpu *cpu, uint32_t addr, size_t len,
   void *phy = NULL;
   struct nds32_vm_area *vma;
 
+  /* For debugging */
+  prot |= PROT_READ | PROT_WRITE | PROT_EXEC;
+
   if (flags & MAP_ANONYMOUS)
     phy = mmap (NULL, len, prot, flags & ~MAP_FIXED, fd, offset);
   else if (fd < 0 || fd > MAX_CALLBACK_FDS || cb->fd_buddy[fd] < 0)
