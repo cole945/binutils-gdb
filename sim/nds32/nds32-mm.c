@@ -60,13 +60,9 @@ device_io_read_buffer (device *me ATTRIBUTE_UNUSED,
   cpu = STATE_CPU (sd, 0);
   cia = CIA_GET (cpu);
 
-  if (vma == NULL || addr < vma->vm_start)
-    {
-      sim_io_eprintf (sd, "Access violation at 0x%08x. Read of address 0x%08x\n", cia, addr);
-      nds32_dump_vma (mm);
-      sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_stopped, SIM_SIGSEGV);
-      return 0;
-    }
+  if (vma == NULL || addr < vma->vm_start
+      || (addr + nr_bytes - 1) >= vma->vm_end)
+    return 0;
 
   memcpy (source, vma->vm_buf + (addr - vma->vm_start), nr_bytes);
 
@@ -87,13 +83,9 @@ device_io_write_buffer (device *me ATTRIBUTE_UNUSED,
   cpu = STATE_CPU (sd, 0);
   cia = CIA_GET (cpu);
 
-  if (vma == NULL || addr < vma->vm_start)
-    {
-      sim_io_eprintf (sd, "Access violation at 0x%08x. Read of address 0x%08x\n", cia, addr);
-      nds32_dump_vma (mm);
-      sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_stopped, SIM_SIGSEGV);
-      return 0;
-    }
+  if (vma == NULL || addr < vma->vm_start
+      || (addr + nr_bytes - 1) >= vma->vm_end)
+    return 0;
 
   memcpy (vma->vm_buf + (addr - vma->vm_start), source, nr_bytes);
 

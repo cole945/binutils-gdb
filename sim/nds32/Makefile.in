@@ -27,6 +27,7 @@ SIM_OBJS = \
 	nds32-cop0.o \
 	nds32-load.o \
 	nds32-mm.o \
+	nds32-syscall.o \
 	sim-cpu.o \
 	sim-engine.o \
 	sim-hrw.o \

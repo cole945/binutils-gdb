@@ -35,48 +35,20 @@
 #include "sim-utils.h"
 #include "sim-fpu.h"
 #include "sim-trace.h"
-#include "targ-vals.h"
 
 #include "opcode/nds32.h"
 #include "nds32-sim.h"
 #include "nds32-mm.h"
-#include "nds32-syscall-map.h"
+#include "nds32-syscall.h"
 
 #ifdef __linux__
 /* FIXME */
-#include <sys/time.h>
-#include <sys/times.h>
-#include <sys/utsname.h>
-#include <sys/mman.h>
-#include <sys/resource.h>
 #include <sys/types.h>
-#include <sys/ioctl.h>
 #elif defined (__WIN32__)
 #include "mingw32-hdep.h"
 #endif
 #include <unistd.h>
 #include <time.h>
-#include <fcntl.h>
-#include <errno.h>
-
-/* Check
-	linux: arch/nds32/include/asm/stat.h
-	newlib: libc/include/sys/stat.h
-   for details.  */
-static const char cb_linux_stat_map_32[] =
-"st_dev,2:space,2:st_ino,4:st_mode,2:st_nlink,2:st_uid,2:st_gid,2:st_rdev,2:space,2:"
-"st_size,4:st_blksize,4:st_blocks,4:st_atime,4:st_atimensec,4:"
-"st_mtime,4:st_mtimensec,4:st_ctime,4:st_ctimensec,4:space,4:space,4";
-
-static const char cb_linux_stat_map_64[] =
-"st_dev,8:space,4:__st_ino,4:st_mode,4:st_nlink,4:st_uid,4:st_gid,4:st_rdev,8:"
-"space,8:st_size,8:st_blksize,4:space,4:st_blocks,8:st_atime,4:st_atimensec,4:"
-"st_mtime,4:st_mtimensec,4:st_ctime,4:st_ctimensec,4:st_ino,8";
-
-static const char cb_libgloss_stat_map_32[] =
-"st_dev,2:st_ino,2:st_mode,4:st_nlink,2:st_uid,2:st_gid,2:st_rdev,2:"
-"st_size,4:st_atime,4:space,4:st_mtime,4:space,4:st_ctime,4:space,4:"
-"st_blksize,4:st_blocks,4:space,8";
 
 static ulongest_t
 extract_unsigned_integer (unsigned char *addr, int len, int byte_order)
@@ -128,61 +100,43 @@ store_unsigned_integer (unsigned char *addr, int len,
     }
 }
 
-/* Utility of cb_syscall to fetch a path name.
-   The buffer is malloc'd and the address is stored in BUFP.
-   The result is that of get_string, but prepended with
-   simulator_sysroot if the string starts with '/'.
-   If an error occurs, no buffer is left malloc'd.
-
-   This code is copied from comm/syscall.c,
-   because it's a static function. */
-
-static int
-get_path (host_callback *cb, CB_SYSCALL *sc, uint32_t addr, char **bufp)
+static void
+nds32_dump_registers (SIM_DESC sd)
 {
-  const int max_path_len = 1024;
-  char *buf = xmalloc (max_path_len);
-  int result;
-  int sysroot_len = strlen (simulator_sysroot);
+  int i;
 
-  result = cb_get_string (cb, sc, buf, max_path_len - sysroot_len, addr);
-  if (result == 0)
+  for (i = 0; i < MAX_NR_PROCESSORS; ++i)
     {
-      /* Prepend absolute paths with simulator_sysroot.  Relative paths
-	 are supposed to be relative to a chdir within that path, but at
-	 this point unknown where.  */
-      if (simulator_sysroot[0] != '\0' && *buf == '/')
-	{
-	  /* Considering expected rareness of syscalls with absolute
-	     file paths (compared to relative file paths and insn
-	     execution), it does not seem worthwhile to rearrange things
-	     to get rid of the string moves here; we'd need at least an
-	     extra call to check the initial '/' in the path.  */
-	  memmove (buf + sysroot_len, buf, sysroot_len);
-	  memcpy (buf, simulator_sysroot, sysroot_len);
-	}
-
-      *bufp = buf;
+      sim_cpu *cpu = STATE_CPU (sd, i);
+      /* TODO ... */
+      sim_io_eprintf (sd, "pc %08x\n", CCPU_USR[NC_PC].u);
     }
-  else
-    free (buf);
-  return result;
 }
 
-enum nds32_exceptions
+uint32_t
+nds32_raise_exception (sim_cpu *cpu, enum nds32_exceptions e, int sig,
+		       char *msg, ...)
 {
-  EXP_RESET = 0,
-  EXP_TLB_FILL = 1,
-  EXP_NO_PTE = 2,
-  EXP_TLB_MISC = 3,
-  EXP_TLB_VLPT_MISS = 4,
-  EXP_MACHINE_ERROR = 5,
-  EXP_DEBUG = 6,
-  EXP_GENERAL = 7,
-  EXP_SYSCALL = 8,
+  SIM_DESC sd = CPU_STATE (cpu);
+  uint32_t cia = CCPU_USR[NC_PC].u;
 
-  EXP_BADOP,
-};
+  /* TODO: Show message only if it is not handled by user.  */
+  if (msg)
+    {
+      va_list va;
+      va_start (va, msg);
+      sim_io_vprintf (sd, msg, va);
+      va_end (va);
+    }
+
+  /* Dump registers before halt.  */
+  if (STATE_OPEN_KIND (sd) != SIM_OPEN_DEBUG)
+    nds32_dump_registers (sd);
+
+  sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_stopped, sig);
+
+  return cia;
+}
 
 void
 nds32_bad_op (sim_cpu *cpu, uint32_t cia, uint32_t insn, char *tag)
@@ -190,364 +144,8 @@ nds32_bad_op (sim_cpu *cpu, uint32_t cia, uint32_t insn, char *tag)
   if (tag == NULL)
     tag = "";
 
-  sim_io_error (CPU_STATE (cpu),
-		"Unhandled %s instruction at 0x%x, code=0x%08x\n",
-		tag, cia, insn);
-
-  sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_stopped, SIM_SIGILL);
-}
-
-/* Read/write functions for system call interface.  */
-
-static int
-syscall_read_mem (host_callback *cb, struct cb_syscall *sc,
-		  unsigned long taddr, char *buf, int bytes)
-{
-  SIM_DESC sd = (SIM_DESC) sc->p1;
-  SIM_CPU *cpu = (SIM_CPU *) sc->p2;
-
-  return sim_core_read_buffer (sd, cpu, read_map, buf, taddr, bytes);
-}
-
-static int
-syscall_write_mem (host_callback *cb, struct cb_syscall *sc,
-		  unsigned long taddr, const char *buf, int bytes)
-{
-  SIM_DESC sd = (SIM_DESC) sc->p1;
-  SIM_CPU *cpu = (SIM_CPU *) sc->p2;
-
-  return sim_core_write_buffer (sd, cpu, write_map, buf, taddr, bytes);
-}
-
-static sim_cia
-nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
-{
-  SIM_DESC sd = CPU_STATE (cpu);
-  host_callback *cb = STATE_CALLBACK (sd);
-  CB_SYSCALL sc;
-  int cbid;
-
-  CB_SYSCALL_INIT (&sc);
-
-  sc.func = swid;
-  sc.arg1 = CCPU_GPR[0].s;
-  sc.arg2 = CCPU_GPR[1].s;
-  sc.arg3 = CCPU_GPR[2].s;
-  sc.arg4 = CCPU_GPR[3].s;
-
-  sc.p1 = (PTR) sd;
-  sc.p2 = (PTR) cpu;
-  sc.result = -1;
-  sc.errcode = 0;
-  sc.read_mem = syscall_read_mem;
-  sc.write_mem = syscall_write_mem;
-
-  /* switch (swid) */
-  switch (cbid = cb_target_to_host_syscall (cb, sc.func))
-    {
-    default:
-      cb_syscall (cb, &sc);
-      if (sc.result == -1 && sc.errcode == TARGET_ENOSYS)
-	{
-	  nds32_bad_op (cpu, cia, swid, "syscall");
-	  return cia;
-	}
-      break;
-
-    /*
-     * System calls used by libgloss and Linux.
-     */
-
-    case CB_SYS_exit_group:
-    case CB_SYS_exit:
-      sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_exited, CCPU_GPR[0].s);
-      break;
-
-    case CB_SYS_llseek:
-      {
-	unsigned int fd = CCPU_GPR[0].u;
-	unsigned long offhi = CCPU_GPR[1].u;
-	unsigned long offlo = CCPU_GPR[2].u;
-	unsigned int whence = CCPU_GPR[4].u;
-	loff_t roff;
-
-	sc.func = swid;
-	sc.arg1 = fd;
-	sc.arg2 = offlo;
-	sc.arg3 = whence;
-
-	SIM_ASSERT (offhi == 0);
-
-	sc.func = TARGET_LINUX_SYS_lseek;
-	cb_syscall (cb, &sc);
-	roff = sc.result;
-
-	/* Copy the result only if user really passes other then NULL.  */
-	if (sc.result != -1 && CCPU_GPR[3].u)
-	  sim_write (sd, CCPU_GPR[3].u, (const unsigned char *) &roff, sizeof (loff_t));
-      }
-
-    case CB_SYS_getpid:
-      sc.result = getpid ();
-      break;
-
-    case CB_SYS_stat:
-    case CB_SYS_lstat:
-    case CB_SYS_fstat:
-      if (STATE_ENVIRONMENT (sd) == USER_ENVIRONMENT)
-	cb->stat_map = cb_linux_stat_map_32;
-      else
-	cb->stat_map = cb_libgloss_stat_map_32;
-      cb_syscall (cb, &sc);
-      break;
-
-    case CB_SYS_stat64:
-      cb->stat_map = cb_linux_stat_map_64;
-      sc.func = TARGET_LINUX_SYS_stat;
-      cb_syscall (cb, &sc);
-      break;
-    case CB_SYS_lstat64:
-      cb->stat_map = cb_linux_stat_map_64;
-      sc.func = TARGET_LINUX_SYS_lstat;
-      cb_syscall (cb, &sc);
-      break;
-    case CB_SYS_fstat64:
-      cb->stat_map = cb_linux_stat_map_64;
-      sc.func = TARGET_LINUX_SYS_fstat;
-      cb_syscall (cb, &sc);
-      break;
-
-    case CB_SYS_gettimeofday:
-      {
-	struct timeval t;
-	struct timezone tz;
-
-	sc.result = gettimeofday (&t, &tz);
-	if (CCPU_GPR[0].u)
-	  sim_write (sd, CCPU_GPR[0].u, (const unsigned char *) &t,
-		     sizeof (t));
-	if (CCPU_GPR[1].u)
-	  sim_write (sd, CCPU_GPR[1].u, (const unsigned char *) &t,
-		     sizeof (tz));
-      }
-      break;
-
-    /* glibc will try to use this, but we should reject it,
-       so getrlimit will be used instread.  */
-    case CB_SYS_ugetrlimit:
-      sc.result = -1;
-      sc.errcode = ENOSYS;
-      break;
-
-    /*
-     * System calls used by Linux only.
-     */
-
-    case CB_SYS_brk:
-      sc.result = nds32_sys_brk (cpu, CCPU_GPR[0].u);
-      break;
-
-    case CB_SYS_ioctl:
-      sc.result = ioctl (CCPU_GPR[0].s, CCPU_GPR[1].s, CCPU_GPR[2].s);
-      break;
-
-    case CB_SYS_fcntl64:
-      sc.result = fcntl (CCPU_GPR[0].s, CCPU_GPR[1].s, CCPU_GPR[2].s);
-      break;
-
-    case CB_SYS_times:
-      {
-	struct tms tms;
-
-	sc.result = times (&tms);
-	if (CCPU_GPR[0].u)
-	  sim_write (sd, CCPU_GPR[0].u, (const unsigned char *) &tms,
-		     sizeof (tms));
-      }
-      break;
-
-    case CB_SYS_access:
-      {
-	char *path;
-	get_path (cb, &sc, CCPU_GPR[0].u, &path);
-	sc.result = access (path, CCPU_GPR[1].u);
-	free (path);
-      }
-      break;
-
-    case CB_SYS_link:
-      {
-	char *oldpath;
-	char *newpath;
-
-	get_path (cb, &sc, CCPU_GPR[0].u, &oldpath);
-	get_path (cb, &sc, CCPU_GPR[1].u, &newpath);
-
-	sc.result = link (oldpath, newpath);
-
-	free (oldpath);
-	free (newpath);
-      }
-      break;
-
-    case CB_SYS_uname:
-      {
-	struct utsname buf;
-
-	if ((sc.result = uname (&buf)) == 0 && CCPU_GPR[0].u)
-	  sim_write (sd, CCPU_GPR[0].u, (const unsigned char *) &buf,
-		     sizeof (buf));
-      }
-      break;
-
-    case CB_SYS_getpagesize:
-      sc.result = PAGE_SIZE;
-      break;
-
-    case CB_SYS_getuid32:
-      sc.result = getuid ();
-      break;
-
-    case CB_SYS_getgid32:
-      sc.result = getgid ();
-      break;
-
-    case CB_SYS_geteuid32:
-      sc.result = geteuid ();
-      break;
-
-    case CB_SYS_getegid32:
-      sc.result = getegid ();
-      break;
-
-    case CB_SYS_setuid32:
-      sc.result = setuid (CCPU_GPR[0].u);
-      break;
-
-    case CB_SYS_setgid32:
-      sc.result = setgid (CCPU_GPR[0].u);
-      break;
-
-    /* case CB_SYS_readv: */
-    case CB_SYS_writev:
-      {
-	/* ssize_t writev(int fd, const struct iovec *iov, int iovcnt); */
-	uint32_t iov_base = 0, iov_len = 0;
-	int fd = CCPU_GPR[0].u;
-	int piov = CCPU_GPR[1].u;
-	int iovcnt = CCPU_GPR[2].u;
-	int i;
-	int ret = 0;
-
-	if (fd < 0 || fd > MAX_CALLBACK_FDS || cb->fd_buddy[fd] < 0)
-	  {
-	    sc.result = -1;
-	    sc.errcode = EBADF;
-	    break;
-	  }
-	fd = cb->fdmap[fd];
-
-	/* I'm not sure whether use write () to implement wrivev () is better or not.  */
-	for (i = 0; i < iovcnt; i++)
-	  {
-	    /* Read the iov struct from target.  */
-	    sim_read (sd, piov + i * 8 /* sizeof (struct iovec) */,
-		      (unsigned char *) &iov_base, 4);
-	    sim_read (sd, piov + i * 8 + 4,
-		      (unsigned char *) &iov_len, 4);
-
-	    sc.func = TARGET_LINUX_SYS_write;
-	    sc.arg1 = fd;
-	    sc.arg2 = iov_base;
-	    sc.arg3 = iov_len;
-	    cb_syscall (cb, &sc);
-
-	    ret += sc.result;
-	    if (sc.result < 0)	/* on error */
-	      goto out;
-	    else if (sc.result != iov_len) /* fail to write whole buffer */
-	      break;
-	  }
-	sc.result = ret;
-      }
-      break;
-
-    case CB_SYS_mmap2:
-       /* void *mmap2 (void *addr, size_t length, int prot,
-		       int flags, int fd, off_t pgoffset);  */
-      {
-	uint32_t addr = CCPU_GPR[0].u;
-	size_t len = CCPU_GPR[1].s;
-	int prot = CCPU_GPR[2].s;
-	int flags = CCPU_GPR[3].s;
-	int fd = CCPU_GPR[4].s;
-	off_t pgoffset = CCPU_GPR[5].u;
-
-	sc.result = (long) nds32_mmap (cpu, addr, len, prot, flags,
-				       fd, pgoffset * PAGE_SIZE);
-      }
-      break;
-    case CB_SYS_munmap:
-      {
-	uint32_t addr = CCPU_GPR[0].u;
-	size_t len = CCPU_GPR[1].s;
-
-	sc.result = nds32_munmap (cpu, addr, len);
-      }
-      break;
-
-    case CB_SYS_setrlimit:
-      /* int setrlimit(int resource, const struct rlimit *rlim); */
-      {
-	struct rlimit rlim;
-
-	sim_read (sd, CCPU_GPR[1].u, (unsigned char *) &rlim, sizeof (rlim));
-	sc.result = setrlimit (CCPU_GPR[0].s, &rlim);
-      }
-      break;
-
-    case CB_SYS_getrlimit:
-      /* int getrlimit(int resource, struct rlimit *rlim); */
-      {
-	struct rlimit rlim;
-
-	sc.result = getrlimit (CCPU_GPR[0].s, &rlim);
-	if (sc.result >= 0)
-	  sim_write (sd, CCPU_GPR[1].u, (const unsigned char *) &rlim, sizeof (rlim));
-      }
-      break;
-
-    case CB_SYS_mprotect:
-      sc.result = 0; /* Just do nothing now. */
-      break;
-
-    case CB_SYS_NDS32_isatty:
-      sc.result = sim_io_isatty (sd, CCPU_GPR[0].s);
-      if (sc.result == -1)
-	sc.result = 0; /* -1 is returned if EBADF, but caller wants 0. */
-      break;
-
-    case CB_SYS_NDS32_getcmdline:
-      sc.result = CCPU_GPR[0].u;
-      sim_write (sd, CCPU_GPR[0].u, (unsigned char*)sd->cmdline, strlen (sd->cmdline) + 1);
-      break;
-
-    /* This is used by libgloss only.  */
-    case CB_SYS_NDS32_errno:
-      sc.result = sim_io_get_errno (sd);
-      break;
-    }
-
-out:
-  if (sc.result < 0)
-    {
-      if (sc.errcode == 0)
-	sc.errcode = errno;
-      CCPU_GPR[0].s = -sc.errcode;
-    }
-  else
-    CCPU_GPR[0].s = sc.result;
-  return cia + 4;
+  nds32_raise_exception (cpu, EXP_GENERAL, SIM_SIGILL,
+			 "Unhandled %s instruction (%08x)\n", tag, insn);
 }
 
 ulongest_t
@@ -557,16 +155,14 @@ __nds32_ld (sim_cpu *cpu, SIM_ADDR addr, int size, int aligned_p)
   ulongest_t val = 0;
   int order;
   SIM_DESC sd = CPU_STATE (cpu);
-  uint32_t cia = CCPU_USR[NC_PC].u;
 
   SIM_ASSERT (size <= sizeof (ulongest_t));
 
   if (aligned_p && (addr & (size - 1)) != 0)
-    {
-      sim_io_eprintf (sd, "Unaligned access at 0x%08x. "
-			  "Read of address 0x%08x", cia, addr);
-      sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_stopped, SIM_SIGSEGV);
-    }
+    nds32_raise_exception (cpu, EXP_GENERAL, SIM_SIGSEGV,
+			   "Alignment check exception. "
+			   "Read of address 0x%08x in size of %d.\n",
+			   addr, size);
 
   r = sim_read (sd, addr, (unsigned char *) &val, size);
   order = CCPU_SR_TEST (PSW, PSW_BE) ? BIG_ENDIAN : LITTLE_ENDIAN;
@@ -575,9 +171,8 @@ __nds32_ld (sim_cpu *cpu, SIM_ADDR addr, int size, int aligned_p)
   if (r == size)
     return val;
 
-  sim_io_eprintf (sd, "Access violation at 0x%08x. Read of address 0x%08x\n",
-		  cia, addr);
-  sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_stopped, SIM_SIGSEGV);
+  nds32_raise_exception (cpu, EXP_GENERAL, SIM_SIGSEGV,
+			 "Access violation. Read of address 0x%08x.\n", addr);
 
   return val;
 }
@@ -589,16 +184,14 @@ __nds32_st (sim_cpu *cpu, SIM_ADDR addr, int size, ulongest_t val,
   int r;
   int order;
   SIM_DESC sd = CPU_STATE (cpu);
-  uint32_t cia = CCPU_USR[NC_PC].u;
 
   SIM_ASSERT (size <= sizeof (ulongest_t));
 
   if (aligned_p && (addr & (size - 1)) != 0)
-    {
-      sim_io_eprintf (sd, "Unaligned access at 0x%08x. "
-			  "Read of address 0x%08x", cia, addr);
-      sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_stopped, SIM_SIGSEGV);
-    }
+    nds32_raise_exception (cpu, EXP_GENERAL, SIM_SIGSEGV,
+			   "Alignment check exception. "
+			   "Write of address 0x%08x in size of %d.\n",
+			   addr, size);
 
   order = CCPU_SR_TEST (PSW, PSW_BE) ? BIG_ENDIAN : LITTLE_ENDIAN;
   store_unsigned_integer ((unsigned char *) &val, size, order, val);
@@ -607,9 +200,8 @@ __nds32_st (sim_cpu *cpu, SIM_ADDR addr, int size, ulongest_t val,
   if (r == size)
     return;
 
-  sim_io_eprintf (sd, "Access violation at 0x%08x. "
-		      "Write of address 0x%08x\n", cia, addr);
-  sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_stopped, SIM_SIGSEGV);
+  nds32_raise_exception (cpu, EXP_GENERAL, SIM_SIGSEGV,
+			 "Access violation. Write of address 0x%08x\n", addr);
 
   return;
 }
@@ -758,9 +350,9 @@ nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 33:			/* smwa */
       if (base & 3)
 	{
-	  sim_io_eprintf (sd, "SMWA: unaligned access at 0x%x. "
-			      "Write of address 0x%llx.\n",
-			  cia, base);
+	  nds32_raise_exception (cpu, EXP_GENERAL, SIM_SIGSEGV,
+				 "Alignment check exception (SMWA). "
+				 "Write of address 0x%08x.\n", base);
 	  return cia;
 	}
     case 32:			/* smw */
@@ -789,10 +381,9 @@ nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 1:			/* lmwa */
       if (base & 3)
 	{
-	  sim_io_eprintf (sd, "LMWA: unaligned access at 0x%x. "
-			      "Read of address 0x%llx.\n",
-			  cia, base);
-	  sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_stopped, SIM_SIGSEGV);
+	  nds32_raise_exception (cpu, EXP_GENERAL, SIM_SIGSEGV,
+				 "Alignment check exception (LMWA). "
+				 "Read of address 0x%08x.\n", base);
 	  return cia;
 	}
     case 0:			/* lmw */
@@ -1355,8 +946,7 @@ nds32_decode32_br2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	}
       else
 	{
-	  sim_io_error (CPU_STATE (cpu), "Nested IFCALL.\n");
-	  sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_stopped, SIM_SIGABRT);
+	  /* Nested IFCALL. Do nothing.  */
 	}
       break;
     case 0x2:			/* beqz */
@@ -1448,7 +1038,7 @@ nds32_decode32_misc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       break;
     case 0x5:			/* trap */
     case 0xa:			/* break */
-      sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_stopped, SIM_SIGTRAP);
+      nds32_raise_exception (cpu, EXP_DEBUG, SIM_SIGTRAP, NULL);
       return cia; /* FIXME dispatch exception? */
     case 0x2:			/* mfsr */
       CCPU_GPR[rt] = CCPU_SR[__GF (insn, 10, 10)];
@@ -1885,7 +1475,7 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
     case 0x35:			/* break16, ex9.it */
       if (imm9u < 32)		/* break16 */
 	{
-	  sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_stopped, SIM_SIGTRAP);
+	  nds32_raise_exception (cpu, EXP_DEBUG, SIM_SIGTRAP, NULL);
 	  return cia;
 	}
 
@@ -2072,6 +1662,8 @@ sim_engine_run (SIM_DESC sd, int next_cpu_nr, int nr_cpus, int siggnal)
   if (siggnal != 0)
     {
       /* FIXME: Study kernel to make sure this.  */
+      /* TODO: In OPERATING_ENVIRONMENT, users may want to handle
+	       this himself. */
       sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_exited,
 		       128 + siggnal);
       return;
@@ -2254,6 +1846,11 @@ nds32_pc_set (sim_cpu *cpu, sim_cia cia)
 static void
 nds32_initialize_cpu (SIM_DESC sd, sim_cpu *cpu, struct bfd *abfd)
 {
+  memset (cpu->reg_gpr, 0, sizeof (cpu->reg_gpr));
+  memset (cpu->reg_usr, 0, sizeof (cpu->reg_usr));
+  memset (cpu->reg_sr, 0, sizeof (cpu->reg_sr));
+  memset (cpu->reg_fpr, 0, sizeof (cpu->reg_fpr));
+
   /* Common operations defined in sim-cpu.h */
   CPU_REG_FETCH (cpu) = nds32_fetch_register;
   CPU_REG_STORE (cpu) = nds32_store_register;
@@ -2270,6 +1867,10 @@ nds32_initialize_cpu (SIM_DESC sd, sim_cpu *cpu, struct bfd *abfd)
   CCPU_SR_SET (MSC_CFG, MSC_CFG_MAC);
   CCPU_SR_SET (MSC_CFG, MSC_CFG_IFC);
   CCPU_SR_SET (MSC_CFG, MSC_CFG_EIT);
+
+  CCPU_SR_CLEAR (IVB, IVB_EVIC);	/* (IM) */
+  CCPU_SR_PUT (IVB, IVB_ESZ, 1);	/* 16-byte */
+  CCPU_SR_PUT (IVB, IVB_IVBASE, 0);	/* (IM) */
 }
 
 SIM_DESC
@@ -2333,7 +1934,7 @@ sim_open (SIM_OPEN_KIND kind, host_callback * callback,
       nds32_initialize_cpu (sd, cpu, abfd);
     }
 
-  callback->syscall_map = cb_nds32_syscall_map;
+  callback->syscall_map = cb_nds32_libgloss_syscall_map;
 
   return sd;
 }
