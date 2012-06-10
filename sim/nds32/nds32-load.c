@@ -36,6 +36,7 @@
 
 #include "nds32-sim.h"
 #include "nds32-mm.h"
+#include "nds32-syscall.h"
 
 static void
 nds32_simple_osabi_sniff_sections (bfd *abfd, asection *sect, void *obj)
@@ -318,6 +319,8 @@ nds32_init_libgloss (SIM_DESC sd, struct bfd *abfd, char **argv, char **env)
 {
   int len, mlen, i;
 
+  STATE_CALLBACK (sd)->syscall_map = cb_nds32_libgloss_syscall_map;
+
   /* Save argv for -mcrt-arg hacking.  */
   memset (sd->cmdline, 0, sizeof (sd->cmdline));
   mlen = sizeof (sd->cmdline) - 1;
@@ -363,6 +366,8 @@ nds32_init_linux (SIM_DESC sd, struct bfd *abfd, char **argv, char **env)
   uint32_t flat;			/* Beginning of argv/env strings.  */
   unsigned char buf[8];
   int i;
+
+  STATE_CALLBACK (sd)->syscall_map = cb_nds32_linux_syscall_map;
 
   /* Check stack layout in
 	http://articles.manugarg.com/aboutelfauxiliaryvectors.html
