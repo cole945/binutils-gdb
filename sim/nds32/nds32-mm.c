@@ -56,14 +56,40 @@ device_io_read_buffer (device *me ATTRIBUTE_UNUSED,
 			sim_cia cia ATTRIBUTE_UNUSED)
 {
   struct nds32_mm *mm = STATE_MM (sd);
-  struct nds32_vm_area *vma = nds32_find_vma (mm, addr);
+  struct nds32_vm_area *vma;
   cpu = STATE_CPU (sd, 0);
   cia = CIA_GET (cpu);
+
+#if defined (USE_TLB)
+  if (mm->icache && addr >= mm->icache->vm_start
+      && (addr + nr_bytes) <= mm->icache->vm_end)
+    {
+      /* mm->cache_ihit++; */
+      vma = mm->icache;
+      goto FOUND;
+    }
+  else if (mm->dcache && addr >= mm->dcache->vm_start
+	   && (addr + nr_bytes) <= mm->dcache->vm_end)
+    {
+      /* mm->cache_dhit++; */
+      vma = mm->dcache;
+      goto FOUND;
+    }
+  /* mm->cache_miss++; */
+  vma = nds32_find_vma (mm, addr);
+  if (vma->vm_prot & PROT_EXEC)
+    mm->icache = vma;
+  else
+    mm->dcache = vma;
+#else
+  vma = nds32_find_vma (mm, addr);
+#endif
 
   if (vma == NULL || addr < vma->vm_start
       || (addr + nr_bytes - 1) >= vma->vm_end)
     return 0;
 
+FOUND:
   memcpy (source, vma->vm_buf + (addr - vma->vm_start), nr_bytes);
 
   return nr_bytes;
@@ -79,14 +105,30 @@ device_io_write_buffer (device *me ATTRIBUTE_UNUSED,
 			SIM_DESC sd, SIM_CPU *cpu, sim_cia cia)
 {
   struct nds32_mm *mm = STATE_MM (sd);
-  struct nds32_vm_area *vma = nds32_find_vma (mm, addr);
+  struct nds32_vm_area *vma = NULL;
   cpu = STATE_CPU (sd, 0);
   cia = CIA_GET (cpu);
+
+#if defined (USE_TLB)
+  if (mm->dcache && addr >= mm->dcache->vm_start
+      && (addr + nr_bytes) <= mm->dcache->vm_end)
+    {
+      /* mm->cache_dhit++; */
+      vma = mm->dcache;
+      goto FOUND;
+    }
+  /* mm->cache_miss++; */
+  vma = nds32_find_vma (mm, addr);
+  mm->dcache = vma;
+#else
+  vma = nds32_find_vma (mm, addr);
+#endif
 
   if (vma == NULL || addr < vma->vm_start
       || (addr + nr_bytes - 1) >= vma->vm_end)
     return 0;
 
+FOUND:
   memcpy (vma->vm_buf + (addr - vma->vm_start), source, nr_bytes);
 
   return nr_bytes;
@@ -127,7 +169,9 @@ nds32_find_vma (struct nds32_mm *mm, uint32_t addr)
     }
 
   if (vma != MM_HEAD (mm))
-    return vma;
+    {
+      return vma;
+    }
   return NULL;
 }
 
@@ -149,6 +193,10 @@ nds32_link_vma (struct nds32_mm *mm, struct nds32_vm_area *vma)
   vma->vm_prev = prev;
   prev->vm_next->vm_prev = vma;
   prev->vm_next = vma;
+
+#if defined (USE_TLB)
+  mm->icache = mm->dcache = NULL;
+#endif
 }
 
 /* Remove a VMA mapping and unmap its buffer.  */
@@ -163,6 +211,9 @@ nds32_unlink_vma (struct nds32_mm *mm, uint32_t addr, uint32_t len)
   if (!vma)
     return;
 
+#if defined (USE_TLB)
+  mm->icache = mm->dcache = NULL;
+#endif
   /*
     Possible intersection cases:
 
@@ -200,6 +251,7 @@ nds32_unlink_vma (struct nds32_mm *mm, uint32_t addr, uint32_t len)
 	  vma_tmp->vm_start = oe;
 	  vma_tmp->vm_end = vma->vm_end;
 	  vma_tmp->vm_buf = vma->vm_buf + (oe - vma->vm_start);
+	  vma_tmp->vm_prot = vma->vm_prot;
 	  vma->vm_end = os;
 	  nds32_link_vma (mm, vma_tmp);
 	}
@@ -264,6 +316,11 @@ nds32_mm_init (struct nds32_mm *mm)
   mm->mmap.vm_prev = mm->mmap.vm_next = MM_HEAD (mm);
   mm->start_sp = STACK_TOP;
   mm->free_cache = TASK_UNMAPPED_BASE;
+#if defined (USE_TLB)
+  mm->icache = mm->dcache = NULL;
+  /* mm->cache_miss = 0;
+  mm->cache_ihit = mm->cache_dhit = 0; */
+#endif
 }
 
 /* munmap () for Linux VMA.  */
@@ -293,7 +350,7 @@ nds32_mmap (sim_cpu *cpu, uint32_t addr, size_t len,
   struct nds32_vm_area *vma;
 
   /* For debugging */
-  prot |= PROT_READ | PROT_WRITE | PROT_EXEC;
+  prot |= PROT_READ | PROT_WRITE;
 
   if (flags & MAP_ANONYMOUS)
     phy = mmap (NULL, len, prot, flags & ~MAP_FIXED, fd, offset);
@@ -318,6 +375,7 @@ nds32_mmap (sim_cpu *cpu, uint32_t addr, size_t len,
   vma = nds32_alloc_vma ();
   vma->vm_buf = phy;
   vma->vm_start = addr;
+  vma->vm_prot = prot;
   vma->vm_end = addr + PAGE_ROUNDUP (len);
   nds32_link_vma (mm, vma);
 
@@ -351,8 +409,8 @@ nds32_sys_brk (sim_cpu *cpu, uint32_t addr)
     {
       /* create pages */
       nds32_mmap (cpu, PAGE_ROUNDUP (mm->brk), addr - PAGE_ROUNDUP (mm->brk),
-		PROT_READ | PROT_WRITE | PROT_EXEC,
-		MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK,
+		PROT_READ | PROT_WRITE,
+		MAP_PRIVATE | MAP_ANONYMOUS,
 		-1, 0);
       return mm->brk = addr;
     }
