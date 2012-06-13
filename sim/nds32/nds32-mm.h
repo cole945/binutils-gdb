@@ -46,12 +46,23 @@ struct nds32_vm_area
   uint32_t vm_end;			/* First address after this interval */
   struct nds32_vm_area *vm_next;
   struct nds32_vm_area *vm_prev;
+  uint32_t vm_prot;
   char *vm_buf;
 };
 
 struct nds32_mm
 {
   struct nds32_vm_area mmap;		/* Head node for vm_area */
+
+#if defined USE_TLB
+  /* A simple vma lookup cache for non-/EXEC pages. */
+  struct nds32_vm_area *dcache;
+  struct nds32_vm_area *icache;
+  /* Accounting hit rates.  */
+  /* uint64_t cache_miss;
+  uint64_t cache_ihit;
+  uint64_t cache_dhit; */
+#endif
 
   uint32_t start_brk;			/* Start address of brk */
   uint32_t brk;				/* Final address of brk */
