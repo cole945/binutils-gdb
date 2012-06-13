@@ -132,9 +132,11 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
 
   nds32_mm_init (mm);
 
+  /* Allocate stack.  */
+  /* TODO: Executable stack.  Currently, EXEC affects vma cache. */
   nds32_mmap (cpu, mm->start_sp - mm->limit_sp, mm->limit_sp,
-	      PROT_READ | PROT_WRITE | PROT_EXEC,
-	      MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED | MAP_STACK, -1, 0);
+	      PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED,
+	      -1, 0);
 
   /* FIXME: Handle ET_DYN and ET_EXEC.  */
   phdr = elf_tdata (abfd)->phdr;
@@ -142,6 +144,7 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
   for (i = 0; i < elf_elfheader (abfd)->e_phnum; i++)
     {
       uint32_t addr, len;
+      uint32_t prot = 0;
 
       if (phdr[i].p_type == PT_INTERP)
 	interp_phdr = &phdr[i];
@@ -154,11 +157,17 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
       len = PAGE_ROUNDUP (len);
       addr = PAGE_ALIGN (addr);
 
+      if (phdr[i].p_flags & PF_X)
+	prot |= PROT_EXEC;
+      if (phdr[i].p_flags & PF_W)
+	prot |= PROT_WRITE;
+      if (phdr[i].p_flags & PF_R)
+	prot |= PROT_READ;
+
       if (sd->exec_base == -1)
 	sd->exec_base = addr;
 
-      nds32_mmap (cpu, addr, len,
-		  PROT_READ | PROT_WRITE | PROT_EXEC,
+      nds32_mmap (cpu, addr, len, prot,
 		  MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED,
 		  -1, 0);
 
@@ -197,7 +206,7 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
   interp_base = nds32_get_unmapped_area (mm, 0, len);
   for (i = 0; i < elf_elfheader (sd->interp_bfd)->e_phnum; i++)
     {
-      uint32_t addr, len;
+      uint32_t addr, len, prot = 0;
 
       if (phdr[i].p_type != PT_LOAD || phdr[i].p_memsz == 0)
 	continue;
@@ -207,8 +216,14 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
       len = PAGE_ROUNDUP (len);
       addr = PAGE_ALIGN (addr);
 
-      nds32_mmap (cpu, addr, len,
-		  PROT_READ | PROT_WRITE | PROT_EXEC,
+      if (phdr[i].p_flags & PF_X)
+	prot |= PROT_EXEC;
+      if (phdr[i].p_flags & PF_W)
+	prot |= PROT_WRITE;
+      if (phdr[i].p_flags & PF_R)
+	prot |= PROT_READ;
+
+      nds32_mmap (cpu, addr, len, prot,
 		  MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED,
 		  -1, 0);
     }

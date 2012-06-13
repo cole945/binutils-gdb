@@ -1943,6 +1943,21 @@ void
 sim_close (SIM_DESC sd, int quitting)
 {
   /* Nothing to do.  */
+  /* TODO: Release vma mappings.  */
+#if 0 && defined (USE_TLB)
+  char *SIM_DEBUG = getenv ("SIM_DEBUG");
+  if (!SIM_DEBUG || atoi (SIM_DEBUG) == 0)
+    return;
+
+  struct nds32_mm *mm = STATE_MM(sd);
+  uint64_t t = mm->cache_ihit + mm->cache_dhit + mm->cache_miss;
+  nds32_dump_vma (mm);
+
+  printf ("i-hit rate: %f (%llu/%llu)\n",
+	  (double) mm->cache_ihit / t * 100, mm->cache_ihit, t);
+  printf ("d-hit rate: %f (%llu/%llu)\n",
+	  (double) mm->cache_dhit / t * 100, mm->cache_dhit, t);
+#endif
 }
 
 SIM_RC
