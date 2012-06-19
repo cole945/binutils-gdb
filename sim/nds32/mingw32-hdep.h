@@ -90,6 +90,7 @@ struct utsname {
 /*
  * rlimit
  */
+typedef uint32_t rlim_t;
 struct rlimit {
   rlim_t rlim_cur;  /* Soft limit */
   rlim_t rlim_max;  /* Hard limit (ceiling for rlim_cur) */
