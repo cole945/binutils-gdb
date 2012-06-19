@@ -53,3 +53,4 @@ UNIMP(fcntl);
 UNIMP(munmap);
 UNIMP(mmap);
 UNIMP(getrlimit);
+UNIMP(setrlimit);
