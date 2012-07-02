@@ -560,7 +560,7 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
 
       type = nds32_init_type (gdbarch, "builtin_type_nds32_tlb_misc", 4);
       nds32_append_field (type, stype1, 0, 3, "ACC_PSZ");
-      nds32_append_field (type, bt->builtin_uint32, 4, 12, "ACC_PSZ");
+      nds32_append_field (type, bt->builtin_uint32, 4, 12, "CID");
       nds32_list_insert (&tdep->nds32_types, reg_name, type);
       return type;
     }
