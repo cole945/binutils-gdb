@@ -361,7 +361,6 @@ nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	{
 	  if (enable4 & (1 << enb4map[aligned][i]))
 	    {
-	      sim_write (sd, base, reg, 4);
 	      nds32_st_unaligned (cpu, base, 4,
 				  CCPU_GPR[NG_SP - (enb4map[aligned][i])].u);
 	      base -= 4;
@@ -870,6 +869,7 @@ nds32_decode32_jreg (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       break; /* NOT taken */
 
     case 3:			/* jralnez */
+      /* Rt is clobbed anyway according to spec.  */
       if (cpu->iflags & NIF_EX9)
 	CCPU_GPR[rt].u = cia + 2;
       else
@@ -886,7 +886,7 @@ nds32_decode32_jreg (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	  return CCPU_GPR[rb].u;
 	}
 
-      break; /* NOT taken */
+      return CCPU_GPR[rt].u; /* cia + 2 for EX9 */
 
     default:
       nds32_bad_op (cpu, cia, insn, "JREG");
@@ -994,6 +994,11 @@ nds32_decode32_br2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0x1c:			/* bgezal */
       if (CCPU_GPR[rt].s >= 0)
 	{
+	  if (cpu->iflags & NIF_EX9)
+	    CCPU_USR[NC_IFCLP].u = cia + 2;
+	  else
+	    CCPU_USR[NC_IFCLP].u = cia + 4;
+
 	  CCPU_GPR[NG_LP].u = cia + 4;
 	  cpu->iflags &= ~NIF_EX9;	/* Check ex9.it for details. */
 	  return cia + (imm16s << 1);
@@ -1363,7 +1368,7 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
       }
     }
 
-  if (__GF (insn, 8, 7) == 0x7d)
+  if (__GF (insn, 8, 7) == 0x7d)	/* movd44 */
     {
       int rt5e = __GF (insn, 4, 4) << 1;
       int ra5e = __GF (insn, 0, 4) << 1;
@@ -1629,7 +1634,7 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
 	    }
 	  goto done;
 	}
-      else if (CCPU_GPR[rt38].u != CCPU_GPR[5].u)
+      else if (CCPU_GPR[rt38].u != CCPU_GPR[5].u) /* bnes38 */
 	return cia + (N16_IMM8S (insn) << 1);
       goto done;
     case 0xe:			/* lwi37/swi37 */
