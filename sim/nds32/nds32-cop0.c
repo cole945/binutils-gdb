@@ -182,6 +182,15 @@ nds32_decode32_fcmp (sim_fpu *sfa, sim_fpu *sfb)
     4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
   };
 
+  /*
+    0 - GT
+    1 - EQ
+    2 - LT
+    3 - UN (quiet)
+    4 - UN (signaling)
+    9 - Calc
+   */
+
   r = ctab [s2i[op0is] + s2i[op1is] * 10];
   if (r != 9)
     return r;
@@ -236,7 +245,7 @@ nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       sim_fpu_64to (&sfb, u64);
     }
 
-  if ((insn & 0x7) == 0)
+  if ((insn & 0x7) == 0)	/* FS1 or FD1 */
     {
       int dp = (insn & 0x8) > 0;
       int sft_to_dp = dp;
@@ -294,8 +303,6 @@ nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	case 0x2:		/* fcpynsd */
 	case 0x4:		/* fmaddd */
 	case 0x5:		/* fmsubd */
-	case 0x6:		/* fcmovnd */
-	case 0x7:		/* fcmovzd */
 	case 0x8:		/* fnmaddd */
 	case 0x9:		/* fnmsubd */
 	case 0xa:
