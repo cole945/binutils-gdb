@@ -282,6 +282,7 @@ SIM_RC
 sim_load (SIM_DESC sd, char *prog_name, struct bfd *prog_bfd, int from_tty)
 {
   bfd *result_bfd;
+  struct nds32_mm *mm = STATE_MM (sd);
 
   if (prog_bfd == NULL)
     prog_bfd = STATE_PROG_BFD (sd);
@@ -291,8 +292,12 @@ sim_load (SIM_DESC sd, char *prog_name, struct bfd *prog_bfd, int from_tty)
     return SIM_RC_FAIL;
   SIM_ASSERT (STATE_PROG_BFD (sd) != NULL);
 
+  /* Free vma for previous program.  */
+  nds32_freeall_vma (mm);
+
   /* Allocate core memory if none is specified by user.  */
-  if (STATE_MEMOPT (sd) == NULL && prog_bfd != NULL)
+  if (STATE_MEMOPT (sd) == NULL && sd->mem_attached == FALSE
+      && prog_bfd != NULL)
     nds32_alloc_memory (sd, prog_bfd);
 
   if (STATE_ENVIRONMENT (sd) != USER_ENVIRONMENT)

@@ -81,5 +81,6 @@ void *nds32_mmap (sim_cpu *cpu, uint32_t addr, size_t len,
 	      int prot, int flags, int fd, off_t offset);
 uint32_t nds32_get_unmapped_area (struct nds32_mm *mm, uint32_t addr,
 				  uint32_t len);
+void nds32_freeall_vma (struct nds32_mm *mm);
 
 #endif

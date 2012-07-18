@@ -87,6 +87,14 @@ struct sim_state {
   struct bfd *interp_bfd;	/* For Linux dynamic linker.  */
   uint32_t interp_base;		/* Base address of where interp is loaded. */
   uint32_t exec_base;		/* Base address of where executable is loaded. */
+  /* If the same memory-region is already attached (registered) to sim-core,
+     the program just crashs. Unfortunately, we have no way to know whether
+     the region is attached or not, so I use `mem_attached' to bookkeep it.
+
+     MEMOPT provides `memory-delete all' command to delete all the mappings,
+     but if sim_core_attach is used in order to attach device_io, then
+     there is no way to detach all. */
+  int mem_attached;
 
   struct nds32_mm mm;
 #define STATE_MM(sd) (&(sd)->mm)
