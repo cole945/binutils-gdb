@@ -1,0 +1,3 @@
+* Allocate BRK at once to improve performance of HEAP.
+* Use RLIMIT_DATA to limit the size of BRK
+* Bookkeep attached memory region, region can be properly removed.
