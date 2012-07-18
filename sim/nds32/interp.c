@@ -1884,6 +1884,7 @@ sim_open (SIM_OPEN_KIND kind, host_callback * callback,
 {
   int i;
   SIM_DESC sd = sim_state_alloc (kind, callback);
+  struct nds32_mm *mm = STATE_MM (sd);
 
   /* The cpu data is kept in a separately allocated chunk of memory.  */
   if (sim_cpu_alloc_all (sd, 1, 0) != SIM_RC_OK)
@@ -1939,6 +1940,11 @@ sim_open (SIM_OPEN_KIND kind, host_callback * callback,
       nds32_initialize_cpu (sd, cpu, abfd);
     }
 
+  /* Always initial memory-management struct;
+     otherwise, we cannot know whether VMA are used or not.  */
+  nds32_mm_init (mm);
+  sd->mem_attached = FALSE;
+
   callback->syscall_map = cb_nds32_libgloss_syscall_map;
 
   return sd;
@@ -1947,14 +1953,15 @@ sim_open (SIM_OPEN_KIND kind, host_callback * callback,
 void
 sim_close (SIM_DESC sd, int quitting)
 {
-  /* Nothing to do.  */
-  /* TODO: Release vma mappings.  */
+  struct nds32_mm *mm = STATE_MM (sd);
+  nds32_freeall_vma (mm);
+
 #if 0 && defined (USE_TLB)
+  /* Dump VMA usage for debugging.  */
   char *SIM_DEBUG = getenv ("SIM_DEBUG");
   if (!SIM_DEBUG || atoi (SIM_DEBUG) == 0)
     return;
 
-  struct nds32_mm *mm = STATE_MM(sd);
   uint64_t t = mm->cache_ihit + mm->cache_dhit + mm->cache_miss;
   nds32_dump_vma (mm);
 
