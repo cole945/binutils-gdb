@@ -152,6 +152,7 @@ nds32_alloc_vma ()
 static void
 nds32_free_vma (struct nds32_vm_area *vma)
 {
+  /* The caller should un-map vm_buf itself.  */
   free (vma);
 }
 
@@ -269,6 +270,22 @@ nds32_unlink_vma (struct nds32_mm *mm, uint32_t addr, uint32_t len)
     }
 }
 
+void
+nds32_freeall_vma (struct nds32_mm *mm)
+{
+  struct nds32_vm_area *vma;
+  struct nds32_vm_area *next;
+
+  for (vma = MM_HEAD (mm)->vm_next; vma != MM_HEAD (mm); vma = next)
+    {
+      next = vma->vm_next;
+      munmap (vma->vm_buf, vma->vm_end - vma->vm_start);
+      nds32_free_vma (vma);
+    }
+
+  nds32_mm_init (mm);
+}
+
 /* Dump VMA list for debugging.  */
 
 void
@@ -277,7 +294,7 @@ nds32_dump_vma (struct nds32_mm *mm)
   struct nds32_vm_area *vma;
 
   for (vma = MM_HEAD (mm)->vm_next; vma != MM_HEAD (mm); vma = vma->vm_next)
-    printf ("%08x-%08x\n", vma->vm_start, vma->vm_end);
+    printf ("%08x-%08x @ %p\n", vma->vm_start, vma->vm_end, vma->vm_buf);
 }
 
 /* Find a suitable address for addr/len.  */
