@@ -21,7 +21,7 @@
 #include "config.h"
 
 #include <stdlib.h>
-#if defined (__linux__)
+#if defined (__linux__) || defined (__CYGWIN__)
 #include <sys/mman.h>
 #include <sys/resource.h>
 #elif defined (__WIN32__)

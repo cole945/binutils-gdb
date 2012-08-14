@@ -25,7 +25,7 @@
 #include "gdb/callback.h"
 #include "targ-vals.h"
 
-#if defined (__linux__)
+#if defined (__linux__) || defined (__CYGWIN__)
 #include <sys/time.h>
 #include <sys/times.h>
 #include <sys/utsname.h>
