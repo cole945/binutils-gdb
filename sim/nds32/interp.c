@@ -1233,9 +1233,10 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	    CCPU_GPR[NG_LP].u = cia + 4;
 	  cia = cia + (N32_IMMS (insn, 24) << 1);
 	}
-      if (CCPU_SR_TEST (PSW, PSW_IFCON) && insn & (1 << 24))
+      if (CCPU_SR_TEST (PSW, PSW_IFCON))
 	{
-	  CCPU_GPR[NG_LP] = CCPU_USR[NC_IFCLP];
+	  if (insn & (1 << 24))	/* jal */
+	    CCPU_GPR[NG_LP] = CCPU_USR[NC_IFCLP];
 	  CCPU_SR_CLEAR (PSW, PSW_IFCON);
 	}
 
