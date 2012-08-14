@@ -41,7 +41,7 @@
 #include "nds32-mm.h"
 #include "nds32-syscall.h"
 
-#ifdef __linux__
+#if defined (__linux__) || defined (__CYGWIN__)
 /* FIXME */
 #include <sys/types.h>
 #elif defined (__WIN32__)
