@@ -21,7 +21,7 @@
 #include "config.h"
 
 #include <errno.h>
-#if defined (__linux__)
+#if defined (__linux__) || defined (__CYGWIN__)
 #include <sys/mman.h>
 #elif defined (__WIN32__)
 #include "mingw32-hdep.h"
