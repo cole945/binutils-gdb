@@ -100,6 +100,38 @@ store_unsigned_integer (unsigned char *addr, int len,
     }
 }
 
+/* Find first zero byte in sequential memory address.
+   Return ordinal number. Return 0 if not found.  */
+
+static uint32_t
+find_null (unsigned char *memory)
+{
+  int i;
+
+  for (i = 0; i < 4; i++)
+    {
+      if (memory[i] == '\0')
+	return i + 1;
+    }
+  return 0;
+}
+
+/* Find first zero byte or mis-match in sequential memory address.
+   If no such byte is found, return 0.  */
+
+static uint32_t
+find_null_mism (unsigned char *b1, unsigned char *b2)
+{
+  int i;
+
+  for (i = 0; i < 4; i++)
+    {
+      if ((b1[i] == '\0') || (b1[i] != b2[i]))
+	return -4 + i;
+    }
+  return 0;
+}
+
 static void
 nds32_dump_registers (SIM_DESC sd)
 {
@@ -307,114 +339,184 @@ nds32_decode32_mem (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 static sim_cia
 nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
-  /* smwa?.(a|b)(d|i)m? rb,[ra],re,enable4 */
+  /* (l|s)mwa?zb?.(a|b)(d|i)m? rb,[ra],re,enable4 */
   SIM_DESC sd = CPU_STATE (cpu);
   int rb, re, ra, enable4, i;
-  int aligned;
-  int m = 0;
-  int di;			/* dec=-1 or inc=1 */
-  unsigned char reg[4];
-  char enb4map[2][4] = { /*smw */ {0, 1, 2, 3}, /*smwa */ {3, 1, 2, 0} };
-  ulongest_t base = ~1 + 1;
+  int WAC;		/* With Alignment Check? */
+  int TNReg = 0;	/* TNReg = Total number of registers stored.  */
+  int di;		/* dec=-1 or inc=1 */
+  int order = CCPU_SR_TEST (PSW, PSW_BE) ? BIG_ENDIAN : LITTLE_ENDIAN;
+  int len = 4;		/* load/store bytes */
+  int null_loc = 0;	/* zero byte location */
+  int ret;
+  char enb4map[2][4] = { /*smw */ {3, 2, 1, 0}, /*smwa */ {0, 1, 2, 3} };
+  uint32_t val = 0;
+  SIM_ADDR base = -1;
 
+  /* Undefined opcode?  */
+  if ((insn & 3) == 3)
+    {
+      nds32_bad_op (cpu, cia, insn, "LSMW");
+      return cia;
+    }
+
+  /* Invalid opcode?  */
+  if ((insn & 11) == 10)
+    {
+      nds32_bad_op (cpu, cia, insn, "LSMW");
+      return cia;
+    }
+
+  /* Decode instruction.  */
   rb = N32_RT5 (insn);
   ra = N32_RA5 (insn);
   re = N32_RB5 (insn);
   enable4 = (insn >> 6) & 0x0F;
-  aligned = (insn & 3) ? 1 : 0;
+  WAC = (insn & 1) ? 1 : 0;
   di = (insn & (1 << 3)) ? -1 : 1;
 
-  /* m = TNReg * 4; */
-  m += (enable4 & 0x1) ? 1 : 0;
-  m += (enable4 & 0x2) ? 1 : 0;
-  m += (enable4 & 0x4) ? 1 : 0;
-  m += (enable4 & 0x8) ? 1 : 0;
+  /* The first memory address.  */
+  base = CCPU_GPR[ra].u;
+
+  /* With Alignment Check? */
+  if (WAC && base & 3)
+  {
+      nds32_raise_exception (cpu, EXP_GENERAL, SIM_SIGSEGV,
+			     (insn & 32) /* store or load */
+			     ? "Alignment check exception (SMWA). "
+			       "Write of address 0x%08x.\n"
+			     : "Alignment check exception (LMWA). "
+			       "Read of address 0x%08x.\n", base);
+      return cia;
+  }
+
+  /* TNReg = Count_Registers(register_list); */
+  TNReg += (enable4 & 0x1) ? 1 : 0;
+  TNReg += (enable4 & 0x2) ? 1 : 0;
+  TNReg += (enable4 & 0x4) ? 1 : 0;
+  TNReg += (enable4 & 0x8) ? 1 : 0;
   if (rb < NG_FP && re < NG_FP)
     {
       /* Reg-list should not include fp, gp, lp and sp,
 	 i.e., the rb == re == sp case, anyway... */
-      m += (re - rb) + 1;
+      TNReg += (re - rb) + 1;
     }
-  m *= 4;			/* 4*TNReg */
-
-  base = CCPU_GPR[ra].u;
 
   if (insn & (1 << 0x4))	/* a:b, a for +-4 */
     base += 4 * di;
+  if (insn & (1 << 0x3))	/* d:i, d for - (TNReg - 1) * 4) */
+    base -= (TNReg - 1) * 4;
 
-  if (di == 1)
-    base += (m - 4);
 
-  switch (insn & 0x23)
+  /* Operation from low address memory to high address memory.  */
+  for (i = rb; i <= re && rb < NG_FP; i++)
     {
-    case 33:			/* smwa */
-      if (base & 3)
+      /* Skip if re == rb == sp > fp.  */
+      if (insn & 32)
 	{
-	  nds32_raise_exception (cpu, EXP_GENERAL, SIM_SIGSEGV,
-				 "Alignment check exception (SMWA). "
-				 "Write of address 0x%08x.\n", base);
-	  return cia;
-	}
-    case 32:			/* smw */
-      /* TODO: alignment exception check for SMWA */
-      for (i = 0; i < 4; i++)
-	{
-	  if (enable4 & (1 << enb4map[aligned][i]))
+	  /* store */
+
+	  val = CCPU_GPR[i].u;
+	  store_unsigned_integer ((unsigned char *) &val, 4, order, val);
+	  if ((insn & 11) == 2)
 	    {
-	      nds32_st_unaligned (cpu, base, 4,
-				  CCPU_GPR[NG_SP - (enb4map[aligned][i])].u);
-	      base -= 4;
+	      /* Until zero byte?  */
+	      null_loc = find_null ((unsigned char *) &val);
+	      len = (null_loc == 0) ? 4 : null_loc;
+	    }
+	  ret = sim_write (sd, base, (unsigned char *) &val, len);
+	  if (ret != len)
+	    {
+	      nds32_raise_exception (cpu, EXP_GENERAL, SIM_SIGSEGV,
+				     "Access violation. Write of address %#x\n",
+				     base);
+	    }
+	  if (null_loc)
+	    /* Zero byte is found.  */
+	    break;
+	}
+      else
+	{
+	  /* load */
+
+	  ret = sim_read (sd, base, (unsigned char *) &val, 4);
+	  if (ret != 4)
+	    {
+	      nds32_raise_exception (cpu, EXP_GENERAL, SIM_SIGSEGV,
+				     "Access violation. Write of address %#x\n",
+				     base);
+	    }
+	  val = extract_unsigned_integer ((unsigned char *) &val, 4, order);
+	  CCPU_GPR[i].u = val;
+	  if ((insn & 11) == 2)
+	    {
+	      /* Until zero byte? */
+	      null_loc = find_null ((unsigned char *) &val);
+	      if (null_loc)
+		/* Zero byte is found.  */
+		break;
 	    }
 	}
-
-      /* Skip if re == rb == sp > fp.  */
-      for (i = re; i >= rb && rb < NG_FP; i--)
-	{
-	  nds32_st_unaligned (cpu, base, 4, CCPU_GPR[i].u);
-	  base -= 4;
-	}
-
-      if (insn & (1 << 2))
-	CCPU_GPR[ra].u += m * di;
-      break;
-    case 1:			/* lmwa */
-      if (base & 3)
-	{
-	  nds32_raise_exception (cpu, EXP_GENERAL, SIM_SIGSEGV,
-				 "Alignment check exception (LMWA). "
-				 "Read of address 0x%08x.\n", base);
-	  return cia;
-	}
-    case 0:			/* lmw */
-      /* TODO: alignment exception check for SMWA */
-      for (i = 0; i < 4; i++)
-	{
-	  if (enable4 & (1 << enb4map[aligned][i]))
-	    {
-	      uint32_t u;
-
-	      u = nds32_ld_unaligned (cpu, base, 4);
-	      CCPU_GPR[NG_SP - (enb4map[aligned][i])].u = u;
-	      base -= 4;
-	    }
-	}
-
-      /* Skip if re == rb == sp > fp.  */
-      for (i = re; i >= rb && rb < NG_FP; i--)
-	{
-	  CCPU_GPR[i].u = nds32_ld_unaligned (cpu, base, 4);
-	  base -= 4;
-	}
-
-      if (insn & (1 << 2))
-	CCPU_GPR[ra].u += m * di;
-      break;
-    case 2:			/* lmwzb */
-    case 34:			/* smwzb */
-    default:
-      nds32_bad_op (cpu, cia, insn, "LSMW");
-      return cia;
+	base += 4;
     }
+
+  /* 4 individual registers from R28 to R31.  */
+  for (i = 0; i < 4; i++)
+    {
+      if (enable4 & (1 << enb4map[WAC][i]))
+	{
+	  if (insn & 32)
+	  {
+	    /* store */
+
+	    val = CCPU_GPR[NG_SP - (enb4map[WAC][i])].u;
+	    store_unsigned_integer ((unsigned char *) &val, 4, order, val);
+	    if ((insn & 11) == 2)
+	      {
+		/* Until zero byte? */
+		null_loc = find_null ((unsigned char *) &val);
+		len = (null_loc == 0) ? 4 : null_loc;
+	      }
+	    ret = sim_write (sd, base, (unsigned char *) &val, len);
+	    if (ret != len)
+	      {
+		nds32_raise_exception (cpu, EXP_GENERAL, SIM_SIGSEGV,
+				       "Access violation. Write of address %#x\n",
+				       base);
+	      }
+	    if (null_loc)
+	      /* Zero byte is found.  */
+	      break;
+	  }
+	  else
+	  {
+	    /* load */
+
+	    ret = sim_read (sd, base, (unsigned char *) &val, 4);
+	    if (ret != 4)
+	      {
+		nds32_raise_exception (cpu, EXP_GENERAL, SIM_SIGSEGV,
+				       "Access violation. Write of address %#x\n",
+				       base);
+	      }
+	    val = extract_unsigned_integer ((unsigned char *) &val, 4, order);
+	    CCPU_GPR[NG_SP - (enb4map[WAC][i])].u = val;
+	    if ((insn & 11) == 2)
+	      {
+		/* Until zero byte? */
+		null_loc = find_null ((unsigned char *) &val);
+		if (null_loc)
+		  /* Until zero byte? */
+		  break;
+	      }
+	  }
+	  base += 4;
+	}
+    }
+
+  /* Update base address register.  */
+  if (insn & (1 << 2))
+    CCPU_GPR[ra].u += TNReg * 4 * di;
 
   return cia + 4;
 }
@@ -654,6 +756,20 @@ nds32_decode32_alu2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       break;
     case 0xb:			/* btst */
       CCPU_GPR[rt].u = (CCPU_GPR[ra].u & (1 << imm5u)) != 0;
+      break;
+    case 0x17:			/* ffzmism */
+      {
+	uint32_t a = CCPU_GPR[ra].u;
+	uint32_t b = CCPU_GPR[rb].u;
+	int order = CCPU_SR_TEST (PSW, PSW_BE) ? BIG_ENDIAN : LITTLE_ENDIAN;
+	int ret;
+
+	store_unsigned_integer ((unsigned char *) &a, 4, order, a);
+	store_unsigned_integer ((unsigned char *) &b, 4, order, b);
+	ret = find_null_mism ((unsigned char *) &a, (unsigned char *) &b);
+	ret = extract_unsigned_integer ((unsigned char *) &ret, 4, order);
+	CCPU_GPR[rt].u = ret;
+      }
       break;
     case 0x24:			/* mul */
       CCPU_GPR[rt].u = CCPU_GPR[ra].u * CCPU_GPR[rb].u;
