@@ -169,3 +169,4 @@ main:
 	FAIL	0x15
 1:
 	PASS
+	EXIT	0

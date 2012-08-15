@@ -12,6 +12,11 @@
 	bal	result
 .endm
 
+.macro	EXIT	code
+	li	$r0, \code
+	syscall	1
+.endm
+
 	.data
 	.align 2
 LPASS_STR:
@@ -57,6 +62,8 @@ swap:
 	.global	result
 	.type	result, @function
 result:
+	smw.adm	$r0,[$sp],$r27,0xe
+	addi	$sp, $sp, -4
 	move	$r6, $r0
 	bnez	$r0, 1f
 	la	$r1, LPASS_STR
@@ -89,7 +96,10 @@ result:
 	move	$r0, $r1
 	bal	puts
 	move	$r0, $r6
-	syscall	1
+
+	addi	$sp, $sp, 4
+	lmw.bim	$r0,[$sp],$r27,0xe
+	ret
 
 	.size	result, .-result
 
