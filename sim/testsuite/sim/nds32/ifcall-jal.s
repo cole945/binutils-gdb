@@ -7,46 +7,75 @@
 	.include "utils.inc"
 
 	.text
+
+	! $r0: address for fail message
+check_ifcon:
+	! check IFCON
+	movi    $r1, 32768	! bit-15 for IFCON
+	mfsr	$r2, $psw
+	and	$r2, $r2, $r1
+	beqz	$r2, 1f
+	jal	puts		! PSW.IFCON is not cleared
+1:
+	ret
+
 	.global	main
 main:
 	smw.adm $r6, [$sp], $r9, 10
 
-	movi    $r8, 32768	! bit-15 for IFCON
+	! ---- test JAL ----
+	ifcall	2f
+	! should return from check_ifcon
+	j	3f
+2:	la	$r0, .Lfstr_ifcon_jal
+	jal	check_ifcon
+	PUTS	.Lfstr_jal		! return to the wrong address
+3:	nop
 
-	! test JAL
-	ifcall	.L0
-	j	.Ltest_jral5
-.L0:
-	jal	.L1		!! test J
-	FAIL	1		! return to the wrong address
 
-.L1:
-	! check IFCON
-	mfsr	$r1, $psw
-	and	$r1, $r1, $r8
-	bnez	$r1, .L2
-	ret
-.L2:
-	FAIL	2		! IFCON not cleared
+	! ---- test JRAL ----
+	ifcall	2f
+	! should return from check_ifcon
+	j	3f
+2:	la	$r0, .Lfstr_ifcon_jral
+	la	$r1, check_ifcon
+	jral	$r1
+	PUTS	.Lfstr_jral		! return to the wrong address
+3:	nop
 
-.Ltest_jral5:
-	! test JAL5
-	ifcall	.L3
-	PASS
+
+	! ---- test JRAL5 ----
+	ifcall	2f
+	! should return from check_ifcon
+	j	3f
+2:	la	$r0, .Lfstr_ifcon_jral5
+	la	$r1, check_ifcon
+	jral5	$r1
+	PUTS	.Lfstr_jral5		! return to the wrong address
+3:	nop
+
+
+	! ---- test JRALNEZ ----
+	ifcall	2f
+	! should return from check_ifcon
+	j	3f
+2:	la	$r0, .Lfstr_ifcon_jralnez
+	la	$r1, check_ifcon
+	jralnez	$r1
+	PUTS	.Lfstr_jralnez		! return to the wrong address
+3:	nop
+
+	PUTS	.Lpstr
 	EXIT	0
-.L3:
-	la	$r3, .L4
-	jral5	$r3	!! test JRAL5
-	FAIL	3		! return to the wrong address
-.L4:
-	! check IFCON
-	mfsr	$r1, $psw
-	and	$r1, $r1, $r8
-	bnez	$r1, .L5
-	ret
-.L5:
-	FAIL	4		! IFCON not cleared
 
 
-.Lpstr:
-	.string "pass\n"
+.section	.rodata
+.Lpstr:		.string "pass\n"
+.Lfstr_jal:     .string "fail: return to wrong address (jal after ifcall)\n"
+.Lfstr_jral:    .string "fail: return to wrong address (jral after ifcall)\n"
+.Lfstr_jral5:   .string "fail: return to wrong address (jral5 after ifcall)\n"
+.Lfstr_jralnez: .string "fail: return to wrong address (jralnez after ifcall)\n"
+.Lfstr_ifcon_jal:      .string "fail: PSW.IFCON is not cleared when jal\n"
+.Lfstr_ifcon_jral:     .string "fail: PSW.IFCON is not cleared when jral\n"
+.Lfstr_ifcon_jral5:    .string "fail: PSW.IFCON is not cleared when jral5\n"
+.Lfstr_ifcon_jralnez:  .string "fail: PSW.IFCON is not cleared when jralnez\n"

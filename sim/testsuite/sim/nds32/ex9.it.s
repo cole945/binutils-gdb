@@ -9,7 +9,7 @@
 .section	.ex9.itable, "a"
 	.align	2
 ITB:
-	.space	32 * 4, 0
+	.space	32 * 4, 0	! pad 32 entries
 .L32:
 	addi	$r7, $r7, 13
 .LITB_J:
@@ -18,7 +18,12 @@ ITB:
 	jal	.LITB_JAL
 	jr	$r8
 
+
 	.text
+test_jal_call:
+	addi	$r7, $r7, -1
+	ret
+
 	.global	main
 main:
 	smw.adm $r6, [$sp], $r9, 10
@@ -33,16 +38,15 @@ main:
 	ex9.it	32
 	addi	$r7, $r7, -30
 
-	beqz	$r7, test_j32
-	la	$r0, .Lfstr_n32
-	b	.LFAIL
+	beqz	$r7, .Ltest_j32
+	PUTS	.Lfstr_n32
 
 
-test_j32:
+.Ltest_j32:
 	!	j > 32
 	! fix the entry in table
 	lwi	$r7, [$r9 + 4]
-	la	$r0, test_jal	! fix this address in
+	la	$r0, .Ltest_jal	! fix this address in
 	srli	$r0, $r0, 1
 	mfsr	$r8, $psw
 	andi	$r8, $r8, 32
@@ -53,11 +57,9 @@ test_j32:
 	swi	$r0, [$r9 + 4]
 
 	ex9.it	33
-	la	$r0, .Lfstr_j32
-	b	.LFAIL
+	PUTS	.Lfstr_j32
 
-
-test_jal:
+.Ltest_jal:
 	!	jal > 32
 	! fix the entry in table
 	lwi	$r7, [$r9 + 8]
@@ -73,51 +75,26 @@ test_jal:
 
 	movi	$r7, 1
 	ex9.it	34
-	beqz	$r7, test_jr
-	la	$r0, .Lfstr_jal
-	j	.LFAIL
+	beqz	$r7, .Ltest_jr
+	PUTS	.Lfstr_jal
 
-test_jal_call:
-	addi	$r7, $r7, -1
-	ret
-	beqz	$r7, test_jr
-	la	$r0, .Lfstr_jal
-	j	.LFAIL
-
-test_jr:
+.Ltest_jr:
 	!	jr > 32
 	la	$r8, .Ldone
 	ex9.it	35
-	la	$r0, .Lfstr_jr
-	j	.LFAIL
+	PUTS	.Lfstr_jr
 
 	!	jral > 32
 
 .Ldone:
-	la	$r0, .Lpstr
-	bal	puts
+	PUTS	.Lpstr
 
 	movi	$r0, 0
 	lmw.bim	$r6, [$sp], $r9, 10
 	ret
 
-.LFAIL:
-	bal	puts
-	movi	$r0, 1
-	syscall 1
-
-.LPASS:
-	bal	puts
-	movi	$r0, 0
-	syscall 1
-
-.Lpstr:
-	.string "pass\n"
-.Lfstr_n32:
-	.string "fall: addi in ex9.it (>=32)\n"
-.Lfstr_j32:
-	.string "fail: j in ex9.it (>=32)\n"
-.Lfstr_jal:
-	.string "fail: jal in ex9.it (>=32)\n"
-.Lfstr_jr:
-	.string "fail: jr in ex9.it (>=32)\n"
+.Lpstr:     .string "pass\n"
+.Lfstr_n32: .string "fall: addi in ex9.it (>=32)\n"
+.Lfstr_j32: .string "fail: j in ex9.it (>=32)\n"
+.Lfstr_jal: .string "fail: jal in ex9.it (>=32)\n"
+.Lfstr_jr:  .string "fail: jr in ex9.it (>=32)\n"

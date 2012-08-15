@@ -2,7 +2,7 @@
 # mach:	 all
 # as:
 # ld:		--defsym=_stack=0x3000000
-# output:	pass\n*MWA*\nprogram stopped with signal*\n
+# output:	pass\n*lignment*MWA*\n
 # xerror:
 
 	.include "utils.inc"
@@ -34,7 +34,7 @@ main:
 	lmw.bi	$r0, [$r9], $r0, 0
 	li	$r1, 0x82838485
 	beq	$r0, $r1, 1f
-	FAIL	1
+	PUTS	.Lfstr0
 
 1:
 	li	$r0, 0x12345678
@@ -51,6 +51,7 @@ main:
 	li	$r1, 0x78563412
 	beq	$r0, $r1, 1f
 	FAIL	2
+	PUTS	.Lfstr1
 1:
 	li	$r0, 0xaabbccdd
 	smw.bi	$r0, [$r9], $r0, 0
@@ -60,13 +61,21 @@ main:
 	li	$r1, 0xccdd8180
 	beq	$r0, $r1, 1f
 	FAIL	3
+	PUTS	.Lfstr2
 1:
-
 
 	la	$r0, LPASS_STR
 	bal	puts
 
 	la	$r9, HALF
-	lmwa.bi	$r0, [$r9], $r0, 0	! This shell fail
+	lmwa.bi	$r0, [$r9], $r0, 0	! Expected to fail.
 
-	FAIL	4
+	PUTS	.Lfstr3
+	EXIT	1
+
+
+.section	.rodata
+.Lfstr0: .string "fail: Unaligned LMW.bi (big-endian)\n"
+.Lfstr1: .string "fail: Unaligned LMW.bi (little-endian)\n"
+.Lfstr2: .string "fail: Aligned LWI\n"
+.Lfstr3: .string "fail: Unaligned LMWA.bi\n"

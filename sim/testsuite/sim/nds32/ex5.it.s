@@ -1,4 +1,4 @@
-# nds32 test J/JAL in ex9, expected to pass.
+# nds32 test J/JAL in ex5.it (index < 32), expected to pass.
 # mach:	 all
 # as:
 # ld:		--defsym=_stack=0x3000000
@@ -17,6 +17,10 @@
 	jr	$r8
 
 	.text
+test_jal_call:
+	addi	$r7, $r7, -1
+	ret
+
 	.global	main
 main:
 	smw.adm $r6, [$sp], $r9, 10
@@ -32,16 +36,13 @@ main:
 	ex9.it	0
 	addi	$r7, $r7, -30
 
-	beqz	$r7, test_j32
-	la	$r0, .Lfstr_n32
-	b	.LFAIL
+	beqz	$r7, .Ltest_j32
+	PUTS	.Lfstr_n32	! FAIL: addi in ex5.it
 
-
-test_j32:
-	!	j > 32
-	! fix the entry in table
+.Ltest_j32:
+	! relocate the entry in table
 	lwi	$r7, [$r9 + 4]
-	la	$r0, test_jal	! fix this address in
+	la	$r0, .Ltest_jal	! fix this address in
 	srli	$r0, $r0, 1
 	mfsr	$r8, $psw
 	andi	$r8, $r8, 32
@@ -51,14 +52,12 @@ test_j32:
 	or	$r0, $r0, $r7
 	swi	$r0, [$r9 + 4]
 
-	ex9.it	1
-	la	$r0, .Lfstr_j32
-	b	.LFAIL
+	ex9.it	0x1		! j  .Ltest_jal
+	PUTS	.Lfstr_j32	! FAIL: j in ex5.it
 
 
-test_jal:
-	!	jal > 32
-	! fix the entry in table
+.Ltest_jal:
+	! relocate the entry in table
 	lwi	$r7, [$r9 + 8]
 	la	$r0, test_jal_call	! fix this address in
 	srli	$r0, $r0, 1
@@ -71,52 +70,25 @@ test_jal:
 	swi	$r0, [$r9 + 8]
 
 	movi	$r7, 1
-	ex9.it	2
-	beqz	$r7, test_jr
-	la	$r0, .Lfstr_jal
-	j	.LFAIL
+	ex9.it	0x2			! test_jal_call for $r7--
+	beqz	$r7, .Ltest_jr
+	PUTS	.Lfstr_jal		! jal .Ltest_jr
 
-test_jal_call:
-	addi	$r7, $r7, -1
-	ret
-	beqz	$r7, test_jr
-	la	$r0, .Lfstr_jal
-	j	.LFAIL
-
-test_jr:
-	!	jr > 32
+.Ltest_jr:
 	la	$r8, .Ldone
-	ex9.it	3
-	la	$r0, .Lfstr_jr
-	j	.LFAIL
-
-	!	jral > 32
+	ex9.it	0x3			! jr $r8 (.Ldone)
+	PUTS	.Lfstr_jr
+	EXIT	1
 
 .Ldone:
-	la	$r0, .Lpstr
-	bal	puts
+	PUTS	.Lpstr
 
 	movi	$r0, 0
 	lmw.bim	$r6, [$sp], $r9, 10
 	ret
 
-.LFAIL:
-	bal	puts
-	movi	$r0, 1
-	syscall 1
-
-.LPASS:
-	bal	puts
-	movi	$r0, 0
-	syscall 1
-
-.Lpstr:
-	.string "pass\n"
-.Lfstr_n32:
-	.string "fall: addi in ex9.it (<32)\n"
-.Lfstr_j32:
-	.string "fail: j in ex9.it (<32)\n"
-.Lfstr_jal:
-	.string "fail: jal in ex9.it (<32)\n"
-.Lfstr_jr:
-	.string "fail: jr in ex9.it (<32)\n"
+.Lpstr:     .string "pass\n"
+.Lfstr_n32: .string "fall: addi in ex9.it (<32)\n"
+.Lfstr_j32: .string "fail: j in ex9.it (<32)\n"
+.Lfstr_jal: .string "fail: jal in ex9.it (<32)\n"
+.Lfstr_jr:  .string "fail: jr in ex9.it (<32)\n"
