@@ -1,4 +1,4 @@
-# nds32 test sanity, expected to pass.
+# nds32 test basic ifcall and PSW.IFCON, expected to pass.
 # mach:	 all
 # as:
 # ld:		--defsym=_stack=0x3000000
@@ -15,37 +15,40 @@ main:
 
 	movi    $r7, 0
 
-	ifcall  .L0
+	ifcall  .Lcommon0
+
+	! Return from ifret. Make sure ifcall is really done.
 	addi    $r7, $r7, -1
 	! check $r7 == 0
 	beqz	$r7, .L2
-	FAIL	3
+	PUTS	.Lfstr2
 .L2:
 	! check IFCON is off
 	mfsr	$r1, $psw
 	and	$r1, $r1, $r8
 	beqz	$r1, .L3
-	FAIL	4
+	PUTS	.Lfstr1
+	EXIT	1
 .L3:
-	PASS
+	PUTS	.Lpstr
 	EXIT	0
 
-.L0:
+.Lcommon0:
 	! check IFCON is set
 	mfsr	$r1, $psw
 	and	$r1, $r1, $r8
 	bnez	$r1, .L1
-	! FAIL: IFCON not set
-	FAIL	1
+	PUTS	.Lfstr0	! FAIL: IFCON not set
 .L1:
 	addi	$r7, $r7, 1
 	ifret
-	FAIL	2	! fail to ifret
+	PUTS	.Lfstr3	! fail to ifret
+	EXIT	1
 
-
-.data
+.section	.rodata
 	.align 2
-.Lpstr:
-	.string "pass\n"
-.Lfstr:
-	.string "fail ifcall\n"
+.Lpstr:  .string "pass\n"
+.Lfstr0: .string "fail: IFCON is not set\n"
+.Lfstr1: .string "fail: IFCON is not off\n"
+.Lfstr2: .string "fail: fail to ifcall\n"
+.Lfstr3: .string "fail: fail to ifret\n"
