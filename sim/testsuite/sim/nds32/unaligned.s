@@ -26,9 +26,7 @@ main:
 	smw.adm $sp, [$sp], $sp, 10
 
 	! Set to big endian
-	mfsr	$r3, $psw
-	ori	$r3, $r3, 32	!psw.be
-	mtsr	$r3, $psw
+	setend.b
 
 	la	$r9, HALF
 	lmw.bi	$r0, [$r9], $r0, 0
@@ -41,10 +39,7 @@ main:
 	smw.bi	$r0, [$r9], $r0, 0
 
 	! Set to little endian
-	mfsr	$r3, $psw
-	li	$r4, ~32
-	and	$r3, $r3, $r4	!psw.be
-	mtsr	$r3, $psw
+	setend.l
 
 	la	$r9, HALF
 	lmw.bi	$r0, [$r9], $r0, 0

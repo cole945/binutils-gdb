@@ -1165,7 +1165,38 @@ nds32_decode32_misc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       CCPU_GPR[rt] = CCPU_SR[__GF (insn, 10, 10)];
       break;
     case 0x3:			/* mtsr */
-      CCPU_SR[__GF (insn, 10, 10)] = CCPU_GPR[rt];
+      {
+	int sridx = __GF (insn, 10, 10);
+
+	switch (__GF (insn, 5, 5))
+	  {
+	  case 0:		/* mtsr */
+	    CCPU_SR[sridx] = CCPU_GPR[rt];
+	    break;
+	  case 1:		/* setend */
+	    if (sridx != 0x80)
+	      nds32_bad_op (cpu, cia, insn, "SETEND (sridx)");
+
+	    if (rt == 1)
+	      CCPU_SR_SET (PSW, PSW_BE);
+	    else if (rt == 0)
+	      CCPU_SR_CLEAR (PSW, PSW_BE);
+	    else
+	      nds32_bad_op (cpu, cia, insn, "SETEND (BE/LE)");
+	    break;
+	  case 2:		/* setgie */
+	    if (sridx != 0x80)
+	      nds32_bad_op (cpu, cia, insn, "SETGIE (sridx)");
+
+	    if (rt == 1)
+	      CCPU_SR_SET (PSW, PSW_GIE);
+	    else if (rt == 0)
+	      CCPU_SR_CLEAR (PSW, PSW_GIE);
+	    else
+	      nds32_bad_op (cpu, cia, insn, "SETEND (BE/LE)");
+	    break;
+	  }
+      }
       break;
     case 0xb:			/* syscall */
       return nds32_syscall (cpu, __GF (insn, 5, 15), cia);

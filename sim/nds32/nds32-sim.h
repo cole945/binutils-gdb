@@ -145,6 +145,7 @@ enum
   SRIDX_PSW	= SRIDX (1, 0, 0),
   SRIDX_IPSW	= SRIDX (1, 0, 1),
   SRIDX_P_IPSW	= SRIDX (1, 0, 2),
+  PSW_GIE	= 0,
   PSW_BE	= 5,
   PSW_IFCON	= 15,
 
