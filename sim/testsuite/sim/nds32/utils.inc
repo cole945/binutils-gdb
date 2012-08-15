@@ -17,7 +17,12 @@
 	syscall	1
 .endm
 
-	.data
+.macro PUTS	label
+	la	$r0, \label
+	bal	puts
+.endm
+
+.section	.rodata
 	.align 2
 LPASS_STR:
 	.string	"pass\n"
@@ -25,34 +30,16 @@ LPASS_STR:
 	.align 2
 LFAIL_STR:
 	.string "fail: 0x##\n"
-	.text
+
+.text
 	.align	2
 	.globl	swap
 	.type	swap, @function
 swap:
-	! unsigned int
-	! swap (unsigned int x)
-	! {
-	!   return (x >> 24) |
-	!     ((x << 8) & 0x00FF0000) |
-	!     ((x >> 8) & 0x0000FF00) |
-	!     (x << 24);
-	! }
-	slli	$r3, $r0, 24
-	srli	$r1, $r0, 24
-	or	$r1, $r3, $r1
-	sethi	$r3, hi20(16711680)
-	slli	$r2, $r0, 8
-	and	$r2, $r2, $r3
-	or	$r1, $r1, $r2
-	srli	$r0, $r0, 8
-	movi	$r2, 65280
-	and	$r0, $r0, $r2
-	or	$r0, $r1, $r0
+	wsbh    $r0, $r0
+	rotri   $r0,$r0,#0x10
 	ret
 	.size	swap, .-swap
-
-
 
 	! if $r0 = 0
 	!     pass
@@ -62,8 +49,7 @@ swap:
 	.global	result
 	.type	result, @function
 result:
-	smw.adm	$r0,[$sp],$r27,0xe
-	addi	$sp, $sp, -4
+	smw.adm	$r6,[$sp],$r14,0xe
 	move	$r6, $r0
 	bnez	$r0, 1f
 	la	$r1, LPASS_STR
@@ -97,8 +83,7 @@ result:
 	bal	puts
 	move	$r0, $r6
 
-	addi	$sp, $sp, 4
-	lmw.bim	$r0,[$sp],$r27,0xe
+	lmw.bim	$r6,[$sp],$r14,0xe
 	ret
 
 	.size	result, .-result
