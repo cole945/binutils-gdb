@@ -28,6 +28,7 @@ main:
 	FAIL	4
 .L3:
 	PASS
+	EXIT	0
 
 .L0:
 	! check IFCON is set

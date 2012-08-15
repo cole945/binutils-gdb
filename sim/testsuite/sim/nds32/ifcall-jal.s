@@ -33,6 +33,7 @@ main:
 	! test JAL5
 	ifcall	.L3
 	PASS
+	EXIT	0
 .L3:
 	la	$r3, .L4
 	jral5	$r3	!! test JRAL5
