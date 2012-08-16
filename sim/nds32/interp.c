@@ -100,22 +100,6 @@ store_unsigned_integer (unsigned char *addr, int len,
     }
 }
 
-/* Find first zero byte in sequential memory address.
-   Return ordinal number. Return 0 if not found.  */
-
-static uint32_t
-find_null (unsigned char *memory)
-{
-  int i;
-
-  for (i = 0; i < 4; i++)
-    {
-      if (memory[i] == '\0')
-	return i + 1;
-    }
-  return 0;
-}
-
 /* Find first zero byte or mis-match in sequential memory address.
    If no such byte is found, return 0.  */
 
@@ -339,29 +323,28 @@ nds32_decode32_mem (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 static sim_cia
 nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
-  /* (l|s)mwa?zb?.(a|b)(d|i)m? rb,[ra],re,enable4 */
   SIM_DESC sd = CPU_STATE (cpu);
   int rb, re, ra, enable4, i;
-  int WAC;		/* With Alignment Check? */
-  int TNReg = 0;	/* TNReg = Total number of registers stored.  */
-  int di;		/* dec=-1 or inc=1 */
+  int wac;			/* With Alignment Check ?  */
+  int reg_cnt = 0;		/* Total number of registers count.  */
+  int di;			/* dec=-1 or inc=1  */
   int order = CCPU_SR_TEST (PSW, PSW_BE) ? BIG_ENDIAN : LITTLE_ENDIAN;
-  int len = 4;		/* load/store bytes */
-  int null_loc = 0;	/* zero byte location */
+  int size = 4;			/* The load/store bytes.  */
+  int len = 4;			/* The length of a fixed-size string.  */
   int ret;
-  char enb4map[2][4] = { /*smw */ {3, 2, 1, 0}, /*smwa */ {0, 1, 2, 3} };
+  char enb4map[2][4] =
+    { {3, 2, 1, 0}, /* With Aligment Check.  */ {0, 1, 2, 3} };
   uint32_t val = 0;
   SIM_ADDR base = -1;
 
-  /* Undefined opcode?  */
-  if ((insn & 3) == 3)
+  /* Filter out undefined opcode.  */
+  if ((insn & 0x3) == 0x3)
     {
       nds32_bad_op (cpu, cia, insn, "LSMW");
       return cia;
     }
-
-  /* Invalid opcode?  */
-  if ((insn & 11) == 10)
+  /* Filter out invalid opcode.  */
+  if ((insn & 0xB) == 0xA)
     {
       nds32_bad_op (cpu, cia, insn, "LSMW");
       return cia;
@@ -372,68 +355,67 @@ nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
   ra = N32_RA5 (insn);
   re = N32_RB5 (insn);
   enable4 = (insn >> 6) & 0x0F;
-  WAC = (insn & 1) ? 1 : 0;
+  wac = (insn & 1) ? 1 : 0;
   di = (insn & (1 << 3)) ? -1 : 1;
 
-  /* The first memory address.  */
-  base = CCPU_GPR[ra].u;
+  base = CCPU_GPR[ra].u;	/* Get the first memory address  */
 
-  /* With Alignment Check? */
-  if (WAC && base & 3)
-  {
+  /* Do the alignment check. */
+  if (wac && base & 0x3)
+    {
       nds32_raise_exception (cpu, EXP_GENERAL, SIM_SIGSEGV,
-			     (insn & 32) /* store or load */
+			     (insn & 0x20)
 			     ? "Alignment check exception (SMWA). "
 			       "Write of address 0x%08x.\n"
 			     : "Alignment check exception (LMWA). "
-			       "Read of address 0x%08x.\n", base);
+			       "Read of address 0x%08x.\n",
+			     base);
       return cia;
-  }
-
-  /* TNReg = Count_Registers(register_list); */
-  TNReg += (enable4 & 0x1) ? 1 : 0;
-  TNReg += (enable4 & 0x2) ? 1 : 0;
-  TNReg += (enable4 & 0x4) ? 1 : 0;
-  TNReg += (enable4 & 0x8) ? 1 : 0;
-  if (rb < NG_FP && re < NG_FP)
-    {
-      /* Reg-list should not include fp, gp, lp and sp,
-	 i.e., the rb == re == sp case, anyway... */
-      TNReg += (re - rb) + 1;
     }
 
-  if (insn & (1 << 0x4))	/* a:b, a for +-4 */
+  /* Sum up the registers count.  */
+  reg_cnt += (enable4 & 0x1) ? 1 : 0;
+  reg_cnt += (enable4 & 0x2) ? 1 : 0;
+  reg_cnt += (enable4 & 0x4) ? 1 : 0;
+  reg_cnt += (enable4 & 0x8) ? 1 : 0;
+  if (rb < NG_FP && re < NG_FP)
+    {
+      reg_cnt += (re - rb) + 1;
+    }
+
+  /* Generate the first memory address.  */
+  if (insn & (1 << 4))
     base += 4 * di;
-  if (insn & (1 << 0x3))	/* d:i, d for - (TNReg - 1) * 4) */
-    base -= (TNReg - 1) * 4;
+  /* Adjust the first memory address
+     due to operating from low address memory.  */
+  if (insn & (1 << 3))
+    base -= (reg_cnt - 1) * 4;
 
 
-  /* Operation from low address memory to high address memory.  */
+  /* Operating from low address memory to high address memory.  */
   for (i = rb; i <= re && rb < NG_FP; i++)
     {
-      /* Skip if re == rb == sp > fp.  */
-      if (insn & 32)
+      if (insn & 0x20)
 	{
 	  /* store */
 
 	  val = CCPU_GPR[i].u;
 	  store_unsigned_integer ((unsigned char *) &val, 4, order, val);
-	  if ((insn & 11) == 2)
+	  if ((insn & 0x3) == 0x2)
 	    {
-	      /* Until zero byte?  */
-	      null_loc = find_null ((unsigned char *) &val);
-	      len = (null_loc == 0) ? 4 : null_loc;
+	      /* Until zero byte case.  */
+	      len = strnlen ((unsigned char *) &val, 4);
+	      size = (len == 4) ? 4 : len + 1;	/* Include zero byte.  */
 	    }
-	  ret = sim_write (sd, base, (unsigned char *) &val, len);
-	  if (ret != len)
+	  ret = sim_write (sd, base, (unsigned char *) &val, size);
+	  if (ret != size)
 	    {
 	      nds32_raise_exception (cpu, EXP_GENERAL, SIM_SIGSEGV,
 				     "Access violation. Write of address %#x\n",
 				     base);
 	    }
-	  if (null_loc)
-	    /* Zero byte is found.  */
-	    break;
+	  if (len < 4)
+	    goto zero_byte_exist;
 	}
       else
 	{
@@ -448,75 +430,73 @@ nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	    }
 	  val = extract_unsigned_integer ((unsigned char *) &val, 4, order);
 	  CCPU_GPR[i].u = val;
-	  if ((insn & 11) == 2)
+	  if ((insn & 0x3) == 0x2)
 	    {
-	      /* Until zero byte? */
-	      null_loc = find_null ((unsigned char *) &val);
-	      if (null_loc)
-		/* Zero byte is found.  */
-		break;
+	      /* Until zero byte case.  */
+	      len = strnlen ((unsigned char *) &val, 4);
+	      if (len < 4)
+		goto zero_byte_exist;
 	    }
 	}
-	base += 4;
+      base += 4;
     }
 
-  /* 4 individual registers from R28 to R31.  */
+  /* Operating the 4 individual registers
+     from low address memory to high address memory. */
   for (i = 0; i < 4; i++)
     {
-      if (enable4 & (1 << enb4map[WAC][i]))
+      if (enable4 & (1 << enb4map[wac][i]))
 	{
-	  if (insn & 32)
-	  {
-	    /* store */
+	  if (insn & 0x20)
+	    {
+	      /* store */
 
-	    val = CCPU_GPR[NG_SP - (enb4map[WAC][i])].u;
-	    store_unsigned_integer ((unsigned char *) &val, 4, order, val);
-	    if ((insn & 11) == 2)
-	      {
-		/* Until zero byte? */
-		null_loc = find_null ((unsigned char *) &val);
-		len = (null_loc == 0) ? 4 : null_loc;
-	      }
-	    ret = sim_write (sd, base, (unsigned char *) &val, len);
-	    if (ret != len)
-	      {
-		nds32_raise_exception (cpu, EXP_GENERAL, SIM_SIGSEGV,
-				       "Access violation. Write of address %#x\n",
-				       base);
-	      }
-	    if (null_loc)
-	      /* Zero byte is found.  */
-	      break;
-	  }
+	      val = CCPU_GPR[NG_SP - (enb4map[wac][i])].u;
+	      store_unsigned_integer ((unsigned char *) &val, 4, order, val);
+	      if ((insn & 0x3) == 0x2)	/* Until zero byte case.  */
+		{
+		  len = strnlen ((unsigned char *) &val, 4);
+		  size = (len == 4) ? 4 : len + 1;	/* Include zero byte.  */
+		}
+	      ret = sim_write (sd, base, (unsigned char *) &val, size);
+	      if (ret != size)
+		{
+		  nds32_raise_exception (cpu, EXP_GENERAL, SIM_SIGSEGV,
+					 "Access violation. Write of address %#x\n",
+					 base);
+		}
+	      if (len < 4)
+		goto zero_byte_exist;
+	    }
 	  else
-	  {
-	    /* load */
+	    {
+	      /* load */
 
-	    ret = sim_read (sd, base, (unsigned char *) &val, 4);
-	    if (ret != 4)
-	      {
-		nds32_raise_exception (cpu, EXP_GENERAL, SIM_SIGSEGV,
-				       "Access violation. Write of address %#x\n",
-				       base);
-	      }
-	    val = extract_unsigned_integer ((unsigned char *) &val, 4, order);
-	    CCPU_GPR[NG_SP - (enb4map[WAC][i])].u = val;
-	    if ((insn & 11) == 2)
-	      {
-		/* Until zero byte? */
-		null_loc = find_null ((unsigned char *) &val);
-		if (null_loc)
-		  /* Until zero byte? */
-		  break;
-	      }
-	  }
+	      ret = sim_read (sd, base, (unsigned char *) &val, 4);
+	      if (ret != 4)
+		{
+		  nds32_raise_exception (cpu, EXP_GENERAL, SIM_SIGSEGV,
+					 "Access violation. Write of address %#x\n",
+					 base);
+		}
+	      val =
+		extract_unsigned_integer ((unsigned char *) &val, 4, order);
+	      CCPU_GPR[NG_SP - (enb4map[wac][i])].u = val;
+	      if ((insn & 0x3) == 0x2)	/* until zero byte ? */
+		{
+		  len = strnlen ((unsigned char *) &val, 4);
+		  if (len < 4)
+		    goto zero_byte_exist;
+		}
+	    }
 	  base += 4;
 	}
     }
 
-  /* Update base address register.  */
+zero_byte_exist:
+  /* Update the base address register.  */
   if (insn & (1 << 2))
-    CCPU_GPR[ra].u += TNReg * 4 * di;
+    CCPU_GPR[ra].u += reg_cnt * 4 * di;
 
   return cia + 4;
 }
@@ -767,7 +747,6 @@ nds32_decode32_alu2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	store_unsigned_integer ((unsigned char *) &a, 4, order, a);
 	store_unsigned_integer ((unsigned char *) &b, 4, order, b);
 	ret = find_null_mism ((unsigned char *) &a, (unsigned char *) &b);
-	ret = extract_unsigned_integer ((unsigned char *) &ret, 4, order);
 	CCPU_GPR[rt].u = ret;
       }
       break;
@@ -946,7 +925,7 @@ nds32_decode32_jreg (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	  if (CCPU_SR_TEST (PSW, PSW_IFCON))
 	    cia = CCPU_USR[NC_IFCLP].u;
 	  else
-	    cia += 4;	/* Do nothing */
+	    cia += 4;		/* Do nothing */
 	}
       else
 	/* jr or ret */
