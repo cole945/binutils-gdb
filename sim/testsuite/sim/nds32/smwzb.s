@@ -15,7 +15,7 @@ BASE:
 	.word	0xffffffff ! $r9
 	.word	0xffffffff ! $fp
 WORD:
-	.byte	0x77,0xff,0xff,0xff
+	.byte	0x77,0x00,0xff,0xff
 
 .text
 	.global	main
@@ -68,7 +68,7 @@ main:
 
 .section	.rodata
 .Lpstr:  .string "pass\n"
-.Lfstr0: .string "fall: adjust $Ra + 20\n"
+.Lfstr0: .string "fail: adjust $Ra + 20\n"
 .Lfstr1: .string "fail: $r6 == 0x11222211\n"
 .Lfstr2: .string "fail: $r7 == 0x55666655\n"
 .Lfstr3: .string "fail: $r8 == 0x77000077\n"
