@@ -80,7 +80,7 @@
 #define TARGET_LINUX_SYS_lstat	(LINUX_SYS_BASE + 107)
 #define TARGET_LINUX_SYS_fstat	(LINUX_SYS_BASE + 108)
 
-sim_cia nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia);
+void nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia);
 
 extern CB_TARGET_DEFS_MAP cb_nds32_libgloss_syscall_map[];
 extern CB_TARGET_DEFS_MAP cb_nds32_linux_syscall_map[];
