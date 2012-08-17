@@ -8,13 +8,11 @@
 
 .section	.ex9.itable, "a"
 	.align	2
-.LITB0:
-	addi	$r7, $r7, 13
-.LITB_J:
-	j	.LITB_J
-.LITB_JAL:
-	jal	.LITB_JAL
-	jr	$r8
+.LITB0:		addi	$r7, $r7, 13
+.LITB_J:	j	.LITB_J
+.LITB_JAL:	jal	.LITB_JAL
+.LITB_JR:	jr	$r8
+.LITB_BEQZ:	beqz	$r8, .LITB_BEQZ
 
 	.text
 test_jal_call:
