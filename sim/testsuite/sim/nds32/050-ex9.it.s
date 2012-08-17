@@ -28,6 +28,10 @@ test_jal_call:
 main:
 	smw.adm $r6, [$sp], $r9, 10
 
+	! Test big-endian only.
+	! The code for relocation is off topic.
+	setend.b
+
 	la	$r9, ITB
 	mtusr	$r9, $ITB
 
@@ -48,11 +52,6 @@ main:
 	lwi	$r7, [$r9 + 4]
 	la	$r0, .Ltest_jal	! fix this address in
 	srli	$r0, $r0, 1
-	mfsr	$r8, $psw
-	andi	$r8, $r8, 32
-	bnez	$r8, 1f
-	bal	swap
-1:
 	or	$r0, $r0, $r7
 	swi	$r0, [$r9 + 4]
 
@@ -65,11 +64,6 @@ main:
 	lwi	$r7, [$r9 + 8]
 	la	$r0, test_jal_call	! fix this address in
 	srli	$r0, $r0, 1
-	mfsr	$r8, $psw
-	andi	$r8, $r8, 32
-	bnez	$r8, 1f
-	bal	swap
-1:
 	or	$r0, $r0, $r7
 	swi	$r0, [$r9 + 8]
 
@@ -88,11 +82,11 @@ main:
 
 .Ldone:
 	PUTS	.Lpstr
+	EXIT	0	! Because endian is chagned,
+			! it cannot properly restore registers.
+	.size	main, .-main
 
-	movi	$r0, 0
-	lmw.bim	$r6, [$sp], $r9, 10
-	ret
-
+.section	.rodata
 .Lpstr:     .string "pass\n"
 .Lfstr_n32: .string "fall: addi in ex9.it (>=32)\n"
 .Lfstr_j32: .string "fail: j in ex9.it (>=32)\n"
