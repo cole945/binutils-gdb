@@ -44,11 +44,10 @@ typedef union {
 enum nds32_internal_flags
 {
   /* Set NIF_EX9 to indicate the instructions is executed in ITB.
-     JAL and J work differently in ITB.
-     If the instruction is a branch or jump, clear NIF_EX9
-     to indicate the next CIA is changed by the instruction
-     instead of CIA + 2.  */
+     JAL and J work differently in ITB.  */
   NIF_EX9 = 1,
+  /* Set NIF_BRANCH to indicate an branch is taken.  */
+  NIF_BRANCH = 2,
 };
 
 struct _sim_cpu {
@@ -69,6 +68,8 @@ struct _sim_cpu {
 #define CCPU_FPR	(cpu->reg_fpr)
 
   enum nds32_internal_flags iflags;
+  /* If NIF_BRANCH, this is the destination address.  */
+  SIM_ADDR	baddr;
 
   sim_cpu_base base;
 };
