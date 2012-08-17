@@ -24,6 +24,9 @@
 main:
 	smw.adm $r6, [$sp], $r9, 10
 
+	! Check $lp after test.
+	move	$r9, $lp
+
 	! ---- test J ----
 	ifcall	2f
 	nop
@@ -66,7 +69,10 @@ main:
 	PUTS	.Lfstr_jr5	! not jump
 3:	check_ifcon	.Lfstr_ifcon_jr5
 
+	beq	$lp, $r9, 3f
+	PUTS	.Lfstr_lp
 
+3:
 	PUTS	.Lpstr
 	EXIT	0
 
@@ -82,3 +88,4 @@ main:
 .Lfstr_ifcon_jr:    .string "fail: PSW.IFCON is not cleared when jr\n"
 .Lfstr_ifcon_jr5:   .string "fail: PSW.IFCON is not cleared when jr5\n"
 .Lfstr_ifcon_jrnez: .string "fail: PSW.IFCON is not cleared when jrnez\n"
+.Lfstr_lp:    .string "fail: $lp is corrupted by j in ifcall\n"
