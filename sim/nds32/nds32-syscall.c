@@ -225,7 +225,7 @@ syscall_write_mem (host_callback *cb, struct cb_syscall *sc,
   return sim_core_write_buffer (sd, cpu, write_map, buf, taddr, bytes);
 }
 
-sim_cia
+void
 nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 {
   SIM_DESC sd = CPU_STATE (cpu);
@@ -256,7 +256,7 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
       if (sc.result == -1 && sc.errcode == TARGET_ENOSYS)
 	{
 	  nds32_bad_op (cpu, cia, swid, "syscall");
-	  return cia;
+	  return;
 	}
       break;
 
@@ -561,5 +561,5 @@ out:
     }
   else
     CCPU_GPR[0].s = sc.result;
-  return cia + 4;
+  return;
 }

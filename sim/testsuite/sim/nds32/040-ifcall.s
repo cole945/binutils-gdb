@@ -37,12 +37,13 @@ main:
 	! check IFCON is set
 	mfsr	$r1, $psw
 	and	$r1, $r1, $r8
-	bnez	$r1, .L1
-	PUTS	.Lfstr0	! FAIL: IFCON not set
-.L1:
+	beqz	$r1, .L1
 	addi	$r7, $r7, 1
 	ifret
 	PUTS	.Lfstr3	! fail to ifret
+	EXIT	1
+.L1:
+	PUTS	.Lfstr0	! FAIL: IFCON not set
 	EXIT	1
 
 .section	.rodata

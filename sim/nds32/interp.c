@@ -236,7 +236,18 @@ sim_size (int s)
 {
 }
 
-static sim_cia
+/* Set next-instructoin-address, so sim_engine_run () fetches `nia'
+   instead of ($pc + 4) or ($pc + 2) for next instruction base on
+   currenly instruction size. */
+
+static void
+nds32_set_nia (sim_cpu *cpu, sim_cia nia)
+{
+  cpu->iflags |= NIF_BRANCH;
+  cpu->baddr = nia;
+}
+
+static void
 nds32_decode32_mem (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
   const int rt = N32_RT5 (insn);
@@ -314,13 +325,11 @@ nds32_decode32_mem (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0x2a:			/* swup */
     default:
       nds32_bad_op (cpu, cia, insn, "MEM");
-      return cia;
+      return;
     }
-
-  return cia + 4;
 }
 
-static sim_cia
+static void
 nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
   SIM_DESC sd = CPU_STATE (cpu);
@@ -341,13 +350,13 @@ nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
   if ((insn & 0x3) == 0x3)
     {
       nds32_bad_op (cpu, cia, insn, "LSMW");
-      return cia;
+      return;
     }
   /* Filter out invalid opcode.  */
   if ((insn & 0xB) == 0xA)
     {
       nds32_bad_op (cpu, cia, insn, "LSMW");
-      return cia;
+      return;
     }
 
   /* Decode instruction.  */
@@ -356,7 +365,7 @@ nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
   re = N32_RB5 (insn);
   enable4 = (insn >> 6) & 0x0F;
   wac = (insn & 1) ? 1 : 0;
-  di = (insn & (1 << 3)) ? -1 : 1;
+  di = (insn & __BIT (3)) ? -1 : 1;
 
   base = CCPU_GPR[ra].u;	/* Get the first memory address  */
 
@@ -370,7 +379,7 @@ nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 			     : "Alignment check exception (LMWA). "
 			       "Read of address 0x%08x.\n",
 			     base);
-      return cia;
+      return;
     }
 
   /* Sum up the registers count.  */
@@ -384,11 +393,11 @@ nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     }
 
   /* Generate the first memory address.  */
-  if (insn & (1 << 4))
+  if (insn & __BIT (4))
     base += 4 * di;
   /* Adjust the first memory address
      due to operating from low address memory.  */
-  if (insn & (1 << 3))
+  if (insn & __BIT (3))
     base -= (reg_cnt - 1) * 4;
 
 
@@ -445,7 +454,7 @@ nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
      from low address memory to high address memory. */
   for (i = 0; i < 4; i++)
     {
-      if (enable4 & (1 << enb4map[wac][i]))
+      if (enable4 & (__BIT (enb4map[wac][i])))
 	{
 	  if (insn & 0x20)
 	    {
@@ -495,13 +504,13 @@ nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 
 zero_byte_exist:
   /* Update the base address register.  */
-  if (insn & (1 << 2))
+  if (insn & __BIT (2))
     CCPU_GPR[ra].u += reg_cnt * 4 * di;
 
-  return cia + 4;
+  return;
 }
 
-static sim_cia
+static void
 nds32_decode32_alu1 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
   int rt = N32_RT5 (insn);
@@ -560,7 +569,7 @@ nds32_decode32_alu1 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0xf:			/* rotr */
       {
 	uint32_t shift = ((insn & 0x1f) == 0xb) ? imm5u : CCPU_GPR[rb].u;
-	uint32_t m = CCPU_GPR[ra].u & ((1 << shift) - 1);
+	uint32_t m = CCPU_GPR[ra].u & (__BIT (shift) - 1);
 	CCPU_GPR[rt].u = CCPU_GPR[ra].u >> shift;
 	CCPU_GPR[rt].u |= m << (32 - shift);
       }
@@ -641,20 +650,20 @@ nds32_decode32_alu1 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       break;
     default:
       nds32_bad_op (cpu, cia, insn, "ALU1");
-      return cia;
+      return;
     }
 
-  return cia + 4;
+  return;
 }
 
-static sim_cia
+static void
 nds32_decode32_alu2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
   int rt = N32_RT5 (insn);
   int ra = N32_RA5 (insn);
   int rb = N32_RB5 (insn);
   const int imm5u = rb;
-  const int dt = (insn & (1 << 21)) ? NC_D1LO : NC_D0LO;
+  const int dt = (insn & __BIT (21)) ? NC_D1LO : NC_D0LO;
 
   switch (insn & 0x3ff)
     {
@@ -703,7 +712,7 @@ nds32_decode32_alu2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 
 	for (i = 31; i >= 0; i--)
 	  {
-	    if (CCPU_GPR[ra].u & (1 << i))
+	    if (CCPU_GPR[ra].u & __BIT (i))
 	      cnt++;
 	    else
 	      break;
@@ -717,7 +726,7 @@ nds32_decode32_alu2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 
 	for (i = 31; i >= 0; i--)
 	  {
-	    if ((CCPU_GPR[ra].u & (1 << i)) == 0)
+	    if ((CCPU_GPR[ra].u & __BIT (i)) == 0)
 	      cnt++;
 	    else
 	      break;
@@ -894,19 +903,20 @@ nds32_decode32_alu2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       break;
     default:
       nds32_bad_op (cpu, cia, insn, "ALU2");
-      return cia;
+      return;
     }
 
-  return cia + 4;
+  return;
 }
 
-static sim_cia
+static void
 nds32_decode32_jreg (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
   SIM_DESC sd = CPU_STATE (cpu);
   int rt = N32_RT5 (insn);
   int ra = N32_RA5 (insn);
   int rb = N32_RB5 (insn);
+  sim_cia nia;
 
   if (ra != 0)
     sim_io_error (sd, "JREG RA == %d at pc=0x%x, code=0x%08x\n",
@@ -925,16 +935,15 @@ nds32_decode32_jreg (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	  if (CCPU_SR_TEST (PSW, PSW_IFCON))
 	    cia = CCPU_USR[NC_IFCLP].u;
 	  else
-	    cia += 4;		/* Do nothing */
+	    return;		/* Do nothing. (ifret) */
 	}
       else
 	/* jr or ret */
 	cia = CCPU_GPR[rb].u;
 
       CCPU_SR_CLEAR (PSW, PSW_IFCON);
-      /* SIM_IO_DPRINTF (sd, "set $pc to 0x%x\n", CCPU_USR[NC_PC].u); */
-      cpu->iflags &= ~NIF_EX9;	/* Check ex9.it for details. */
-      return cia;
+      nds32_set_nia (cpu, cia);
+      return;
 
     case 1:			/* jral */
       if (cpu->iflags & NIF_EX9)
@@ -943,55 +952,52 @@ nds32_decode32_jreg (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	CCPU_GPR[rt].u = cia + 4;
 
       cia = CCPU_GPR[rb].u;
-      /* SIM_IO_DPRINTF (sd, "set $pc to 0x%x, save ra to $r%d\n", CCPU_USR[NC_PC].u, rb); */
+      /* If PSW.IFCON, it returns to $ifclp instead.  */
       if (CCPU_SR_TEST (PSW, PSW_IFCON))
-	{
-	  CCPU_GPR[rt] = CCPU_USR[NC_IFCLP];
-	  CCPU_SR_CLEAR (PSW, PSW_IFCON);
-	}
+	CCPU_GPR[rt] = CCPU_USR[NC_IFCLP];
 
-      cpu->iflags &= ~NIF_EX9;	/* Check ex9.it for details. */
-      return cia;
+      CCPU_SR_CLEAR (PSW, PSW_IFCON);
+      nds32_set_nia (cpu, cia);
+      return;
 
     case 2:			/* jrnez */
-      if (CCPU_GPR[rb].u != 0)	/* taken */
-	{
-	  CCPU_SR_CLEAR (PSW, PSW_IFCON);
-	  cpu->iflags &= ~NIF_EX9;	/* Check ex9.it for details. */
-	  return CCPU_GPR[rb].u;
-	}
+      if (CCPU_GPR[rb].u == 0)
+	return;			/* NOT taken */
 
-      break; /* NOT taken */
+      /* PSW.IFCON is only cleared when taken.  */
+      CCPU_SR_CLEAR (PSW, PSW_IFCON);
+      nds32_set_nia (cpu, CCPU_GPR[rb].u);
+      return;
 
     case 3:			/* jralnez */
-      /* Rt is clobbed anyway according to spec.  */
+      /* Prevent early clobbing of rb (rt == rb).  */
+      nia = CCPU_GPR[rb].u;
+
+      /* Rt is always set according to spec.  */
       if (cpu->iflags & NIF_EX9)
 	CCPU_GPR[rt].u = cia + 2;
       else
 	CCPU_GPR[rt].u = cia + 4;
 
-      if (CCPU_GPR[rb].u != 0)	/* taken */
-	{
-	  if (CCPU_SR_TEST (PSW, PSW_IFCON))
-	    {
-	      CCPU_GPR[rt] = CCPU_USR[NC_IFCLP];
-	      CCPU_SR_CLEAR (PSW, PSW_IFCON);
-	    }
-	  cpu->iflags &= ~NIF_EX9;	/* Check ex9.it for details. */
-	  return CCPU_GPR[rb].u;
-	}
+      /* By spec, PSW.IFCON is always cleared no matter it takes or not.  */
+      if (CCPU_SR_TEST (PSW, PSW_IFCON))
+	CCPU_GPR[rt] = CCPU_USR[NC_IFCLP];
+      CCPU_SR_CLEAR (PSW, PSW_IFCON);
 
-      return CCPU_GPR[rt].u; /* cia + 2 for EX9 */
+      if (nia != 0)		/* taken branch */
+	nds32_set_nia (cpu, nia);
+
+      return;
 
     default:
       nds32_bad_op (cpu, cia, insn, "JREG");
-      return cia;
+      return;
     }
 
-  return cia + 4;
+  return;
 }
 
-static sim_cia
+static void
 nds32_decode32_br1 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
   int rt = N32_RT5 (insn);
@@ -1003,126 +1009,125 @@ nds32_decode32_br1 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0:			/* beq */
       if (CCPU_GPR[rt].u == CCPU_GPR[ra].u)
 	{
-	  cpu->iflags &= ~NIF_EX9;	/* Check ex9.it for details. */
-	  return cia + (imm14s << 1);
+	  CCPU_SR_CLEAR (PSW, PSW_IFCON);
+	  nds32_set_nia (cpu, cia + (imm14s << 1));
 	}
       break;
     case 1:			/* bne */
       if (CCPU_GPR[rt].u != CCPU_GPR[ra].u)
 	{
-	  cpu->iflags &= ~NIF_EX9;	/* Check ex9.it for details. */
-	  return cia + (imm14s << 1);
+	  CCPU_SR_CLEAR (PSW, PSW_IFCON);
+	  nds32_set_nia (cpu, cia + (imm14s << 1));
 	}
       break;
     }
-
-  return cia + 4;
 }
 
-static sim_cia
+static void
 nds32_decode32_br2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
   int rt = N32_RT5 (insn);
-  int imm16s = N32_IMM16S (insn);
+  int imm16s1 = N32_IMM16S (insn) << 1;
 
   switch (__GF (insn, 16, 4))
     {
     case 0x0:			/* ifcall */
+      /* Do not set $ifclp when chaining ifcall.  */
       if (!CCPU_SR_TEST (PSW, PSW_IFCON))
 	{
 	  if (cpu->iflags & NIF_EX9)
 	    CCPU_USR[NC_IFCLP].u = cia + 2;
 	  else
 	    CCPU_USR[NC_IFCLP].u = cia + 4;
-
-	  CCPU_SR_SET (PSW, PSW_IFCON);
-	  cpu->iflags &= ~NIF_EX9;	/* Check ex9.it for details. */
-	  return cia + (N32_IMMS (insn, 16) << 1);
 	}
-      else
-	{
-	  /* Nested IFCALL. Do nothing.  */
-	}
+      nds32_set_nia (cpu, cia + imm16s1);
+      CCPU_SR_SET (PSW, PSW_IFCON);
       break;
     case 0x2:			/* beqz */
       if (CCPU_GPR[rt].s == 0)
 	{
-	  cpu->iflags &= ~NIF_EX9;	/* Check ex9.it for details. */
-	  return cia + (imm16s << 1);
+	  CCPU_SR_CLEAR (PSW, PSW_IFCON);
+	  nds32_set_nia (cpu, cia + imm16s1);
 	}
       break;
     case 0x3:			/* bnez */
       if (CCPU_GPR[rt].s != 0)
 	{
-	  cpu->iflags &= ~NIF_EX9;	/* Check ex9.it for details. */
-	  return cia + (imm16s << 1);
+	  CCPU_SR_CLEAR (PSW, PSW_IFCON);
+	  nds32_set_nia (cpu, cia + imm16s1);
 	}
       break;
     case 0x4:			/* bgez */
       if (CCPU_GPR[rt].s >= 0)
 	{
-	  cpu->iflags &= ~NIF_EX9;	/* Check ex9.it for details. */
-	  return cia + (imm16s << 1);
+	  CCPU_SR_CLEAR (PSW, PSW_IFCON);
+	  nds32_set_nia (cpu, cia + imm16s1);
 	}
       break;
     case 0x5:			/* bltz */
       if (CCPU_GPR[rt].s < 0)
 	{
-	  cpu->iflags &= ~NIF_EX9;	/* Check ex9.it for details. */
-	  return cia + (imm16s << 1);
+	  CCPU_SR_CLEAR (PSW, PSW_IFCON);
+	  nds32_set_nia (cpu, cia + imm16s1);
 	}
       break;
     case 0x6:			/* bgtz */
       if (CCPU_GPR[rt].s > 0)
 	{
-	  cpu->iflags &= ~NIF_EX9;	/* Check ex9.it for details. */
-	  return cia + (imm16s << 1);
+	  CCPU_SR_CLEAR (PSW, PSW_IFCON);
+	  nds32_set_nia (cpu, cia + imm16s1);
 	}
       break;
     case 0x7:			/* blez */
       if (CCPU_GPR[rt].s <= 0)
 	{
-	  cpu->iflags &= ~NIF_EX9;	/* Check ex9.it for details. */
-	  return cia + (imm16s << 1);
+	  CCPU_SR_CLEAR (PSW, PSW_IFCON);
+	  nds32_set_nia (cpu, cia + imm16s1);
 	}
       break;
     case 0x1c:			/* bgezal */
-      if (CCPU_GPR[rt].s >= 0)
-	{
-	  if (cpu->iflags & NIF_EX9)
-	    CCPU_USR[NC_IFCLP].u = cia + 2;
-	  else
-	    CCPU_USR[NC_IFCLP].u = cia + 4;
+      /* Always clob $lp.  */
+      if (cpu->iflags & NIF_EX9)
+	CCPU_GPR[NG_LP].u = cia + 2;
+      else
+	CCPU_GPR[NG_LP].u = cia + 4;
 
-	  CCPU_GPR[NG_LP].u = cia + 4;
-	  cpu->iflags &= ~NIF_EX9;	/* Check ex9.it for details. */
-	  return cia + (imm16s << 1);
-	}
-      break;
+      /* Always set $lp = $ifc_lp no matter it takes no not.  */
+      if (CCPU_SR_TEST (PSW, PSW_IFCON))
+	CCPU_GPR[NG_LP].u = CCPU_USR[NC_IFCLP].u;
+
+      /* PSW.IFCON is only cleared when the branch is taken.  */
+      if (!(CCPU_GPR[rt].s >= 0))
+	return;
+
+      CCPU_SR_CLEAR (PSW, PSW_IFCON);
+      nds32_set_nia (cpu, cia + imm16s1);
+      return;
     case 0x1d:			/* bltzal */
-      if (CCPU_GPR[rt].s < 0)
-	{
-	  if (cpu->iflags & NIF_EX9)
-	    CCPU_USR[NC_IFCLP].u = cia + 2;
-	  else
-	    CCPU_USR[NC_IFCLP].u = cia + 4;
+      /* Always clob $lp.  */
+      if (cpu->iflags & NIF_EX9)
+	CCPU_GPR[NG_LP].u = cia + 2;
+      else
+	CCPU_GPR[NG_LP].u = cia + 4;
 
-	  cpu->iflags &= ~NIF_EX9;	/* Check ex9.it for details. */
-	  return cia + (imm16s << 1);
-	}
+      /* Always set $lp = $ifc_lp no matter it takes no not.  */
+      if (CCPU_SR_TEST (PSW, PSW_IFCON))
+	CCPU_GPR[NG_LP].u = CCPU_USR[NC_IFCLP].u;
+
+      /* PSW.IFCON is only cleared when the branch is taken.  */
+      if (!(CCPU_GPR[rt].s < 0))
+	return;
+
+      CCPU_SR_CLEAR (PSW, PSW_IFCON);
+      nds32_set_nia (cpu, cia + imm16s1);
       break;
     default:
-      goto bad_op;
+      nds32_bad_op (cpu, cia, insn, "BR2");
+      break;
     }
-
-  return cia + 4;
-
-bad_op:
-  nds32_bad_op (cpu, cia, insn, "BR2");
-  return cia;
 }
 
-static sim_cia
+static void
 nds32_decode32_misc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
   int rt = N32_RT5 (insn);
@@ -1139,7 +1144,7 @@ nds32_decode32_misc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0x5:			/* trap */
     case 0xa:			/* break */
       nds32_raise_exception (cpu, EXP_DEBUG, SIM_SIGTRAP, NULL);
-      return cia; /* FIXME dispatch exception? */
+      return; /* FIXME dispatch exception?  */
     case 0x2:			/* mfsr */
       CCPU_GPR[rt] = CCPU_SR[__GF (insn, 10, 10)];
       break;
@@ -1178,28 +1183,27 @@ nds32_decode32_misc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       }
       break;
     case 0xb:			/* syscall */
-      return nds32_syscall (cpu, __GF (insn, 5, 15), cia);
+      nds32_syscall (cpu, __GF (insn, 5, 15), cia);
+      break;
     case 0x4:			/* iret */
       nds32_bad_op (cpu, cia, insn, "iret (MISC)");
-      return cia;
+      break;
     case 0x6:			/* teqz */
       nds32_bad_op (cpu, cia, insn, "teqz (MISC)");
-      return cia;
+      break;
     case 0x7:			/* tnez */
       nds32_bad_op (cpu, cia, insn, "tnez (MISC)");
-      return cia;
+      break;
     case 0xe:			/* tlbop */
       nds32_bad_op (cpu, cia, insn, "tlbop (MISC)");
-      return cia;
+      break;
     default:
       nds32_bad_op (cpu, cia, insn, "MISC");
-      return cia;
+      break;
     }
-
-  return cia + 4;
 }
 
-static sim_cia
+static void
 nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
   int op = N32_OP6 (insn);
@@ -1281,7 +1285,7 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       }
       break;
     case 0x17:			/* LBGP */
-      if (insn & (1 << 19))	/* lbsi.gp */
+      if (insn & __BIT (19))	/* lbsi.gp */
 	{
 	  addr = CCPU_GPR[NG_GP].u + N32_IMMS (insn, 19);
 	  CCPU_GPR[rt].u = nds32_ld_aligned (cpu, addr, 1);
@@ -1292,17 +1296,23 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	  nds32_ld_aligned (cpu, CCPU_GPR[NG_GP].u + N32_IMMS (insn, 19), 1);
       break;
     case 0x18:			/* LWC */
-      return nds32_decode32_lwc (cpu, insn, cia);
+      nds32_decode32_lwc (cpu, insn, cia);
+      return;
     case 0x19:			/* SWC */
-      return nds32_decode32_swc (cpu, insn, cia);
+      nds32_decode32_swc (cpu, insn, cia);
+      return;
     case 0x1a:			/* LDC */
-      return nds32_decode32_ldc (cpu, insn, cia);
+      nds32_decode32_ldc (cpu, insn, cia);
+      return;
     case 0x1b:			/* SDC */
-      return nds32_decode32_sdc (cpu, insn, cia);
+      nds32_decode32_sdc (cpu, insn, cia);
+      return;
     case 0x1c:			/* MEM */
-      return nds32_decode32_mem (cpu, insn, cia);
+      nds32_decode32_mem (cpu, insn, cia);
+      return;
     case 0x1d:			/* LSMW */
-      return nds32_decode32_lsmw (cpu, insn, cia);
+      nds32_decode32_lsmw (cpu, insn, cia);
+      return;
     case 0x1e:			/* HWGP */
       switch (__GF (insn, 17, 3))
 	{
@@ -1330,16 +1340,18 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	}
       break;
     case 0x1f:			/* SBGP */
-      if (insn & (1 << 19))	/* addi.gp */
+      if (insn & __BIT (19))	/* addi.gp */
 	CCPU_GPR[rt].s = CCPU_GPR[NG_GP].u + N32_IMMS (insn, 19);
       else			/* sbi.gp */
 	nds32_st_aligned (cpu, CCPU_GPR[NG_GP].u + N32_IMMS (insn, 19), 1,
 			  CCPU_GPR[rt].u & 0xFF);
       break;
     case 0x20:			/* ALU_1 */
-      return nds32_decode32_alu1 (cpu, insn, cia);
+      nds32_decode32_alu1 (cpu, insn, cia);
+      return;
     case 0x21:			/* ALU_2 */
-      return nds32_decode32_alu2 (cpu, insn, cia);
+      nds32_decode32_alu2 (cpu, insn, cia);
+      return;
     case 0x22:			/* movi */
       CCPU_GPR[rt].s = N32_IMM20S (insn);
       break;
@@ -1349,34 +1361,36 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0x24:			/* ji, jal */
       if (cpu->iflags & NIF_EX9)
 	{
-	  if (insn & (1 << 24))	/* jal in ex9 */
+	  /* Address in ji/jal is treated as absolute address in ex9.  */
+	  if (insn & __BIT (24))	/* jal in ex9 */
 	    CCPU_GPR[NG_LP].u = cia + 2;
 	  cia = (cia & 0xff000000) | (N32_IMMU (insn, 24) << 1);
 	}
       else
 	{
-	  if (insn & (1 << 24))	/* jal */
+	  if (insn & __BIT (24))	/* jal */
 	    CCPU_GPR[NG_LP].u = cia + 4;
 	  cia = cia + (N32_IMMS (insn, 24) << 1);
 	}
+
       if (CCPU_SR_TEST (PSW, PSW_IFCON))
 	{
-	  if (insn & (1 << 24))	/* jal */
+	  if (insn & __BIT (24))	/* jal */
 	    CCPU_GPR[NG_LP] = CCPU_USR[NC_IFCLP];
-	  CCPU_SR_CLEAR (PSW, PSW_IFCON);
 	}
 
-      cpu->iflags &= ~NIF_EX9;
-      return cia;
+      CCPU_SR_CLEAR (PSW, PSW_IFCON);
+      nds32_set_nia (cpu, cia);
+      return;
     case 0x25:			/* jreg */
-      cia = nds32_decode32_jreg (cpu, insn, cia);
-      return cia;
+      nds32_decode32_jreg (cpu, insn, cia);
+      return;
     case 0x26:			/* br1 */
-      cia = nds32_decode32_br1 (cpu, insn, cia);
-      return cia;
+      nds32_decode32_br1 (cpu, insn, cia);
+      return;
     case 0x27:			/* br2 */
-      cia = nds32_decode32_br2 (cpu, insn, cia);
-      return cia;
+      nds32_decode32_br2 (cpu, insn, cia);
+      return;
     case 0x28:			/* addi rt, ra, imm15s */
       CCPU_GPR[rt].s = CCPU_GPR[ra].s + imm15s;
       break;
@@ -1396,11 +1410,12 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       {
 	int imm11s = __SEXT (__GF (insn, 8, 11), 11);
 
-	if (((insn & (1 << 19)) == 0) ^ (CCPU_GPR[rt].s != imm11s))
+	if (((insn & __BIT (19)) == 0) ^ (CCPU_GPR[rt].s != imm11s))
 	  {
-	    cpu->iflags &= ~NIF_EX9;
-	    return cia + (N32_IMMS (insn, 8) << 1);
+	    CCPU_SR_CLEAR (PSW, PSW_IFCON);
+	    nds32_set_nia (cpu, cia + (N32_IMMS (insn, 8) << 1));
 	  }
+	return;
       }
       break;
     case 0x2e:			/* slti */
@@ -1410,43 +1425,30 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       CCPU_GPR[rt].u = (CCPU_GPR[ra].s < imm15s) ? 1 : 0;
       break;
     case 0x32:			/* misc */
-      return nds32_decode32_misc (cpu, insn, cia);
+      nds32_decode32_misc (cpu, insn, cia);
+      return;
     case 0x33:			/* bitci */
       CCPU_GPR[rt].u = CCPU_GPR[ra].u & ~imm15u;
       break;
     case 0x35:			/* COP */
-      return nds32_decode32_cop (cpu, insn, cia);
+      nds32_decode32_cop (cpu, insn, cia);
+      return;
     default:
-      goto bad_op;
+      nds32_bad_op (cpu, cia, insn, "32-bit");
     }
-
-  return cia + 4;
-
-bad_op:
-  nds32_bad_op (cpu, cia, insn, "32-bit");
-  return cia;
 }
 
-static sim_cia
+static void
 nds32_decode16_ex9 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
 {
-  sim_cia ex9_cia;
-
-  /* For jump and taken branch, it should clear the NIF_EX9 bit
-     to indicate the ex9_cia should be used; otherwsie,
-     the next cia, cia + 2, should be used.  */
+  /* Set NIF_EX9 so to change how JI/JAL interpreting address.  */
 
   cpu->iflags |= NIF_EX9;
-  ex9_cia = nds32_decode32 (cpu, insn, cia);
-
-  if ((cpu->iflags & NIF_EX9) == 0)
-    return ex9_cia;
-
+  nds32_decode32 (cpu, insn, cia);
   cpu->iflags &= ~NIF_EX9;
-  return cia + 2;
 }
 
-static sim_cia
+static void
 nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
 {
   SIM_DESC sd = CPU_STATE (cpu);
@@ -1478,7 +1480,7 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
 	if (re >= 1)
 	  CCPU_GPR[8].u = cia & 0xFFFFFFFC;
       }
-      goto done;
+      return;
     case 0xf9:			/* pop25 */
       {
 	uint32_t lmw_bim = 0x3A6F8384;
@@ -1488,10 +1490,10 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
 	lmw_bim |= res[re] << 10;
 	CCPU_GPR[NG_SP].u += (imm5u << 3);
 	nds32_decode32_lsmw (cpu, lmw_bim, cia);
-	cia = CCPU_GPR[NG_LP].u;
 	CCPU_SR_CLEAR (PSW, PSW_IFCON);
-	return cia;
+	nds32_set_nia (cpu, CCPU_GPR[NG_LP].u);
       }
+      return;
     }
 
   if (__GF (insn, 8, 7) == 0x7d)	/* movd44 */
@@ -1501,44 +1503,44 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
 
       CCPU_GPR[rt5e] = CCPU_GPR[ra5e];
       CCPU_GPR[rt5e + 1] = CCPU_GPR[ra5e + 1];
-      goto done;
+      return;
     }
 
   switch (__GF (insn, 9, 6))
     {
     case 0x4:			/* add45 */
       CCPU_GPR[rt4].u += CCPU_GPR[ra5].u;
-      goto done;
+      return;
     case 0x5:			/* sub45 */
       CCPU_GPR[rt4].u -= CCPU_GPR[ra5].u;
-      goto done;
+      return;
     case 0x6:			/* addi45 */
       CCPU_GPR[rt4].u += imm5u;
-      goto done;
+      return;
     case 0x7:			/* subi45 */
       CCPU_GPR[rt4].u -= imm5u;
-      goto done;
+      return;
     case 0x8:			/* srai45 */
       CCPU_GPR[rt4].u = CCPU_GPR[rt4].s >> imm5u;
-      goto done;
+      return;
     case 0x9:			/* srli45 */
       CCPU_GPR[rt4].u = CCPU_GPR[rt4].u >> imm5u;
-      goto done;
+      return;
     case 0xa:			/* slli333 */
       CCPU_GPR[rt3].u = CCPU_GPR[ra3].u << imm3u;
-      goto done;
+      return;
     case 0xc:			/* add333 */
       CCPU_GPR[rt3].u = CCPU_GPR[ra3].u + CCPU_GPR[rb3].u;
-      goto done;
+      return;
     case 0xd:			/* sub333 */
       CCPU_GPR[rt3].u = CCPU_GPR[ra3].u - CCPU_GPR[rb3].u;
-      goto done;
+      return;
     case 0xe:			/* addi333 */
       CCPU_GPR[rt3].u = CCPU_GPR[ra3].u + imm3u;
-      goto done;
+      return;
     case 0xf:			/* subi333 */
       CCPU_GPR[rt3].u = CCPU_GPR[ra3].u - imm3u;
-      goto done;
+      return;
     case 0x10:			/* lwi333 */
     case 0x12:			/* lhi333 */
     case 0x13:			/* lbi333 */
@@ -1549,11 +1551,11 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
 	addr = CCPU_GPR[ra3].u + (imm3u << shift);
 	CCPU_GPR[rt3].u = nds32_ld_aligned (cpu, addr, 1 << shift);
       }
-      goto done;
+      return;
     case 0x11:			/* lwi333.bi */
       CCPU_GPR[rt3].u = nds32_ld_aligned (cpu, CCPU_GPR[ra3].u, 4);
       CCPU_GPR[ra3].u += imm3u << 2;
-      goto done;
+      return;
     case 0x14:			/* swi333 */
     case 0x16:			/* shi333 */
     case 0x17:			/* sbi333 */
@@ -1564,14 +1566,14 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
 	nds32_st_aligned (cpu, CCPU_GPR[ra3].u + (imm3u << shift),
 			  1 << shift, CCPU_GPR[rt3].u);
       }
-      goto done;
+      return;
     case 0x15:			/* swi333.bi */
       nds32_st_aligned (cpu, CCPU_GPR[ra3].u, 4, CCPU_GPR[rt3].u);
       CCPU_GPR[ra3].u += imm3u << 2;
-      goto done;
+      return;
     case 0x18:			/* addri36.sp */
       CCPU_GPR[rt3].u = CCPU_GPR[NG_SP].u + (N16_IMM6U (insn) << 2);
-      goto done;
+      return;
     case 0x19:			/* lwi45.fe */
       {
 	/* Not tested yet */
@@ -1579,82 +1581,81 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
 
 	CCPU_GPR[rt4].u = nds32_ld_aligned (cpu, CCPU_GPR[8].u + imm7n, 4);
       }
-      goto done;
+      return;
     case 0x1a:			/* lwi450 */
       CCPU_GPR[rt4].u = nds32_ld_aligned (cpu, CCPU_GPR[ra5].u, 4);
-      goto done;
+      return;
     case 0x1b:			/* swi450 */
       nds32_st_aligned (cpu, CCPU_GPR[ra5].u, 4, CCPU_GPR[rt4].u);
-      goto done;
+      return;
     case 0x30:			/* slts45 */
       CCPU_GPR[NG_TA].u = (CCPU_GPR[rt4].s < CCPU_GPR[ra5].s) ? 1 : 0;
-      goto done;
+      return;
     case 0x31:			/* slt45 */
       CCPU_GPR[NG_TA].u = (CCPU_GPR[rt4].u < CCPU_GPR[ra5].u) ? 1 : 0;
-      goto done;
+      return;
     case 0x32:			/* sltsi45 */
       CCPU_GPR[NG_TA].u = (CCPU_GPR[rt4].s < imm5u) ? 1 : 0;
-      goto done;
+      return;
     case 0x33:			/* slti45 */
       CCPU_GPR[NG_TA].u = (CCPU_GPR[rt4].u < imm5u) ? 1 : 0;
-      goto done;
+      return;
 
     case 0x34:			/* beqzs8, bnezs8 */
-      if (((insn & (1 << 8)) == 0) ^ (CCPU_GPR[NG_TA].u != 0))
-	return cia + (N16_IMM8S (insn) << 1);
-      goto done;
+      if (((insn & __BIT (8)) == 0) ^ (CCPU_GPR[NG_TA].u != 0))
+	{
+	  CCPU_SR_CLEAR (PSW, PSW_IFCON);
+	  nds32_set_nia (cpu, cia + (N16_IMM8S (insn) << 1));
+	}
+      return;
     case 0x35:			/* break16, ex9.it */
       if (imm9u < 32)		/* break16 */
 	{
 	  nds32_raise_exception (cpu, EXP_DEBUG, SIM_SIGTRAP, NULL);
-	  return cia;
+	  return;
 	}
 
       /* ex9.it */
       sim_read (sd, (CCPU_USR[NC_ITB].u & 0xfffffffc) + (imm9u << 2),
 		(unsigned char *) &insn, 4);
       insn = extract_unsigned_integer ((unsigned char *) &insn, 4, BIG_ENDIAN);
-      return nds32_decode16_ex9 (cpu, insn, cia);
+      nds32_decode16_ex9 (cpu, insn, cia);
+      return;
     case 0x3c:			/* ifcall9 */
       if (!CCPU_SR_TEST (PSW, PSW_IFCON))
-	{
-	  CCPU_USR[NC_IFCLP].u = cia + 2;
-	  CCPU_SR_SET (PSW, PSW_IFCON);
-	  return cia + (N16_IMM9U (insn) << 1);
-	}
-      else
-	{
-	  /* FIXME: Raise Exception */
-	}
-      goto done;
+	CCPU_USR[NC_IFCLP].u = cia + 2;
+
+      nds32_set_nia (cpu, cia + (N16_IMM9U (insn) << 1));
+      CCPU_SR_SET (PSW, PSW_IFCON);
+      return;
     case 0x3d:			/* movpi45 */
       CCPU_GPR[rt4].u = imm5u + 16;
-      goto done;
+      return;
     case 0x3f:			/* MISC33 */
       switch (insn & 0x7)
 	{
 	case 2:			/* neg33 */
 	  CCPU_GPR[rt3].s = -CCPU_GPR[ra3].u;
-	  goto done;
+	  return;
 	case 3:			/* not33 */
 	  CCPU_GPR[rt3].u = ~CCPU_GPR[ra3].u;
-	  goto done;
+	  return;
 	case 4:			/* mul33 */
 	  CCPU_GPR[rt3].u = CCPU_GPR[rt3].u * CCPU_GPR[ra3].u;
-	  goto done;
+	  return;
 	case 5:			/* xor33 */
 	  CCPU_GPR[rt3].u = CCPU_GPR[rt3].u ^ CCPU_GPR[ra3].u;
-	  goto done;
+	  return;
 	case 6:			/* and33 */
 	  CCPU_GPR[rt3].u = CCPU_GPR[rt3].u & CCPU_GPR[ra3].u;
-	  goto done;
+	  return;
 	case 7:			/* or33 */
 	  CCPU_GPR[rt3].u = CCPU_GPR[rt3].u | CCPU_GPR[ra3].u;
-	  goto done;
+	  return;
 	default:
 	  goto bad_op;
 	}
-      goto done;
+      return;
     case 0xb:			/* ... */
       switch (insn & 0x7)
 	{
@@ -1683,26 +1684,28 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
 	  CCPU_GPR[rt3].u = CCPU_GPR[rt3].u & ((1 << (__GF (insn, 3, 3) + 1)) - 1);
 	  break;
 	}
-      goto done;
+      return;
     }
 
   switch (__GF (insn, 10, 5))
     {
     case 0x0:			/* mov55 or ifret16 */
-      if (CCPU_SR_TEST (PSW, PSW_IFCON) && rt5 == ra5 && rt5 == 31)
+      /* It's ok to do assignment even if it's ifret16.  */
+      CCPU_GPR[rt5].u = CCPU_GPR[ra5].u;
+
+      if (rt5 == ra5 && rt5 == 31 && CCPU_SR_TEST (PSW, PSW_IFCON))
 	{
+	  /* ifret */
 	  CCPU_SR_CLEAR (PSW, PSW_IFCON);
-	  return CCPU_USR[NC_IFCLP].u;
+	  nds32_set_nia (cpu, CCPU_USR[NC_IFCLP].u);
 	}
-      else
-	CCPU_GPR[rt5].u = CCPU_GPR[ra5].u;
-      goto done;
+      return;
     case 0x1:			/* movi55 */
       CCPU_GPR[rt5].s = imm5s;
-      goto done;
+      return;
     case 0x1b:			/* addi10s (V2) */
       CCPU_GPR[NG_SP].u += N16_IMM10S (insn);
-      goto done;
+      return;
     }
 
   switch (__GF (insn, 11, 4))
@@ -1713,22 +1716,28 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
 	nds32_st_aligned (cpu, addr, 4, CCPU_GPR[rt38].u);
       else			/* lwi37.fp */
 	CCPU_GPR[rt38].u = nds32_ld_aligned (cpu, addr, 4);
-      goto done;
+      return;
     case 0x8:			/* beqz38 */
       if (CCPU_GPR[rt38].u == 0)
-	return cia + (N16_IMM8S (insn) << 1);
-      goto done;
+	{
+	  CCPU_SR_CLEAR (PSW, PSW_IFCON);
+	  nds32_set_nia (cpu, cia + (N16_IMM8S (insn) << 1));
+	}
+      return;
     case 0x9:			/* bnez38 */
       if (CCPU_GPR[rt38].u != 0)
-	return cia + (N16_IMM8S (insn) << 1);
-      goto done;
+	{
+	  CCPU_SR_CLEAR (PSW, PSW_IFCON);
+	  nds32_set_nia (cpu, cia + (N16_IMM8S (insn) << 1));
+	}
+      return;
     case 0xa:			/* beqs38/j8, implied r5 */
       if (CCPU_GPR[rt38].u == CCPU_GPR[5].u)	/* rt38 == 5 means j8 */
 	{
 	  CCPU_SR_CLEAR (PSW, PSW_IFCON);
-	  return cia + (N16_IMM8S (insn) << 1);
+	  nds32_set_nia (cpu, cia + (N16_IMM8S (insn) << 1));
 	}
-      goto done;
+      return;
     case 0xb:			/* bnes38 and others */
       if (rt38 == 5)
 	{
@@ -1737,47 +1746,48 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
 	    case 0:		/* jr5 */
 	    case 4:		/* ret5 */
 	      CCPU_SR_CLEAR (PSW, PSW_IFCON);
-	      return CCPU_GPR[ra5].u;
+	      nds32_set_nia (cpu, CCPU_GPR[ra5].u);
+	      return;
 	    case 1:		/* jral5 */
 	      CCPU_GPR[NG_LP].u = cia + 2;
 	      if (CCPU_SR_TEST (PSW, PSW_IFCON))
-		{
-		  CCPU_GPR[NG_LP] = CCPU_USR[NC_IFCLP];
-		  CCPU_SR_CLEAR (PSW, PSW_IFCON);
-		}
-	      return CCPU_GPR[ra5].u;
+		CCPU_GPR[NG_LP] = CCPU_USR[NC_IFCLP];
+	      CCPU_SR_CLEAR (PSW, PSW_IFCON);
+	      nds32_set_nia (cpu, CCPU_GPR[ra5].u);
+	      return;
 	    case 2:		/* ex9.it imm5 */
 	      sim_read (sd, (CCPU_USR[NC_ITB].u & 0xfffffffc) + (imm5u << 2),
 			(unsigned char *) &insn, 4);
 	      insn = extract_unsigned_integer ((unsigned char *) &insn, 4,
 					       BIG_ENDIAN);
-	      return nds32_decode16_ex9 (cpu, insn, cia);
+	      nds32_decode16_ex9 (cpu, insn, cia);
+	      return;
 	    case 5:		/* add5.pc */
 	      CCPU_GPR[ra5].u += cia;
 	      break;
 	    default:
 	      goto bad_op;
 	    }
-	  goto done;
+	  return;
 	}
       else if (CCPU_GPR[rt38].u != CCPU_GPR[5].u) /* bnes38 */
-	return cia + (N16_IMM8S (insn) << 1);
-      goto done;
+	{
+	  CCPU_SR_CLEAR (PSW, PSW_IFCON);
+	  nds32_set_nia (cpu, cia + (N16_IMM8S (insn) << 1));
+	  return;
+	}
+      return;
     case 0xe:			/* lwi37/swi37 */
       addr = CCPU_GPR[NG_SP].u + (N16_IMM7U (insn) << 2);
       if (insn & (1 << 7))	/* swi37.sp */
 	nds32_st_aligned (cpu, addr, 4, CCPU_GPR[rt38].u);
       else			/* lwi37.sp */
 	CCPU_GPR[rt38].u = nds32_ld_aligned (cpu, addr, 4);
-      goto done;
+      return;
     }
 
 bad_op:
   nds32_bad_op (cpu, cia, insn, "16-bit");
-  return cia;
-
-done:
-  return cia + 2;
 }
 
 void
@@ -1816,15 +1826,26 @@ sim_engine_run (SIM_DESC sd, int next_cpu_nr, int nr_cpus, int siggnal)
 			NULL, 0, " "); /* Use a space for gcc warnings.  */
 	}
 
+      cpu->iflags &= ~NIF_BRANCH;
       if ((insn & 0x80000000) == 0)
-	cia = nds32_decode32 (cpu, insn, cia);
+	{
+	  nds32_decode32 (cpu, insn, cia);
+	  cia += 4;
+	}
       else
-	cia = nds32_decode16 (cpu, insn >> 16, cia);
+	{
+	  nds32_decode16 (cpu, insn >> 16, cia);
+	  cia += 2;
+	}
+
+      if (cpu->iflags & NIF_BRANCH)
+	cia = cpu->baddr;
 
       if (TRACE_LINENUM_P (cpu))
 	{
 	  trace_result_addr1 (sd, cpu, TRACE_INSN_IDX, cia);
 	}
+
       /* Sync registers. TODO: Sync PSW with current_target_endian.  */
       CIA_SET (cpu, cia);
 
