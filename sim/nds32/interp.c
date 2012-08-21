@@ -666,6 +666,22 @@ nds32_decode32_alu2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
   const int imm5u = rb;
   const int dt = (insn & __BIT (21)) ? NC_D1LO : NC_D0LO;
 
+  if ((insn & 0x7f) == 0x4e)	/* ffbi */
+    {
+      unsigned char buff[4];
+      int order = CCPU_SR_TEST (PSW, PSW_BE) ? BIG_ENDIAN : LITTLE_ENDIAN;
+      int imm8 = ((insn >> 7) & 0xff);
+      unsigned char *ret;
+
+      store_unsigned_integer (buff, 4, order, CCPU_GPR[ra].u);
+      ret = memchr (buff, imm8, 4);
+      if (NULL == ret)
+	CCPU_GPR[rt].u = 0;
+      else
+	CCPU_GPR[rt].u = ret - buff - 4;
+      return;
+    }
+
   switch (insn & 0x3ff)
     {
     case 0x0:			/* max */
@@ -747,15 +763,29 @@ nds32_decode32_alu2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0xb:			/* btst */
       CCPU_GPR[rt].u = (CCPU_GPR[ra].u & (1 << imm5u)) != 0;
       break;
+    case 0xe:			/* ffb */
+      {
+	char buff[4];
+	int order = CCPU_SR_TEST (PSW, PSW_BE) ? BIG_ENDIAN : LITTLE_ENDIAN;
+	void *ret;
+
+	store_unsigned_integer ((unsigned char *) &buff, 4, order, CCPU_GPR[ra].u);
+	ret = memchr (buff, CCPU_GPR[rb].u, 4);
+	if (NULL == ret)
+	  CCPU_GPR[rt].u = 0;
+	else
+	  CCPU_GPR[rt].u = (char *) ret - (char *) buff - 4;
+      }
+      break;
     case 0x17:			/* ffzmism */
       {
-	uint32_t a = CCPU_GPR[ra].u;
-	uint32_t b = CCPU_GPR[rb].u;
+	char a[4];
+	char b[4];
 	int order = CCPU_SR_TEST (PSW, PSW_BE) ? BIG_ENDIAN : LITTLE_ENDIAN;
 	int ret;
 
-	store_unsigned_integer ((unsigned char *) &a, 4, order, a);
-	store_unsigned_integer ((unsigned char *) &b, 4, order, b);
+	store_unsigned_integer ((unsigned char *) &a, 4, order, CCPU_GPR[ra].u);
+	store_unsigned_integer ((unsigned char *) &b, 4, order, CCPU_GPR[rb].u);
 	ret = find_null_mism ((unsigned char *) &a, (unsigned char *) &b);
 	CCPU_GPR[rt].u = ret;
       }
