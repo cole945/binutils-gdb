@@ -627,12 +627,13 @@ nds32_decode32_alu1 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       }
       break;
     case 0x19:			/* svs */
+      nds32_bad_op (cpu, cia, insn, "ALU1/svs");
       break;
-    case 0x1a:			/* comvz */
+    case 0x1a:			/* cmovz */
       if (CCPU_GPR[rb].u == 0)
 	CCPU_GPR[rt].u = CCPU_GPR[ra].u;
       break;
-    case 0x1b:			/* comvn */
+    case 0x1b:			/* cmovn */
       if (CCPU_GPR[rb].u != 0)
 	CCPU_GPR[rt].u = CCPU_GPR[ra].u;
       break;
