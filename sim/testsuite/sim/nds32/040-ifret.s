@@ -1,6 +1,6 @@
 # nds32 test sanity, expected to pass.
-# mach:	 all
-# as:
+# mach:		all
+# as:		-mbaseline=V3
 # ld:		--defsym=_stack=0x3000000
 # output:	pass\n
 
