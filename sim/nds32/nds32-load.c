@@ -270,7 +270,7 @@ nds32_load_segments (SIM_DESC sd, bfd *abfd, uint32_t load_base)
 
       if (bfd_seek (abfd, phdr[i].p_offset, SEEK_SET) == 0
 	  && bfd_bread (data, filesz, abfd) == filesz)
-	sim_write (sd, addr + bias, data, memsz);
+	sim_write (sd, addr + bias, (unsigned char *) data, memsz);
 
       free (data);
     }
@@ -364,7 +364,7 @@ nds32_init_libgloss (SIM_DESC sd, struct bfd *abfd, char **argv, char **env)
 static uint32_t
 nds32_push_auxv (SIM_DESC sd, struct bfd *abfd,  uint32_t sp, uint32_t type, uint32_t val)
 {
-  char buf[4];
+  unsigned char buf[4];
 
   bfd_put_32 (abfd, type, buf);
   sim_write (sd, sp, buf, sizeof (buf));
@@ -425,7 +425,7 @@ nds32_init_linux (SIM_DESC sd, struct bfd *abfd, char **argv, char **env)
     {
       int len = strlen (argv[i]) + 1;	/* 1 for trailing \0.  */
 
-      sim_write (sd, flat, argv[i], len);
+      sim_write (sd, flat, (unsigned char *) argv[i], len);
       bfd_put_32 (abfd, flat, buf);
       sim_write (sd, sp_argv + i * 4, buf, 4);
       flat += len;
@@ -437,7 +437,7 @@ nds32_init_linux (SIM_DESC sd, struct bfd *abfd, char **argv, char **env)
     {
       int len = strlen (env[i]) + 1;	/* 1 for trailing \0.  */
 
-      sim_write (sd, flat, env[i], len);
+      sim_write (sd, flat, (unsigned char *) env[i], len);
       bfd_put_32 (abfd, flat, buf);
       sim_write (sd, sp_envp + i * 4, buf, 4);
       flat += len;
