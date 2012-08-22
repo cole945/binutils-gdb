@@ -1,6 +1,6 @@
 # nds32 test LMWZB, expected to pass.
-# mach:	 all
-# as:
+# mach:		all
+# as:		-mbaseline=V3
 # ld:		--defsym=_stack=0x3000000
 # output:	pass\n
 
@@ -60,7 +60,7 @@ main:
 
 .section	.rodata
 .Lpstr:  .string "pass\n"
-.Lfstr0: .string "fall: adjust $Ra + 20\n"
+.Lfstr0: .string "fail: adjust $Ra + 20\n"
 .Lfstr1: .string "fail: $r6 == 0x11222211\n"
 .Lfstr2: .string "fail: $r7 == 0x55666655\n"
 .Lfstr3: .string "fail: $r8 == 0x77000077\n"
