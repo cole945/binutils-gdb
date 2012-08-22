@@ -55,11 +55,13 @@ nds32_fd_from_64 (sim_cpu *cpu, int fd, uint64_t u64)
 sim_cia
 nds32_decode32_lwc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
+  SIM_DESC sd = CPU_STATE (cpu);
   const int cop = __GF (insn, 13, 2);
   const int fst = N32_RT5 (insn);
   const int ra = N32_RA5 (insn);
   const int imm12s = N32_IMM12S (insn);
-  sim_fpu sf;
+
+  SIM_ASSERT (cop == 0);
 
   if (insn & (1 << 12))
     {
@@ -77,10 +79,13 @@ nds32_decode32_lwc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 sim_cia
 nds32_decode32_swc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
+  SIM_DESC sd = CPU_STATE (cpu);
   const int cop = __GF (insn, 13, 2);
   const int fst = N32_RT5 (insn);
   const int ra = N32_RA5 (insn);
   const int imm12s = N32_IMM12S (insn);
+
+  SIM_ASSERT (cop == 0);
 
   if (insn & (1 << 12))		/* fssi.bi */
     {
@@ -98,11 +103,14 @@ nds32_decode32_swc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 sim_cia
 nds32_decode32_ldc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
+  SIM_DESC sd = CPU_STATE (cpu);
   const int cop = __GF (insn, 13, 2);
   const int fdt = N32_RT5 (insn);
   const int ra = N32_RA5 (insn);
   const int imm12s = N32_IMM12S (insn);
   uint64_t u64;
+
+  SIM_ASSERT (cop == 0);
 
   if (insn & (1 << 12))		/* fldi.bi */
     {
@@ -122,11 +130,14 @@ nds32_decode32_ldc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 sim_cia
 nds32_decode32_sdc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
+  SIM_DESC sd = CPU_STATE (cpu);
   const int cop = __GF (insn, 13, 2);
   const int fdt = N32_RT5 (insn);
   const int ra = N32_RA5 (insn);
   const int imm12s = N32_IMM12S (insn);
   uint64_t u64;
+
+  SIM_ASSERT (cop == 0);
 
   u64 = nds32_fd_to_64 (cpu, fdt);
 
@@ -210,8 +221,9 @@ nds32_decode32_fcmp (sim_fpu *sfa, sim_fpu *sfb)
 sim_cia
 nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
-  const int sv = __GF (insn, 8, 2);
+  SIM_DESC sd = CPU_STATE (cpu);
   const int cop = __GF (insn, 4, 2);
+  const int sv = __GF (insn, 8, 2);
   const int fst = N32_RT5 (insn);
   const int fsa = N32_RA5 (insn);
   const int fsb = N32_RB5 (insn);
@@ -228,6 +240,9 @@ nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
   sim_fpu sft;
   sim_fpu sfa;
   sim_fpu sfb;
+
+
+  SIM_ASSERT (cop == 0);
 
   /* Prepare operand for F[SD][12]. */
   if ((insn & 0xb) == 0)

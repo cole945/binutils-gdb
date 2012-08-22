@@ -345,6 +345,7 @@ nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     { {3, 2, 1, 0}, /* With Aligment Check.  */ {0, 1, 2, 3} };
   uint32_t val = 0;
   SIM_ADDR base = -1;
+  char buf[4];
 
   /* Filter out undefined opcode.  */
   if ((insn & 0x3) == 0x3)
@@ -409,14 +410,14 @@ nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	  /* store */
 
 	  val = CCPU_GPR[i].u;
-	  store_unsigned_integer ((unsigned char *) &val, 4, order, val);
+	  store_unsigned_integer ((unsigned char *) buf, 4, order, val);
 	  if ((insn & 0x3) == 0x2)
 	    {
 	      /* Until zero byte case.  */
-	      len = strnlen ((unsigned char *) &val, 4);
+	      len = strnlen (buf, 4);
 	      size = (len == 4) ? 4 : len + 1;	/* Include zero byte.  */
 	    }
-	  ret = sim_write (sd, base, (unsigned char *) &val, size);
+	  ret = sim_write (sd, base, (unsigned char *) buf, size);
 	  if (ret != size)
 	    {
 	      nds32_raise_exception (cpu, EXP_GENERAL, SIM_SIGSEGV,
@@ -430,19 +431,19 @@ nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	{
 	  /* load */
 
-	  ret = sim_read (sd, base, (unsigned char *) &val, 4);
+	  ret = sim_read (sd, base, (unsigned char *) buf, 4);
 	  if (ret != 4)
 	    {
 	      nds32_raise_exception (cpu, EXP_GENERAL, SIM_SIGSEGV,
 				     "Access violation. Write of address %#x\n",
 				     base);
 	    }
-	  val = extract_unsigned_integer ((unsigned char *) &val, 4, order);
+	  val = extract_unsigned_integer ((unsigned char *) buf, 4, order);
 	  CCPU_GPR[i].u = val;
 	  if ((insn & 0x3) == 0x2)
 	    {
 	      /* Until zero byte case.  */
-	      len = strnlen ((unsigned char *) &val, 4);
+	      len = strnlen (buf, 4);
 	      if (len < 4)
 		goto zero_byte_exist;
 	    }
@@ -461,13 +462,13 @@ nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	      /* store */
 
 	      val = CCPU_GPR[NG_SP - (enb4map[wac][i])].u;
-	      store_unsigned_integer ((unsigned char *) &val, 4, order, val);
+	      store_unsigned_integer ((unsigned char *) buf, 4, order, val);
 	      if ((insn & 0x3) == 0x2)	/* Until zero byte case.  */
 		{
-		  len = strnlen ((unsigned char *) &val, 4);
+		  len = strnlen (buf, 4);
 		  size = (len == 4) ? 4 : len + 1;	/* Include zero byte.  */
 		}
-	      ret = sim_write (sd, base, (unsigned char *) &val, size);
+	      ret = sim_write (sd, base, (unsigned char *) buf, size);
 	      if (ret != size)
 		{
 		  nds32_raise_exception (cpu, EXP_GENERAL, SIM_SIGSEGV,
@@ -481,7 +482,7 @@ nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	    {
 	      /* load */
 
-	      ret = sim_read (sd, base, (unsigned char *) &val, 4);
+	      ret = sim_read (sd, base, (unsigned char *) buf, 4);
 	      if (ret != 4)
 		{
 		  nds32_raise_exception (cpu, EXP_GENERAL, SIM_SIGSEGV,
@@ -489,11 +490,11 @@ nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 					 base);
 		}
 	      val =
-		extract_unsigned_integer ((unsigned char *) &val, 4, order);
+		extract_unsigned_integer ((unsigned char *) buf, 4, order);
 	      CCPU_GPR[NG_SP - (enb4map[wac][i])].u = val;
 	      if ((insn & 0x3) == 0x2)	/* until zero byte ? */
 		{
-		  len = strnlen ((unsigned char *) &val, 4);
+		  len = strnlen (buf, 4);
 		  if (len < 4)
 		    goto zero_byte_exist;
 		}
@@ -1240,7 +1241,6 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
   int op = N32_OP6 (insn);
   int rt = N32_RT5 (insn);
   int ra = N32_RA5 (insn);
-  int rb = N32_RB5 (insn);
   int imm15s = N32_IMM15S (insn);
   int imm15u = N32_IMM15U (insn);
   uint32_t shift;
