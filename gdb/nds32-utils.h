@@ -38,16 +38,10 @@ void nds32_append_bitfield (struct type *type, struct type *field_type,
 struct type *nds32_init_enum (struct gdbarch *gdbarch, char *name);
 void nds32_append_enum (struct type *type, int bitpos, char *name);
 
-/* General purpose link-list.  */
-struct nds32_list
-{
-  const char *key;
-  void *value;
-  struct nds32_list *next;
-};
-void *nds32_list_lookup (struct nds32_list *head, const char *key);
-void nds32_list_insert (struct nds32_list *pos, const char *key, void *value);
-void nds32_list_init (struct nds32_list *head);
+/* Helpers for type table.  */
+htab_t nds32_alloc_type_tab (int size);
+struct type *nds32_type_lookup (htab_t htab, const char *name);
+void nds32_type_insert (htab_t htab, const char *name, struct type *type);
 
 /* UI buffer for output redirection.  */
 struct ui_file_buffer
