@@ -111,6 +111,7 @@ enum nds32_fpu
    ----------------------------------------------
    | ARCH | CONFUGURAION FIELD | ABI | VERSION  |
    ---------------------------------------------- */
+struct htab;
 struct gdbarch_tdep
 {
   /* ABI version */
@@ -145,7 +146,8 @@ struct gdbarch_tdep
 
   const struct target_desc *tdesc;
 
-  struct nds32_list nds32_types;
+  /* Type table for registers.  */
+  struct htab *type_tab;
 };
 
 /* Hidden options.  */
