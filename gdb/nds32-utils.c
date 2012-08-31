@@ -26,6 +26,7 @@
 #include "gdbtypes.h"
 #include "gdb_assert.h"
 #include "floatformat.h"
+#include "hashtab.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -132,39 +133,79 @@ nds32_append_enum (struct type *type, int enumval, char *name)
   SET_FIELD_ENUMVAL (f[0], enumval);
 }
 
-/* Helper for key-value lookup.
-   TODO: Replace this with libiberty hashtab.  */
+/* Helpers for type table.  */
 
-void *
-nds32_list_lookup (struct nds32_list *head, const char *key)
+struct type_entry
 {
-  struct nds32_list *i;
+  const char *name;
+  struct type *type;
+};
 
-  for (i = head->next; i != head; i = i->next)
-    if (strcmp (key, i->key) == 0)
-      return i->value;
-  return NULL;
+/* Hash code function.  Simply a wrapper for htab_hash_string.  */
+
+static hashval_t
+type_hash_string (const PTR p)
+{
+  struct type_entry *e = (struct type_entry *) p;
+
+  return htab_hash_string (e->name);
 }
 
-void
-nds32_list_init (struct nds32_list *head)
+/* Equal function for hash.  Simply a wrapper for strcmp.  */
+
+static int
+type_name_eq (const PTR p1, const PTR p2)
 {
-  head->next = head;
+  struct type_entry *e1 = (struct type_entry *) p1;
+  struct type_entry *e2 = (struct type_entry *) p2;
+
+  return strcmp (e1->name, e2->name) == 0;
 }
 
-void
-nds32_list_insert (struct nds32_list *pos, const char *key, void *value)
+/* Allocate a hash table for register/type pair.  */
+
+htab_t
+nds32_alloc_type_tab (int size)
 {
-  struct nds32_list *item;
+  return htab_create_alloc (size, type_hash_string, type_name_eq,
+			    NULL /* htab_del */ ,
+			    xcalloc, xfree);
+}
 
-  /* Check for duplicate key.  */
-  gdb_assert (!nds32_list_lookup (pos, key));
+/* Look up a register by name.  */
 
-  item = (struct nds32_list *) xmalloc (sizeof (struct nds32_list));
-  item->key = xstrdup (key);
-  item->value = value;
-  item->next = pos->next;
-  pos->next = item;
+struct type *
+nds32_type_lookup (htab_t htab, const char *name)
+{
+  struct type_entry ent;
+  struct type_entry **pe;
+
+  ent.name = name;
+  pe = (struct type_entry **) htab_find_slot (htab, &ent, NO_INSERT);
+  if (pe)
+    return (*pe)->type;
+  else
+    return NULL;
+}
+
+/* Insert a type for a specific register name.  */
+
+void
+nds32_type_insert (htab_t htab, const char *name, struct type *type)
+{
+  struct type_entry ent;
+  struct type_entry **pe;
+
+  ent.name = name;
+
+  pe = (struct type_entry **) htab_find_slot (htab, &ent, INSERT);
+
+  if (*pe != NULL)
+    return;
+
+  *pe = xmalloc (sizeof (**pe));
+  (*pe)->name = xstrdup (name);
+  (*pe)->type = type;
 }
 
 /* ui_file_put_method_ftype.
