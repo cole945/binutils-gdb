@@ -318,13 +318,13 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
       nds32_append_enum (type, 3, "32SP_32DP");
       stype1 = type;
 
-      type = nds32_init_type (gdbarch, "builtin_fpcfg_type", 4);
+      type = nds32_init_type (gdbarch, "builtin_fpcfg_type", USE_FLAGS);
       nds32_append_flag (type, 0, "SP");
       nds32_append_flag (type, 1, "DP");
-      nds32_append_field (type, stype1, 2, 3, "FREG");
+      nds32_append_bitfield (type, stype1, 2, 3, "FREG");
       nds32_append_flag (type, 4, "FMA");
-      nds32_append_field (type, bt->builtin_uint8, 22, 26, "IMVER");
-      nds32_append_field (type, bt->builtin_uint8, 27, 31, "AVER");
+      nds32_append_bitfield (type, bt->builtin_uint8, 22, 26, "IMVER");
+      nds32_append_bitfield (type, bt->builtin_uint8, 27, 31, "AVER");
       nds32_list_insert (&tdep->nds32_types, reg_name, type);
       return type;
     }
@@ -339,8 +339,8 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
       nds32_append_enum (type, 3, "RTZ");
       stype1 = type;
 
-      type = nds32_init_type (gdbarch, "builtin_type_nds32_fpcsr", 4);
-      nds32_append_field (type, stype1, 0, 1, "RM");
+      type = nds32_init_type (gdbarch, "builtin_type_nds32_fpcsr", USE_FLAGS);
+      nds32_append_bitfield (type, stype1, 0, 1, "RM");
       nds32_append_flag (type, 2, "IVO");
       nds32_append_flag (type, 3, "DBZ");
       nds32_append_flag (type, 4, "OVF");
@@ -384,10 +384,10 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
       nds32_append_enum (type, 3, "Reserved(3)");
       stype2 = type;
 
-      type = nds32_init_type (gdbarch, "builtin_type_nds32_psw", 4);
+      type = nds32_init_type (gdbarch, "builtin_type_nds32_psw", USE_FLAGS);
       nds32_append_flag (type, 0, "GIE");
-      nds32_append_field (type, stype1, 1, 2, "INTL");
-      nds32_append_field (type, stype2, 3, 4, "POM");
+      nds32_append_bitfield (type, stype1, 1, 2, "INTL");
+      nds32_append_bitfield (type, stype2, 3, 4, "POM");
       nds32_append_flag (type, 5, "BE");
       nds32_append_flag (type, 6, "IT");
       nds32_append_flag (type, 7, "DT");
@@ -416,10 +416,10 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
       nds32_append_enum (type, 3, "256_byte");
       stype1 = type;
 
-      type = nds32_init_type (gdbarch, "builtin_type_nds32_ivb", 4);
+      type = nds32_init_type (gdbarch, "builtin_type_nds32_ivb", USE_FLAGS);
       nds32_append_flag (type, 13, "EVIC");
-      nds32_append_field (type, stype1, 14, 15, "ESZ");
-      nds32_append_field (type, bt->builtin_uint16, 16, 31, "IVBASE");
+      nds32_append_bitfield (type, stype1, 14, 15, "ESZ");
+      nds32_append_bitfield (type, bt->builtin_uint16, 16, 31, "IVBASE");
       nds32_list_insert (&tdep->nds32_types, reg_name, type);
       return type;
     }
@@ -429,10 +429,10 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
   if (strcmp (reg_name, "ir6") == 0
    || strcmp (reg_name, "ir7") == 0)
     {
-      type = nds32_init_type (gdbarch, "builtin_type_nds32_itype", 4);
-      nds32_append_field (type, bt->builtin_uint8, 0, 3, "ETYPE");
+      type = nds32_init_type (gdbarch, "builtin_type_nds32_itype", USE_FLAGS);
+      nds32_append_bitfield (type, bt->builtin_uint8, 0, 3, "ETYPE");
       nds32_append_flag (type, 4, "INST");
-      nds32_append_field (type, bt->builtin_uint16, 16, 30, "SWID");
+      nds32_append_bitfield (type, bt->builtin_uint16, 16, 30, "SWID");
       nds32_list_insert (&tdep->nds32_types, "ir6", type);
       nds32_list_insert (&tdep->nds32_types, "ir7", type);
       return type;
@@ -459,23 +459,23 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
   /* ir18 - Interruption Prioirty Register */
   if (strcmp (reg_name, "ir18") == 0)
     {
-      type = nds32_init_type (gdbarch, "builtin_type_nds32_int_pri", 4);
-      nds32_append_field (type, bt->builtin_uint8, 0, 1, "H0PRI");
-      nds32_append_field (type, bt->builtin_uint8, 2, 3, "H1PRI");
-      nds32_append_field (type, bt->builtin_uint8, 4, 5, "H2PRI");
-      nds32_append_field (type, bt->builtin_uint8, 6, 7, "H3PRI");
-      nds32_append_field (type, bt->builtin_uint8, 8, 9, "H4PRI");
-      nds32_append_field (type, bt->builtin_uint8, 10, 11, "H5PRI");
-      nds32_append_field (type, bt->builtin_uint8, 12, 13, "H6PRI");
-      nds32_append_field (type, bt->builtin_uint8, 14, 15, "H7PRI");
-      nds32_append_field (type, bt->builtin_uint8, 16, 17, "H8PRI");
-      nds32_append_field (type, bt->builtin_uint8, 18, 19, "H9PRI");
-      nds32_append_field (type, bt->builtin_uint8, 20, 21, "H10PRI");
-      nds32_append_field (type, bt->builtin_uint8, 22, 23, "H11PRI");
-      nds32_append_field (type, bt->builtin_uint8, 24, 25, "H12PRI");
-      nds32_append_field (type, bt->builtin_uint8, 26, 27, "H13PRI");
-      nds32_append_field (type, bt->builtin_uint8, 28, 29, "H14PRI");
-      nds32_append_field (type, bt->builtin_uint8, 30, 31, "H15PRI");
+      type = nds32_init_type (gdbarch, "builtin_type_nds32_int_pri", NO_FLAGS);
+      nds32_append_bitfield (type, bt->builtin_uint8, 0, 1, "H0PRI");
+      nds32_append_bitfield (type, bt->builtin_uint8, 2, 3, "H1PRI");
+      nds32_append_bitfield (type, bt->builtin_uint8, 4, 5, "H2PRI");
+      nds32_append_bitfield (type, bt->builtin_uint8, 6, 7, "H3PRI");
+      nds32_append_bitfield (type, bt->builtin_uint8, 8, 9, "H4PRI");
+      nds32_append_bitfield (type, bt->builtin_uint8, 10, 11, "H5PRI");
+      nds32_append_bitfield (type, bt->builtin_uint8, 12, 13, "H6PRI");
+      nds32_append_bitfield (type, bt->builtin_uint8, 14, 15, "H7PRI");
+      nds32_append_bitfield (type, bt->builtin_uint8, 16, 17, "H8PRI");
+      nds32_append_bitfield (type, bt->builtin_uint8, 18, 19, "H9PRI");
+      nds32_append_bitfield (type, bt->builtin_uint8, 20, 21, "H10PRI");
+      nds32_append_bitfield (type, bt->builtin_uint8, 22, 23, "H11PRI");
+      nds32_append_bitfield (type, bt->builtin_uint8, 24, 25, "H12PRI");
+      nds32_append_bitfield (type, bt->builtin_uint8, 26, 27, "H13PRI");
+      nds32_append_bitfield (type, bt->builtin_uint8, 28, 29, "H14PRI");
+      nds32_append_bitfield (type, bt->builtin_uint8, 30, 31, "H15PRI");
       nds32_list_insert (&tdep->nds32_types, reg_name, type);
       return type;
     }
@@ -490,18 +490,18 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
       nds32_append_enum (type, 3, "CA_WT");
       stype1 = type;
 
-      type = nds32_init_type (gdbarch, "builtin_type_nds32_mmu_ctl", 4);
+      type = nds32_init_type (gdbarch, "builtin_type_nds32_mmu_ctl", USE_FLAGS);
       nds32_append_flag (type, 0, "D");
-      nds32_append_field (type, stype1, 1, 2, "NTC0");
-      nds32_append_field (type, stype1, 3, 4, "NTC1");
-      nds32_append_field (type, stype1, 5, 6, "NTC2");
-      nds32_append_field (type, stype1, 7, 8, "NTC3");
+      nds32_append_bitfield (type, stype1, 1, 2, "NTC0");
+      nds32_append_bitfield (type, stype1, 3, 4, "NTC1");
+      nds32_append_bitfield (type, stype1, 5, 6, "NTC2");
+      nds32_append_bitfield (type, stype1, 7, 8, "NTC3");
       nds32_append_flag (type, 9, "TBALCK");
       nds32_append_flag (type, 10, "MPZIU");
-      nds32_append_field (type, bt->builtin_uint8, 11, 12, "NTM0");
-      nds32_append_field (type, bt->builtin_uint8, 13, 14, "NTM1");
-      nds32_append_field (type, bt->builtin_uint8, 15, 16, "NTM2");
-      nds32_append_field (type, bt->builtin_uint8, 17, 18, "NTM3");
+      nds32_append_bitfield (type, bt->builtin_uint8, 11, 12, "NTM0");
+      nds32_append_bitfield (type, bt->builtin_uint8, 13, 14, "NTM1");
+      nds32_append_bitfield (type, bt->builtin_uint8, 15, 16, "NTM2");
+      nds32_append_bitfield (type, bt->builtin_uint8, 17, 18, "NTM3");
       nds32_append_flag (type, 19, "DREE");
       nds32_list_insert (&tdep->nds32_types, reg_name, type);
       return type;
@@ -510,9 +510,9 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
   /* mr1 */
   if (strcmp (reg_name, "mr1") == 0)
     {
-      type = nds32_init_type (gdbarch, "builtin_type_nds32_l1_pptb", 4);
+      type = nds32_init_type (gdbarch, "builtin_type_nds32_l1_pptb", USE_FLAGS);
       nds32_append_flag (type, 0, "NV");
-      nds32_append_field (type, bt->builtin_uint32, 12, 31, "L1_PPT_BASE");
+      nds32_append_bitfield (type, bt->builtin_uint32, 12, 31, "L1_PPT_BASE");
       nds32_list_insert (&tdep->nds32_types, reg_name, type);
       return type;
     }
@@ -520,8 +520,8 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
   /* mr2 */
   if (strcmp (reg_name, "mr2") == 0)
     {
-      type = nds32_init_type (gdbarch, "builtin_type_nds32_tlb_vpn", 4);
-      nds32_append_field (type, bt->builtin_uint32, 12, 31, "VPN");
+      type = nds32_init_type (gdbarch, "builtin_type_nds32_tlb_vpn", NO_FLAGS);
+      nds32_append_bitfield (type, bt->builtin_uint32, 12, 31, "VPN");
       nds32_list_insert (&tdep->nds32_types, reg_name, type);
       return type;
     }
@@ -529,15 +529,15 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
   /* mr3 */
   if (strcmp (reg_name, "mr3") == 0)
     {
-      type = nds32_init_type (gdbarch, "builtin_type_nds32_tlb_data", 4);
+      type = nds32_init_type (gdbarch, "builtin_type_nds32_tlb_data", USE_FLAGS);
       nds32_append_flag (type, 0, "V");
-      nds32_append_field (type, bt->builtin_uint8, 1, 3, "M");
+      nds32_append_bitfield (type, bt->builtin_uint8, 1, 3, "M");
       nds32_append_flag (type, 4, "D");
       nds32_append_flag (type, 5, "X");
       nds32_append_flag (type, 6, "A");
       nds32_append_flag (type, 7, "G");
-      nds32_append_field (type, bt->builtin_uint8, 8, 10, "C");
-      nds32_append_field (type, bt->builtin_uint32, 12, 31, "PPN");
+      nds32_append_bitfield (type, bt->builtin_uint8, 8, 10, "C");
+      nds32_append_bitfield (type, bt->builtin_uint32, 12, 31, "PPN");
       nds32_list_insert (&tdep->nds32_types, reg_name, type);
       return type;
     }
@@ -558,9 +558,9 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
       nds32_append_enum (type, 9, "256MB");
       stype1 = type;
 
-      type = nds32_init_type (gdbarch, "builtin_type_nds32_tlb_misc", 4);
-      nds32_append_field (type, stype1, 0, 3, "ACC_PSZ");
-      nds32_append_field (type, bt->builtin_uint32, 4, 12, "CID");
+      type = nds32_init_type (gdbarch, "builtin_type_nds32_tlb_misc", NO_FLAGS);
+      nds32_append_bitfield (type, stype1, 0, 3, "ACC_PSZ");
+      nds32_append_bitfield (type, bt->builtin_uint32, 4, 12, "CID");
       nds32_list_insert (&tdep->nds32_types, reg_name, type);
       return type;
     }
@@ -583,10 +583,10 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
       nds32_append_enum (type, 15, "0KB");
       stype1 = type;
 
-      type = nds32_init_type (gdbarch, "builtin_type_nds32_ilmb", 4);
-      nds32_append_field (type, bt->builtin_uint8, 0, 0, "IEN");
-      nds32_append_field (type, stype1, 1, 4, "ILMSZ");
-      nds32_append_field (type, bt->builtin_data_ptr, 0, 31, "(raw)");
+      type = nds32_init_type (gdbarch, "builtin_type_nds32_ilmb", NO_FLAGS);
+      nds32_append_bitfield (type, bt->builtin_uint8, 0, 0, "IEN");
+      nds32_append_bitfield (type, stype1, 1, 4, "ILMSZ");
+      nds32_append_bitfield (type, bt->builtin_data_ptr, 0, 31, "(raw)");
       nds32_list_insert (&tdep->nds32_types, reg_name, type);
       return type;
     }
@@ -609,12 +609,12 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
       nds32_append_enum (type, 15, "0KB");
       stype1 = type;
 
-      type = nds32_init_type (gdbarch, "builtin_type_nds32_dlmb", 4);
-      nds32_append_field (type, bt->builtin_uint8, 0, 0, "DEN");
-      nds32_append_field (type, stype1, 1, 4, "DLMSZ");
-      nds32_append_field (type, bt->builtin_uint8, 5, 5, "DBM");
-      nds32_append_field (type, bt->builtin_uint8, 6, 6, "DBB");
-      nds32_append_field (type, bt->builtin_data_ptr, 0, 31, "(raw)");
+      type = nds32_init_type (gdbarch, "builtin_type_nds32_dlmb", NO_FLAGS);
+      nds32_append_bitfield (type, bt->builtin_uint8, 0, 0, "DEN");
+      nds32_append_bitfield (type, stype1, 1, 4, "DLMSZ");
+      nds32_append_bitfield (type, bt->builtin_uint8, 5, 5, "DBM");
+      nds32_append_bitfield (type, bt->builtin_uint8, 6, 6, "DBB");
+      nds32_append_bitfield (type, bt->builtin_data_ptr, 0, 31, "(raw)");
       nds32_list_insert (&tdep->nds32_types, reg_name, type);
       return type;
     }
@@ -636,11 +636,11 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
   /* dr40 - EDM Configuration Register */
   if (strcmp (reg_name, "dr40") == 0)
     {
-      type = nds32_init_type (gdbarch, "builtin_type_nds32_edm_cfg", 4);
-      nds32_append_field (type, bt->builtin_uint8, 0, 2, "BC");
+      type = nds32_init_type (gdbarch, "builtin_type_nds32_edm_cfg", USE_FLAGS);
+      nds32_append_bitfield (type, bt->builtin_uint8, 0, 2, "BC");
       nds32_append_flag (type, 3, "DIMU");
       nds32_append_flag (type, 4, "DALM");
-      nds32_append_field (type, bt->builtin_uint16, 16, 31, "VER");
+      nds32_append_bitfield (type, bt->builtin_uint16, 16, 31, "VER");
       nds32_list_insert (&tdep->nds32_types, reg_name, type);
       return type;
     }
@@ -648,11 +648,11 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
   /* dmar0 - DMA Configuration Register */
   if (strcmp (reg_name, "dmar0") == 0)
     {
-      type = nds32_init_type (gdbarch, "builtin_type_nds32_dma_cfg", 4);
-      nds32_append_field (type, bt->builtin_uint8, 0, 1, "NCHN");
+      type = nds32_init_type (gdbarch, "builtin_type_nds32_dma_cfg", USE_FLAGS);
+      nds32_append_bitfield (type, bt->builtin_uint8, 0, 1, "NCHN");
       nds32_append_flag (type, 2, "UNEA");
       nds32_append_flag (type, 3, "2DET");
-      nds32_append_field (type, bt->builtin_uint16, 16, 31, "VER");
+      nds32_append_bitfield (type, bt->builtin_uint16, 16, 31, "VER");
       nds32_list_insert (&tdep->nds32_types, reg_name, type);
       return type;
     }
@@ -677,10 +677,10 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
       nds32_append_enum (type, 0xE, "N14");
       stype2 = type;
 
-      type = nds32_init_type (gdbarch, "builtin_type_nds32_cpuver", 4);
-      nds32_append_field (type, stype1, 0, 15, "CFGID");
-      nds32_append_field (type, bt->builtin_uint8, 16, 23, "REV");
-      nds32_append_field (type, stype2, 24, 31, "CPUID");
+      type = nds32_init_type (gdbarch, "builtin_type_nds32_cpuver", NO_FLAGS);
+      nds32_append_bitfield (type, stype1, 0, 15, "CFGID");
+      nds32_append_bitfield (type, bt->builtin_uint8, 16, 23, "REV");
+      nds32_append_bitfield (type, stype2, 24, 31, "CPUID");
       nds32_list_insert (&tdep->nds32_types, reg_name, type);
       return type;
     }
@@ -688,7 +688,7 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
   /* cr4 - Misc Configuration Register */
   if (strcmp (reg_name, "cr4") == 0)
     {
-      type = nds32_init_type (gdbarch, "builtin_type_nds32_msc_cfg", 4);
+      type = nds32_init_type (gdbarch, "builtin_type_nds32_msc_cfg", USE_FLAGS);
       nds32_append_flag (type, 0, "EDM");
       nds32_append_flag (type, 1, "LMDMA");
       nds32_append_flag (type, 2, "PFM");
@@ -696,12 +696,12 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
       nds32_append_flag (type, 4, "TRACE");
       nds32_append_flag (type, 5, "DIV");
       nds32_append_flag (type, 6, "MAC");
-      nds32_append_field (type, bt->builtin_uint8, 7, 8, "AUDIO");
+      nds32_append_bitfield (type, bt->builtin_uint8, 7, 8, "AUDIO");
       nds32_append_flag (type, 9, "L2c");
       nds32_append_flag (type, 10, "RDREG");
       nds32_append_flag (type, 11, "ADR24");
       nds32_append_flag (type, 12, "INTLC");
-      nds32_append_field (type, bt->builtin_uint8, 13, 15, "BASEV");
+      nds32_append_bitfield (type, bt->builtin_uint8, 13, 15, "BASEV");
       nds32_append_flag (type, 16, "NOD");
       nds32_append_flag (type, 17, "IMV");
       nds32_append_flag (type, 18, "IMR");
