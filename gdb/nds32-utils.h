@@ -24,12 +24,17 @@
 void source_nds32script (void);
 
 /* Declarations for making arch-dependent types.  */
+enum type_option
+{
+  NO_FLAGS = 0,
+  USE_FLAGS = 1,
+};
 struct field *nds32_append_type_field (struct type *type);
 struct type *nds32_init_type (struct gdbarch *gdbarch, char *name,
-			      int length);
+			      enum type_option opt);
 void nds32_append_flag (struct type *type, int bitpos, char *name);
-void nds32_append_field (struct type *type, struct type *field_type,
-			 int bitpos_from, int bitpos_to, char *name);
+void nds32_append_bitfield (struct type *type, struct type *field_type,
+			    int bitpos_from, int bitpos_to, char *name);
 struct type *nds32_init_enum (struct gdbarch *gdbarch, char *name);
 void nds32_append_enum (struct type *type, int bitpos, char *name);
 

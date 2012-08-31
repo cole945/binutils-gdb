@@ -29,61 +29,46 @@
 #include <stdio.h>
 #include <string.h>
 
-struct field *
-nds32_append_type_field (struct type *type)
-{
-  int nfields;
-  struct field *f;
+/* Helpers for allocating types.  */
 
-  nfields = TYPE_NFIELDS (type) + 1;
-  TYPE_NFIELDS (type) = nfields;
-  TYPE_FIELDS (type) =
-    xrealloc (TYPE_FIELDS (type), sizeof (struct field) * nfields);
-  f = &(TYPE_FIELDS (type)[nfields - 1]);
-  memset (f, 0, sizeof f[0]);
-
-  return f;
-}
-
-static struct field *
-nds32_prepend_type_field (struct type *type)
-{
-  int nfields;
-  struct field *f;
-
-  nfields = TYPE_NFIELDS (type) + 1;
-  TYPE_NFIELDS (type) = nfields;
-  TYPE_FIELDS (type) =
-    xrealloc (TYPE_FIELDS (type), sizeof (struct field) * nfields);
-  if (nfields > 1)
-    {
-      memmove (&(TYPE_FIELDS (type)[1]), &(TYPE_FIELDS (type)[0]),
-	       sizeof (struct field) * (nfields - 1));
-    }
-  f = &(TYPE_FIELDS (type)[0]);
-  memset (f, 0, sizeof f[0]);
-
-  return f;
-}
+/* Allocate a new type.
+   Use this instead of arch_composite_type () or arch_type () directly,
+   because it must be a 4-byte word, but we may not append all the fields.
+   If `opt' is USE_FLAGS, then a field for flags is appended.  */
 
 struct type *
-nds32_init_type (struct gdbarch *gdbarch, char *name, int length)
+nds32_init_type (struct gdbarch *gdbarch, char *name, enum type_option opt)
 {
   struct type *type;
 
-  type = arch_type (gdbarch, TYPE_CODE_STRUCT, length, name);
+  gdb_assert (opt == USE_FLAGS || opt == NO_FLAGS);
+
+  type = arch_type (gdbarch, TYPE_CODE_STRUCT, 4, name);
+  TYPE_TAG_NAME (type) = name;
+  INIT_CPLUS_SPECIFIC (type);
+
+  if (opt == USE_FLAGS)
+    {
+      int i;
+      struct type *flags_type =
+	arch_flags_type (TYPE_OWNER (type).gdbarch, "nds32_dummy_flags_type",
+			 TYPE_LENGTH (type));
+      append_composite_type_field_raw (type, "", flags_type);
+
+      /* Hide all the flags from users,
+	 only explicitly appened flags are showen to users.
+	 For example,
+	 {[ #1 #3 #16 #17 #18 ], INTL = Lv1, POM = Superuser}
+	 We don't want users to see this,
+	 INTL and POM should be hidden from users.  */
+      for (i = 0; i < TYPE_LENGTH (type) * TARGET_CHAR_BIT; i++)
+	append_flags_type_flag (flags_type, i, NULL);
+    }
+
   return type;
 }
 
-static void
-nds32_hide_field_from_flags (struct type *type, int bitpos_from, int bitpos_to)
-{
-  int bitpos;
-
-  gdb_assert (TYPE_CODE (type) == TYPE_CODE_FLAGS);
-  for (bitpos = bitpos_from; bitpos <= bitpos_to; bitpos++)
-    append_flags_type_flag (type, bitpos, NULL);
-}
+/* Append a flags bit.  */
 
 void
 nds32_append_flag (struct type *type, int bitpos, char *name)
@@ -95,33 +80,22 @@ nds32_append_flag (struct type *type, int bitpos, char *name)
 
   nfields = TYPE_NFIELDS (type);
 
-  /* Append a new flags-field if not exist.  */
   if (nfields == 0
-      || TYPE_CODE (TYPE_FIELD_TYPE (type, 0)) != TYPE_CODE_FLAGS
-      || strcmp (TYPE_FIELD_NAME (type, 0), "") != 0)
+      || TYPE_CODE (TYPE_FIELD_TYPE (type, 0)) != TYPE_CODE_FLAGS)
     {
-      int i;
-
-      f = nds32_prepend_type_field (type);
-      FIELD_NAME (f[0]) = "";
-      FIELD_TYPE (f[0]) = arch_flags_type (TYPE_OWNER (type).gdbarch,
-					   "nds32_dummy_flags_type",
-					   TYPE_LENGTH (type));
-      /* Hide fields from flags.  */
-      for (i = 1; i < nfields + 1; i++)
-	nds32_hide_field_from_flags (FIELD_TYPE (f[0]), FIELD_BITPOS (f[i]),
-				     FIELD_BITPOS (f[i]) +
-				     FIELD_BITSIZE (f[i]) - 1);
+      internal_error (__FILE__, __LINE__,
+		      _("Pseudo field for flags must be the first one."));
     }
 
-  f = TYPE_FIELDS (type);
-  type = FIELD_TYPE (f[0]);
-  append_flags_type_flag (type, bitpos, name);
+  /* Append flag in the first field.  */
+  append_flags_type_flag (TYPE_FIELD_TYPE (type, 0), bitpos, name);
 }
 
+/* Append a bit-field.  */
+
 void
-nds32_append_field (struct type *type, struct type *field_type,
-		    int bitpos_from, int bitpos_to, char *name)
+nds32_append_bitfield (struct type *type, struct type *field_type,
+		       int bitpos_from, int bitpos_to, char *name)
 {
   struct field *f;
 
@@ -129,20 +103,14 @@ nds32_append_field (struct type *type, struct type *field_type,
   gdb_assert (bitpos_to >= bitpos_from);
   gdb_assert (TYPE_NFIELDS (type) != 0 || strcmp (name, "") != 0);
 
-  f = nds32_append_type_field (type);
-  FIELD_TYPE (f[0]) = field_type;
-  FIELD_NAME (f[0]) = xstrdup (name);
+  f = append_composite_type_field_raw (type, xstrdup (name), field_type);
   SET_FIELD_BITPOS (f[0], bitpos_from);
   FIELD_BITSIZE (f[0]) = bitpos_to - bitpos_from + 1;
-
-  /* Hide field from flags if used.  */
-  if (TYPE_CODE (TYPE_FIELD_TYPE (type, 0)) == TYPE_CODE_FLAGS
-      && strcmp (TYPE_FIELD_NAME (type, 0), "") == 0)
-    {
-      nds32_hide_field_from_flags (TYPE_FIELD_TYPE (type, 0), bitpos_from,
-				   bitpos_to);
-    }
 }
+
+/* Allocate an enumeration type.  The only reason to call this function
+   is that we want it to be UNSIGNED instead.  This is only useful for
+   enum-type bit-field.  */
 
 struct type *
 nds32_init_enum (struct gdbarch *gdbarch, char *name)
@@ -155,15 +123,17 @@ nds32_init_enum (struct gdbarch *gdbarch, char *name)
 }
 
 void
-nds32_append_enum (struct type *type, int bitpos, char *name)
+nds32_append_enum (struct type *type, int enumval, char *name)
 {
   struct field *f;
 
   gdb_assert (TYPE_CODE (type) == TYPE_CODE_ENUM);
-  f = nds32_append_type_field (type);
-  FIELD_NAME (f[0]) = xstrdup (name);
-  SET_FIELD_BITPOS (f[0], bitpos);
+  f = append_composite_type_field_raw (type, name, NULL);
+  SET_FIELD_ENUMVAL (f[0], enumval);
 }
+
+/* Helper for key-value lookup.
+   TODO: Replace this with libiberty hashtab.  */
 
 void *
 nds32_list_lookup (struct nds32_list *head, const char *key)
