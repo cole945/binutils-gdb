@@ -259,6 +259,9 @@ nds32_print_human_table (int col, int row, const char *scsv)
   char **col_hdrtext;
   int *col_width;
   enum ui_align *col_align;
+  struct bound_minimal_symbol msymbol;
+  CORE_ADDR addr;
+  char symbol_text[256];
 
   buf = xstrdup (scsv);
   make_cleanup (xfree, buf);
@@ -300,8 +303,7 @@ nds32_print_human_table (int col, int row, const char *scsv)
   /* Output table.  */
   table_cleanup = make_cleanup_ui_out_table_begin_end
     (current_uiout, col, row - 1, "ProfilingTable");
-
-  for (i = 0; i < 7; i++)
+  for (i = 0; i < col; i++)
     ui_out_table_header (current_uiout, col_width[i], col_align[i],
 			 col_fldname[i], col_hdrtext[i]);
 
@@ -312,22 +314,40 @@ nds32_print_human_table (int col, int row, const char *scsv)
   row_cleanup = make_cleanup_ui_out_tuple_begin_end (current_uiout, "row");
   while (*buf != '\0')
     {
-      CORE_ADDR addr = 0;
       char *sc = strchr (buf, ';');
+      int offset;
 
       *sc = '\0';
       switch (i)
 	{
-	case 0: case 1: case 2: case 3: case 4: case 5: case 6:
+	case 0:
+	  ui_out_field_string (current_uiout, col_fldname[i], buf);
+
+	  /* Assume first column is address.  */
+	  strcpy (symbol_text, "\n");
+	  addr = strtol (buf, NULL, 16);
+	  msymbol = lookup_minimal_symbol_by_pc (addr);
+	  if (!msymbol.minsym)
+	    break;
+
+	  offset = addr - SYMBOL_VALUE_ADDRESS (msymbol.minsym);
+	  if (offset)
+	    snprintf (symbol_text, sizeof (symbol_text), "%s + 0x%x\n",
+		      SYMBOL_PRINT_NAME (msymbol.minsym), offset);
+	  else
+	    snprintf (symbol_text, sizeof (symbol_text), "%s\n",
+		      SYMBOL_PRINT_NAME (msymbol.minsym));
+	  break;
+	case 1: case 2: case 3: case 4: case 5: case 6:
 	  ui_out_field_string (current_uiout, col_fldname[i], buf);
 	  break;
 	}
 
       i++;
       buf = sc + 1;
-      if (i == 7)
+      if (i == col)
 	{
-	  ui_out_text (current_uiout, "\n");
+	  ui_out_text (current_uiout, symbol_text);
 	  do_cleanups (row_cleanup);
 	  i = 0;
 	  row_cleanup = make_cleanup_ui_out_tuple_begin_end
@@ -343,11 +363,10 @@ nds32_print_human_table (int col, int row, const char *scsv)
 static void
 nds32_query_profiling_command (char *args, int from_tty)
 {
-  /* for profiling, there will be multiple responses */
+  /* For profiling, there will be multiple responses.  */
   int row, col;
   struct ui_file *res;
-  int i, r = -1;
-  int len = 0;
+  int i;
   long int pkt_size;
   char *pkt_buf = NULL;
   struct ui_file_buffer ui_buf;
@@ -355,6 +374,7 @@ nds32_query_profiling_command (char *args, int from_tty)
   int arg_human = TRUE;
   struct cleanup *back_to = NULL;
   char **argv = NULL;
+  char *p;
 
   /* Initial size. It may be resized by getpkt.  */
   pkt_size = 1024;
@@ -368,6 +388,9 @@ nds32_query_profiling_command (char *args, int from_tty)
 
   make_cleanup (free_current_contents, &ui_buf.buf);
   make_cleanup (free_current_contents, &pkt_buf);
+  make_cleanup_restore_ui_file (&gdb_stdtarg);
+
+  gdb_stdtarg = res;
 
   if (args != NULL)
     {
@@ -390,54 +413,38 @@ nds32_query_profiling_command (char *args, int from_tty)
     }
 
   /* Fill BUF with monitor command. */
-  snprintf (ui_buf.buf, ui_buf.buf_size, "set %s profiling ide-query",
+  snprintf ((char *) ui_buf.buf, ui_buf.buf_size, "set %s profiling ide-query",
 	    args == NULL ? "cpu" : arg_cpu);
-  target_rcmd (ui_buf.buf, res);
+  target_rcmd ((char *) ui_buf.buf, res);
   memset (ui_buf.buf, 0, ui_buf.buf_size);
   ui_file_put (res, do_ui_file_put_memcpy, &ui_buf);
-
-  /* FIXME: If SID can use 'O' packet to send result,
-	    the following getpkt () loop can be deleted. */
-
-  /* The first line is Row=%d;Column=%d;
-     and then comes ROW rows, including header row.  */
-  i = sscanf (ui_buf.buf, "Row=%d;Column=%d;", &row, &col);
-  if (i != 2)
-    goto bye;
-
-  /* Decode data in pkt_buf into ui_buf. */
-  for (i = 0; i < row; i++)
-    {
-      getpkt (&pkt_buf, &pkt_size, 1);
-
-      r = hex2bin (pkt_buf, (gdb_byte *) pkt_buf, pkt_size >> 1);
-      if (r + len > ui_buf.buf_size)
-	{
-	  ui_buf.buf_size <<= 1;
-	  ui_buf.buf = xrealloc (ui_buf.buf, ui_buf.buf_size);
-	}
-
-      memcpy (ui_buf.buf + len, pkt_buf, r);
-      len += r;
-      ui_buf.buf[len] = '\0';
-    }
 
   if (!arg_human)
     {
       fprintf_unfiltered (gdb_stdtarg,
-			  "=profiling,reason=\"fast_l1_profiling\","
-			  "data=\"Row=%d;Column=%d;%s\"\n",
-			  row, col, ui_buf.buf);
+			  "=profiling,reason=\"fast_l1_profiling\",data=\"%s\"\n",
+			  ui_buf.buf);
       goto bye;
     }
 
-  /* print human-mode table here */
-  nds32_print_human_table (col, row, ui_buf.buf);
+  /* The first response is Row=%d;Column=%d;
+     and then comes 'Row' rows, including head row */
+  i = sscanf ((char *) ui_buf.buf, "Row=%d;Column=%d;", &row, &col);
+  if (i != 2)
+    error (_("Failed to query profiling data"));
+
+  p = (char *) ui_buf.buf;
+
+  /* Skip "Row=r;Column=c;".  */
+  for (i = 0; i < 2 && p; i++)
+    p = strchr (p + 1, ';');
+  p++;
+
+  /* Print human-mode table here.  */
+  nds32_print_human_table (col, row, p);
 
 bye:
   do_cleanups (back_to);
-  if (r == -1 || len == 0)
-    error (_("Failed to query profiling data"));
 }
 
 /* Callback for "nds32 query perfmeter" command.  */
@@ -446,24 +453,11 @@ static void
 nds32_query_perfmeter_command (char *args, int from_tty)
 {
   /* For perfmeter, there will be only one response.  */
-  struct ui_file *res = mem_fileopen ();
-  struct ui_file_buffer ui_buf;
   char cmd[128];
 
-  ui_buf.buf_size = 1024;
-  ui_buf.buf = xmalloc (ui_buf.buf_size);
-
-  snprintf (cmd, sizeof (cmd) - 1, "set %s perf-meter query",
+  snprintf (cmd, sizeof (cmd), "set %s perf-meter query",
 	    args == NULL ? "cpu" : args);
-  target_rcmd (cmd, res);
-  memset (cmd, 0, sizeof (cmd));
-  ui_file_put (res, do_ui_file_put_memcpy, &ui_buf);
-  ui_file_delete (res);
-
-  fprintf_unfiltered (gdb_stdtarg,
-		      "=profiling,reason=\"perf_meter\",data=\"%s\"\n",
-		      ui_buf.buf);
-  gdb_flush (gdb_stdtarg);
+  target_rcmd (cmd, gdb_stdtarg);
 }
 
 /* Callback for "nds32 reset profiling" command.  */
@@ -473,9 +467,9 @@ nds32_reset_profiling_command (char *args, int from_tty)
 {
   char cmd[256];
 
-  snprintf (cmd, sizeof (cmd), "monitor set %s perf-meter reset",
+  snprintf (cmd, sizeof (cmd), "set %s profiling reset",
 	    args == NULL ? "cpu" : args);
-  nds32_execute_command (cmd, NULL, from_tty);
+  target_rcmd (cmd, gdb_stdtarg);
 }
 
 /* Callback for "nds32 reset perfmeter" command.  */
@@ -485,9 +479,9 @@ nds32_reset_perfmeter_command (char *args, int from_tty)
 {
   char cmd[256];
 
-  snprintf (cmd, sizeof (cmd), "monitor set %s profiling reset",
+  snprintf (cmd, sizeof (cmd), "set %s perf-meter reset",
 	    args == NULL ? "cpu" : args);
-  nds32_execute_command (cmd, NULL, from_tty);
+  target_rcmd (cmd, gdb_stdtarg);
 }
 
 static void
