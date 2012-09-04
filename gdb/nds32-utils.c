@@ -230,3 +230,18 @@ do_ui_file_put_memcpy (void *object, const char *buffer, long length_buffer)
 
   memcpy (ui_buf->buf, buffer, length_buffer);
 }
+
+void
+ui_file_buffer_init (struct ui_file_buffer *ub, int size)
+{
+  ub->buf_size = size;
+  ub->buf = xmalloc (size);
+}
+
+void
+free_ui_file_buffer (void *ptr)
+{
+  struct ui_file_buffer *ui_buf = (struct ui_file_buffer *) ptr;
+
+  xfree (ui_buf->buf);
+}
