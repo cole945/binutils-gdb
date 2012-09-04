@@ -876,7 +876,8 @@ nds32_pseudo_register_name (struct gdbarch *gdbarch, int regnum)
   else if ((regnum >= NDS32_FPU_REGNUM)
 	   && (regnum < NDS32_FPU_REGNUM + ARRAY_SIZE (nds32_fpu_regnames)))
     {
-      return nds32_fpu_regnames[regnum - NDS32_FPU_REGNUM];
+      if (tdep->nds32_fpu_sp_num > 0)	/* or > dp_num */
+	return nds32_fpu_regnames[regnum - NDS32_FPU_REGNUM];
     }
 
   return NULL;
@@ -2503,20 +2504,24 @@ nds32_init_pseudo_registers (struct gdbarch *gdbarch)
 
   switch (nds32_config.use_fpreg)
     {
-      case 3232:
-	fpreg = NDS32_FPU_32SP_32DP;
-	break;
-      case 3216:
-	fpreg = NDS32_FPU_32SP_16DP;
-	break;
-      case 168:
-      case 1608:
-	fpreg = NDS32_FPU_16SP_8DP;
-	break;
-      case 84:
-      case 804:
-	fpreg = NDS32_FPU_8SP_4DP;
-	break;
+    case 3232:
+      fpreg = NDS32_FPU_32SP_32DP;
+      break;
+    case 3216:
+      fpreg = NDS32_FPU_32SP_16DP;
+      break;
+    case 168:
+    case 1608:
+      fpreg = NDS32_FPU_16SP_8DP;
+      break;
+    case 84:
+    case 804:
+      fpreg = NDS32_FPU_8SP_4DP;
+      break;
+    default:
+      if (!(eflags & (E_NDS32_HAS_FPU_INST | E_NDS32_HAS_FPU_DP_INST)))
+	fpreg = NDS32_FPU_NONE;
+      break;
     }
 
   switch (fpreg) /* fpcfg */
