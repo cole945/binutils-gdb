@@ -46,11 +46,14 @@ void nds32_type_insert (htab_t htab, const char *name, struct type *type);
 /* UI buffer for output redirection.  */
 struct ui_file_buffer
 {
-  char *buf;
+  unsigned char *buf;
   long buf_size;
 };
 
 void do_ui_file_put_memcpy (void *object, const char *buffer,
 			    long length_buffer);
 
+void ui_file_buffer_init (struct ui_file_buffer *ub, int size);
+
+void free_ui_file_buffer (void *ptr);
 #endif

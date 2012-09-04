@@ -180,7 +180,7 @@ nds32_value_of_reg (struct frame_info *frame, const void *baton)
 /* Swap byte orders.  */
 
 static inline void
-swapbytes (char *buf, int len)
+swapbytes (unsigned char *buf, int len)
 {
   char t;
   register int i, j;
@@ -771,7 +771,9 @@ nds32_remote_mfcp (struct gdbarch *gdbarch, int cpid, int fsa, int f14_10,
 		   int f9_8, int len, gdb_byte *buf)
 {
   struct ui_file *res;
+  struct ui_file_buffer ui_buf;
   char cmd[128];
+  struct cleanup *back_to;
 
   /* Cole Jan. 7th 2011
      the arguments used in Rcmd is quiet not straight forward.
@@ -792,19 +794,24 @@ nds32_remote_mfcp (struct gdbarch *gdbarch, int cpid, int fsa, int f14_10,
   gdb_assert ((f14_10 & ~0x1F) == 0);
   gdb_assert ((f9_8 & ~0x3) == 0);
 
+  res = mem_fileopen ();
+  ui_file_buffer_init (&ui_buf, 16);
+
   sprintf (cmd, "mfcp %s %d 0x%x", (len == 4) ? "word" : "double", cpid,
 	   (fsa << 7) | (f14_10 << 2) | f9_8);
   target_rcmd (cmd, res);
 
   /* Copy the result to buffer.  */
   /* FIXME: Handle buffer overflow.  */
-  ui_file_put (res, do_ui_file_put_memcpy, cmd);
-  ui_file_delete (res);
+  ui_file_put (res, do_ui_file_put_memcpy, &ui_buf);
 
   /* Rcmd always returns big-endian, but gdb expects target-byte-order.  */
   if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_LITTLE)
-    swapbytes (cmd, len);
-  memcpy (buf, cmd, len);
+    swapbytes (ui_buf.buf, len);
+  memcpy (buf, ui_buf.buf, len);
+
+  ui_file_delete (res);
+  free_ui_file_buffer (&ui_buf);
 
   return REG_VALID;
 }
@@ -816,7 +823,7 @@ nds32_remote_mtcp (struct gdbarch *gdbarch, int cpid, int fsa, int f14_10,
   struct ui_file *res = mem_fileopen ();
   char cmd[64];
   char value[17] = { 0 };	/* 1 for tailing \0.  */
-  char tmp[8];			/* 8 bytes for double at most.  */
+  unsigned char tmp[8];		/* 8 bytes for double at most.  */
   int i;
 
   gdb_assert ((fsa & ~0x1F) == 0);
