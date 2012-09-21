@@ -1931,20 +1931,70 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 	    goff = REND;
 	}
 
+      /*
+	When passing arguments,
+
+	* A composite type not larger than 4 bytes is passed
+	  in $rN. The format is as if the value is loaded with
+	  load instruction of corresponding size. (i.g., LB, LH, LW)
+
+	   For example,
+
+		  r0
+		  31      0
+	  little: [x x b a]
+	     BIG: [x x a b]
+
+	 * Otherwise, a composite type is passed in consective registers.
+	   The size is rounded up to the nearest multiple of 4.
+	   The successive registers hold the parts of the argument as if
+	   were loaded using lmw instructions.
+
+	  For example,
+
+		  r0	     r1
+		  31      0 31	     0
+	  little: [d c b a] [x x x e]
+	     BIG: [a b c d] [e x x x]
+
+
+	When push an argument in stack,
+
+	* A composite type not larger than 4 bytes is copied
+	  to memory at the next free space, in little-endian.
+	  In big-endian, the last byte of the argument is aligned
+	  at the next word address.  For example,
+
+	  sp [ - ]  [ b ] hi
+	     [ - ]  [ a ]
+	     [ b ]  [ - ]
+	     [ a ]  [ - ] lo
+	    little   BIG
+       */
+
+      if (len > 4)
+	len = (len + 0x3) & ~0x3;
+
       while (len > 0)
 	{
 	  if (soff
 	      || (typecode == TYPE_CODE_FLT && tdep->use_fpr && foff == REND)
 	      || goff == REND)
 	    {
-	      write_memory (sp + soff, val, (len > 4) ? 4 : len);
+	      int rlen = (len > 4) ? 4 : len;
+
+	      if (byte_order == BFD_ENDIAN_BIG)
+		write_memory (sp + soff + 4 - rlen, val, rlen);
+	      else
+		write_memory (sp + soff, val, rlen);
 	      soff += 4;
 	    }
 	  else
 	    {
 	      regval = extract_unsigned_integer (val, (len > 4) ? 4 : len,
 						 byte_order);
-	      regcache_cooked_write (regcache, goff + NDS32_R0_REGNUM, val);
+	      regcache_cooked_write_unsigned (regcache,
+					      goff + NDS32_R0_REGNUM, regval);
 	      goff++;
 	    }
 
@@ -1972,7 +2022,8 @@ nds32_extract_return_value (struct type *type, struct regcache *regcache,
 {
   int len = TYPE_LENGTH (type);
   int typecode = TYPE_CODE (type);
-  struct gdbarch_tdep *tdep = gdbarch_tdep (get_regcache_arch (regcache));
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int i;
 
   /* TODO: one-float, one-double is special case in V2FP.
@@ -1995,13 +2046,59 @@ nds32_extract_return_value (struct type *type, struct regcache *regcache,
     }
   else
     {
+      /* When returning result,
+
+	* A composite type not larger than 4 bytes is returned
+	  in $r0. The format is as if the result is loaded with
+	  load instruction of corresponding size. (i.g., LB, LH, LW)
+
+	  For example,
+
+		  r0
+		  31      0
+	  little: [x x b a]
+	     BIG: [x x a b]
+
+	* Otherwise, a composite type not larger than 8 bytes
+	  is returned in $r0 and $r1. In little-endian, the first
+	  word is loaded in $r0. In big-endian, the last word
+	  is loaded in $r1.
+
+	  For example,
+
+		  r0	    r1
+		  31      0 31      0
+	  little: [d c b a] [x x x e]
+	     BIG: [x x x a] [b c d e]
+       */
+
       if (len <= 4)
-	regcache_raw_read_part (regcache, NDS32_R0_REGNUM, 0, len, readbuf);
+	{
+	  if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
+	    regcache_raw_read_part (regcache, NDS32_R0_REGNUM, 4 - len, len,
+				    readbuf);
+	  else
+	    regcache_raw_read_part (regcache, NDS32_R0_REGNUM, 0, len,
+				    readbuf);
+	}
       else if (len <= 8)
 	{
-	  regcache_raw_read (regcache, NDS32_R0_REGNUM, readbuf);
-	  regcache_raw_read_part (regcache, NDS32_R0_REGNUM + 1, 0, len - 4,
-				  readbuf + 4);
+	  int partial = len - 4;
+
+	  if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
+	    {
+	      regcache_raw_read_part (regcache, NDS32_R0_REGNUM, 4 - partial,
+				      partial, readbuf);
+	      regcache_raw_read (regcache, NDS32_R0_REGNUM + 1,
+				 readbuf + partial);
+
+	    }
+	  else
+	    {
+	      regcache_raw_read (regcache, NDS32_R0_REGNUM, readbuf);
+	      regcache_raw_read_part (regcache, NDS32_R0_REGNUM + 1, 0,
+				      partial, readbuf + 4);
+	    }
 	}
       else
 	internal_error (__FILE__, __LINE__,
@@ -2020,7 +2117,8 @@ nds32_store_return_value (struct type *type, struct regcache *regcache,
 {
   int len = TYPE_LENGTH (type);
   int typecode = TYPE_CODE (type);
-  struct gdbarch_tdep *tdep = gdbarch_tdep (get_regcache_arch (regcache));
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int i;
 
   /* TODO: one-float, one-double is special case in V2FP.
@@ -2044,12 +2142,32 @@ nds32_store_return_value (struct type *type, struct regcache *regcache,
   else
     {
       if (len <= 4)
-	regcache_raw_write_part (regcache, NDS32_R0_REGNUM, 0, len, writebuf);
+	{
+	  if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
+	    regcache_raw_write_part (regcache, NDS32_R0_REGNUM, 4 - len, len,
+				     writebuf);
+	  else
+	    regcache_raw_write_part (regcache, NDS32_R0_REGNUM, 0, len,
+				     writebuf);
+	}
       else if (len <= 8)
 	{
-	  regcache_raw_write (regcache, NDS32_R0_REGNUM, writebuf);
-	  regcache_raw_write_part (regcache, NDS32_R0_REGNUM + 1, 0, len - 4,
-				   writebuf + 4);
+	  int partial = len - 4;
+
+	  if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
+	    {
+	      regcache_raw_write_part (regcache, NDS32_R0_REGNUM, 4 - partial,
+				       partial, writebuf);
+	      regcache_raw_write (regcache, NDS32_R0_REGNUM + 1,
+				  writebuf + partial);
+
+	    }
+	  else
+	    {
+	      regcache_raw_write (regcache, NDS32_R0_REGNUM, writebuf);
+	      regcache_raw_write_part (regcache, NDS32_R0_REGNUM + 1, 0,
+				       partial, writebuf + 4);
+	    }
 	}
       else
 	internal_error (__FILE__, __LINE__,
