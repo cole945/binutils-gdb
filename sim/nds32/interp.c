@@ -116,6 +116,27 @@ find_null_mism (unsigned char *b1, unsigned char *b2)
   return 0;
 }
 
+/* Find first mis-match in sequential memory address.
+   The 3rd argument inc: 1 means incremental memory address.
+			-1 means decremental memory address.
+   If no such byte is found, return 0.  */
+
+static uint32_t
+find_mism (unsigned char *b1, unsigned char *b2, int inc)
+{
+  int i, end;
+  i = (inc == 1) ? 0 : 3;
+  end = (inc == 1) ? 3 : 0;
+  while (1)
+    {
+      if ((b1[i] != b2[i]))
+	return -4 + i;
+      if (i == end)
+	return 0;
+      i += inc;
+    }
+}
+
 static void
 nds32_dump_registers (SIM_DESC sd)
 {
@@ -778,6 +799,19 @@ nds32_decode32_alu2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	  CCPU_GPR[rt].u = (char *) ret - (char *) buff - 4;
       }
       break;
+    case 0xf:			/* ffmism */
+      {
+	char a[4];
+	char b[4];
+	int order = CCPU_SR_TEST (PSW, PSW_BE) ? BIG_ENDIAN : LITTLE_ENDIAN;
+	int ret;
+
+	store_unsigned_integer ((unsigned char *) &a, 4, order, CCPU_GPR[ra].u);
+	store_unsigned_integer ((unsigned char *) &b, 4, order, CCPU_GPR[rb].u);
+	ret = find_mism ((unsigned char *) &a, (unsigned char *) &b, 1);
+	CCPU_GPR[rt].u = ret;
+      }
+      break;
     case 0x17:			/* ffzmism */
       {
 	char a[4];
@@ -892,6 +926,19 @@ nds32_decode32_alu2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       break;
     case 0x35:			/* msub32 */
       CCPU_USR[dt].s -= CCPU_GPR[ra].s * CCPU_GPR[rb].s;
+      break;
+    case 0x4f:			/* flmism */
+      {
+	char a[4];
+	char b[4];
+	int order = CCPU_SR_TEST (PSW, PSW_BE) ? BIG_ENDIAN : LITTLE_ENDIAN;
+	int ret;
+
+	store_unsigned_integer ((unsigned char *) &a, 4, order, CCPU_GPR[ra].u);
+	store_unsigned_integer ((unsigned char *) &b, 4, order, CCPU_GPR[rb].u);
+	ret = find_mism ((unsigned char *) &a, (unsigned char *) &b, -1);
+	CCPU_GPR[rt].u = ret;
+      }
       break;
     case 0x68:			/* mulsr64 */
       {

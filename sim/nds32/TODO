@@ -8,7 +8,6 @@
     MMU instructions (tlbop, ld_vlpt), teqz, tnez, iret, ret.*toff,
   * v2: lbup, sbup
   * perf-ext: bse, bsp, pbsad, pbsada
-  * string-ext: ffmism, flmism
   * fpu: fmadd*, fmsub*, fnmadd*, fnmsub*,
          IVO exception,
          fmfcsr, fmtcsr,
