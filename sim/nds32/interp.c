@@ -50,6 +50,11 @@
 #include <unistd.h>
 #include <time.h>
 
+/* Recent $pc, for debugging.  */
+#define RECENT_CIA_MASK	0xf
+static sim_cia recent_cia[RECENT_CIA_MASK + 1];
+static int recent_cia_idx = 0;
+
 static ulongest_t
 extract_unsigned_integer (unsigned char *addr, int len, int byte_order)
 {
@@ -140,13 +145,41 @@ find_mism (unsigned char *b1, unsigned char *b2, int inc)
 static void
 nds32_dump_registers (SIM_DESC sd)
 {
+  static char *reg2names[] = {
+	"r0", "r1", "r2", "r3", "r4", "r5",
+	"r6", "r7", "r8", "r9", "10", "11",
+	"12", "13", "14", "ta", "16", "17",
+	"18", "19", "20", "21", "22", "23",
+	"24", "25", "p0", "p1", "fp", "gp",
+	"lp", "sp"
+	};
   int i;
+  int j;
 
   for (i = 0; i < MAX_NR_PROCESSORS; ++i)
     {
       sim_cpu *cpu = STATE_CPU (sd, i);
       /* TODO ... */
-      sim_io_eprintf (sd, "pc %08x\n", CCPU_USR[NC_PC].u);
+      sim_io_eprintf (sd, "pc  %08x\n", CCPU_USR[NC_PC].u);
+
+      for (j = 0; j < 32; j++)
+	{
+	  sim_io_eprintf (sd, "%s  %08x  ", reg2names[j], CCPU_GPR[j].u);
+	  if (j % 6 == 5)
+	    sim_io_eprintf (sd, "\n");
+	}
+      sim_io_eprintf (sd, "\n");
+
+      sim_io_eprintf (sd, "itb %08x  ", CCPU_USR[NC_ITB].u);
+      sim_io_eprintf (sd, "ifc %08x  ", CCPU_USR[NC_IFCLP].u);
+      sim_io_eprintf (sd, "d0  %08x  ", CCPU_USR[NC_D0LO].u);
+      sim_io_eprintf (sd, "hi  %08x  ", CCPU_USR[NC_D0HI].u);
+      sim_io_eprintf (sd, "d1  %08x  ", CCPU_USR[NC_D1LO].u);
+      sim_io_eprintf (sd, "hi  %08x  ", CCPU_USR[NC_D1HI].u);
+      sim_io_eprintf (sd, "\n");
+
+      sim_io_eprintf (sd, "psw %08x  ", CCPU_SR[SRIDX_PSW].u);
+      sim_io_eprintf (sd, "\n");
     }
 }
 
@@ -156,6 +189,7 @@ nds32_raise_exception (sim_cpu *cpu, enum nds32_exceptions e, int sig,
 {
   SIM_DESC sd = CPU_STATE (cpu);
   uint32_t cia = CCPU_USR[NC_PC].u;
+  int i;
 
   /* TODO: Show message only if it is not handled by user.  */
   if (msg)
@@ -168,7 +202,19 @@ nds32_raise_exception (sim_cpu *cpu, enum nds32_exceptions e, int sig,
 
   /* Dump registers before halt.  */
   if (STATE_OPEN_KIND (sd) != SIM_OPEN_DEBUG)
-    nds32_dump_registers (sd);
+    {
+      nds32_dump_registers (sd);
+
+      sim_io_eprintf (sd, "Recent $pc:\n");
+      for (i = 0; i <= RECENT_CIA_MASK; i++)
+	{
+	  sim_io_eprintf (sd, "  0x%x",
+			  recent_cia[(i + recent_cia_idx) & RECENT_CIA_MASK]);
+	  if (i % 6 == 5)
+	    sim_io_eprintf (sd, "\n");
+	}
+      sim_io_eprintf (sd, "\n");
+    }
 
   sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_stopped, sig);
 
@@ -1892,6 +1938,8 @@ sim_engine_run (SIM_DESC sd, int next_cpu_nr, int nr_cpus, int siggnal)
     {
       uint32_t insn;
 
+      recent_cia[recent_cia_idx] = cia;
+      recent_cia_idx = (recent_cia_idx + 1) & RECENT_CIA_MASK;
       r = sim_read (sd, cia, (unsigned char *) &insn, 4);
       insn = extract_unsigned_integer ((unsigned char *) &insn, 4,
 				       BIG_ENDIAN);
