@@ -228,7 +228,7 @@ nds32_bad_op (sim_cpu *cpu, uint32_t cia, uint32_t insn, char *tag)
     tag = "";
 
   nds32_raise_exception (cpu, EXP_GENERAL, SIM_SIGILL,
-			 "Unhandled %s instruction (%08x)\n", tag, insn);
+			 "Illegal/Unhandled %s instruction (%08x)\n", tag, insn);
 }
 
 ulongest_t
@@ -337,7 +337,7 @@ nds32_decode32_mem (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0x4:			/* lb.bi */
     case 0x5:			/* lh.bi */
     case 0x6:			/* lw.bi */
-    case 0x7:			/* ld.bi */
+    /* case 0x7: */		/* ld.bi */
       addr = CCPU_GPR[ra].u + (CCPU_GPR[rb].u << sv);
       CCPU_GPR[rt].u = nds32_ld_aligned (cpu, CCPU_GPR[ra].u, (1 << (op & 0x3)));
       CCPU_GPR[ra].u = addr;
@@ -345,21 +345,21 @@ nds32_decode32_mem (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0x8:			/* sb */
     case 0x9:			/* sh */
     case 0xa:			/* sw */
-    case 0xb:			/* sd */
+    /* case 0xb: */		/* sd */
       addr = CCPU_GPR[ra].u + (CCPU_GPR[rb].u << sv);
       nds32_st_aligned (cpu, addr, (1 << (op & 0x3)), CCPU_GPR[rt].u);
       break;
     case 0xc:			/* sb.bi */
     case 0xd:			/* sh.bi */
     case 0xe:			/* sw.bi */
-    case 0xf:			/* sd.bi */
+    /* case 0xf: */		/* sd.bi */
       nds32_st_aligned (cpu, CCPU_GPR[ra].u, (1 << (op & 0x3)),
 			CCPU_GPR[rt].u);
       CCPU_GPR[ra].u += (CCPU_GPR[rb].u << sv);
       break;
     case 0x10:			/* lbs */
     case 0x11:			/* lhs */
-    case 0x12:			/* lws */
+    /* case 0x12: */		/* lws */
       addr = CCPU_GPR[ra].u + (CCPU_GPR[rb].u << sv);
       CCPU_GPR[rt].u =
 	nds32_ld_aligned (cpu, addr, (1 << (op & 0x3)));
@@ -370,7 +370,7 @@ nds32_decode32_mem (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       break;
     case 0x14:			/* lbs.bi */
     case 0x15:			/* lhs.bi */
-    case 0x16:			/* lws.bi */
+    /* case 0x16: */		/* lws.bi */
       CCPU_GPR[rt].u = nds32_ld_aligned (cpu, CCPU_GPR[ra].u,
 					 (1 << (op & 0x3)));
       CCPU_GPR[rt].u = __SEXT (CCPU_GPR[rt].u, (1 << (op & 0x3)) * 8);
@@ -1344,7 +1344,7 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0x0:			/* lbi */
     case 0x1:			/* lhi */
     case 0x2:			/* lwi */
-    case 0x3:			/* ldi */
+    /* case 0x3: */		/* ldi */
       {
 	shift = (op - 0x0);
 	addr = CCPU_GPR[ra].u + (imm15s << shift);
@@ -1355,7 +1355,7 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0x4:			/* lbi.bi */
     case 0x5:			/* lhi.bi */
     case 0x6:			/* lwi.bi */
-    case 0x7:			/* ldi.bi */
+    /* case 0x7: */		/* ldi.bi */
       {
 	shift = (op - 0x4);
 	CCPU_GPR[rt].u = nds32_ld_aligned (cpu, CCPU_GPR[ra].u, 1 << shift);
@@ -1366,7 +1366,7 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0x8:			/* sbi */
     case 0x9:			/* shi */
     case 0xa:			/* swi */
-    case 0xb:			/* sdi */
+    /* case 0xb: */		/* sdi */
       {
 	shift = (op - 0x8);
 	addr = CCPU_GPR[ra].u + (imm15s << shift);
@@ -1377,7 +1377,7 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0xc:			/* sbi.bi */
     case 0xd:			/* shi.bi */
     case 0xe:			/* swi.bi */
-    case 0xf:			/* sdi.bi */
+    /* case 0xf: */		/* sdi.bi */
       {
 	shift = (op - 0xc);
 	nds32_st_aligned (cpu, CCPU_GPR[ra].u, 1 << shift, CCPU_GPR[rt].u);
@@ -1387,7 +1387,7 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 
     case 0x10:			/* lbsi */
     case 0x11:			/* lhsi */
-    case 0x12:			/* lwsi */
+    /* case 0x12: */		/* lwsi */
       {
 	shift = (op - 0x10);
 	addr = CCPU_GPR[ra].u + (imm15s << shift);
@@ -1400,7 +1400,7 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       break;
     case 0x14:			/* lbsi.bi */
     case 0x15:			/* lhsi.bi */
-    case 0x16:			/* lwsi.bi */
+    /* case 0x16: */		/* lwsi.bi */
       {
 	shift = (op - 0x14);
 	CCPU_GPR[rt].u = nds32_ld_aligned (cpu, CCPU_GPR[ra].u, 1 << shift);
