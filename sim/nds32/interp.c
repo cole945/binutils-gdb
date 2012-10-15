@@ -1940,6 +1940,7 @@ sim_engine_run (SIM_DESC sd, int next_cpu_nr, int nr_cpus, int siggnal)
 
       recent_cia[recent_cia_idx] = cia;
       recent_cia_idx = (recent_cia_idx + 1) & RECENT_CIA_MASK;
+
       r = sim_read (sd, cia, (unsigned char *) &insn, 4);
       insn = extract_unsigned_integer ((unsigned char *) &insn, 4,
 				       BIG_ENDIAN);
@@ -1965,7 +1966,14 @@ sim_engine_run (SIM_DESC sd, int next_cpu_nr, int nr_cpus, int siggnal)
 	}
 
       if (cpu->iflags & NIF_BRANCH)
-	cia = cpu->baddr;
+	{
+	  if (cpu->baddr & 1)
+	    nds32_raise_exception (cpu, EXP_GENERAL, SIM_SIGSEGV,
+				   "Alignment check exception. "
+				   "Unaligned instruction address 0x%08x\n",
+				   cia);
+	  cia = cpu->baddr;
+	}
 
       if (TRACE_LINENUM_P (cpu))
 	{
