@@ -2712,6 +2712,39 @@ nds32_simple_overlay_update (struct obj_section *osect)
   simple_overlay_update (osect);
 }
 
+static int
+gdb_print_insn_nds32 (bfd_vma memaddr, disassemble_info *info)
+{
+  struct gdbarch *gdbarch = info->application_data;
+  struct obj_section * s = find_pc_section (memaddr);
+  struct cleanup *back_to;
+
+  /* Reload symtab if abfd changed.
+     In case there are multiple ITB in different shared objects.  */
+  if (s == NULL || info->section != s->the_bfd_section)
+    {
+      xfree (info->symtab);
+      info->symtab = NULL;
+      info->symtab_size = 0;
+    }
+
+  if (info->symtab == NULL && s && s->the_bfd_section)
+    {
+      long storage = bfd_get_symtab_upper_bound (s->objfile->obfd);
+
+      if (storage <= 0)
+	goto done;
+
+      info->section = s->the_bfd_section;
+      info->symtab = xmalloc (storage);
+      info->symtab_size =
+	bfd_canonicalize_symtab (s->the_bfd_section->owner, info->symtab);
+    }
+
+done:
+  return print_insn_nds32 (memaddr, info);
+}
+
 /* Callback for gdbarch_init.  */
 
 static struct gdbarch *
@@ -2854,7 +2887,7 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
      The ID's stack address must match the SP value returned by
      PUSH_DUMMY_CALL, and saved by generic_save_dummy_frame_tos.  */
   set_gdbarch_dummy_id (gdbarch, nds32_dummy_id);
-  set_gdbarch_print_insn (gdbarch, print_insn_nds32);
+  set_gdbarch_print_insn (gdbarch, gdb_print_insn_nds32);
   set_gdbarch_skip_permanent_breakpoint (gdbarch,
 					 nds32_skip_permanent_breakpoint);
   /* Support simple overlay manager.  */
