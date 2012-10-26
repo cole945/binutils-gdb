@@ -557,7 +557,13 @@ out:
 	 Otherwise, the syscall is not handled by it.  */
       if (sc.errcode == 0)
 	sc.errcode = errno;
-      CCPU_GPR[0].s = -sc.errcode;
+
+      /* Our libgloss implementation uses SYS_NDS32_errno for `errno'.
+	 Syscalls per se only return -1 when fail.  */
+      if (cb->syscall_map == cb_nds32_libgloss_syscall_map)
+	CCPU_GPR[0].s = -1;
+      else /* cb_nds32_linux_syscall_map */
+	CCPU_GPR[0].s = -sc.errcode;
     }
   else
     CCPU_GPR[0].s = sc.result;
