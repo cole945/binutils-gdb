@@ -35,11 +35,13 @@
 #include "sim-utils.h"
 #include "sim-fpu.h"
 #include "sim-trace.h"
+#include "sim-options.h"
 
 #include "opcode/nds32.h"
 #include "nds32-sim.h"
 #include "nds32-mm.h"
 #include "nds32-syscall.h"
+#include "nds32-gmon.h"
 
 #if defined (__linux__) || defined (__CYGWIN__)
 /* FIXME */
@@ -49,6 +51,10 @@
 #endif
 #include <unistd.h>
 #include <time.h>
+
+enum {
+  OPTION_GPROF = OPTION_START,
+};
 
 /* Recent $pc, for debugging.  */
 #define RECENT_CIA_MASK	0xf
@@ -1071,6 +1077,8 @@ nds32_decode32_jreg (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       return;
 
     case 1:			/* jral */
+      if (sd->gprof)
+	nds32_gmon_mcount (cia, CCPU_GPR[rb].u);
       if (cpu->iflags & NIF_EX9)
 	CCPU_GPR[rt].u = cia + 2;
       else
@@ -1151,6 +1159,7 @@ nds32_decode32_br1 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 static void
 nds32_decode32_br2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
+  SIM_DESC sd = CPU_STATE (cpu);
   int rt = N32_RT5 (insn);
   int imm16s1 = N32_IMM16S (insn) << 1;
 
@@ -1225,6 +1234,8 @@ nds32_decode32_br2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       if (!(CCPU_GPR[rt].s >= 0))
 	return;
 
+      if (sd->gprof)
+	nds32_gmon_mcount (cia, cia + imm16s1);
       CCPU_SR_CLEAR (PSW, PSW_IFCON);
       nds32_set_nia (cpu, cia + imm16s1);
       return;
@@ -1243,6 +1254,8 @@ nds32_decode32_br2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       if (!(CCPU_GPR[rt].s < 0))
 	return;
 
+      if (sd->gprof)
+	nds32_gmon_mcount (cia, cia + imm16s1);
       CCPU_SR_CLEAR (PSW, PSW_IFCON);
       nds32_set_nia (cpu, cia + imm16s1);
       break;
@@ -1331,6 +1344,7 @@ nds32_decode32_misc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 static void
 nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
+  SIM_DESC sd = CPU_STATE (cpu);
   int op = N32_OP6 (insn);
   int rt = N32_RT5 (insn);
   int ra = N32_RA5 (insn);
@@ -1338,6 +1352,7 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
   int imm15u = N32_IMM15U (insn);
   uint32_t shift;
   uint32_t addr;
+  sim_cia next_cia;
 
   switch (op)
     {
@@ -1488,13 +1503,13 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	  /* Address in ji/jal is treated as absolute address in ex9.  */
 	  if (insn & __BIT (24))	/* jal in ex9 */
 	    CCPU_GPR[NG_LP].u = cia + 2;
-	  cia = (cia & 0xff000000) | (N32_IMMU (insn, 24) << 1);
+	  next_cia = (cia & 0xff000000) | (N32_IMMU (insn, 24) << 1);
 	}
       else
 	{
 	  if (insn & __BIT (24))	/* jal */
 	    CCPU_GPR[NG_LP].u = cia + 4;
-	  cia = cia + (N32_IMMS (insn, 24) << 1);
+	  next_cia = cia + (N32_IMMS (insn, 24) << 1);
 	}
 
       if (CCPU_SR_TEST (PSW, PSW_IFCON))
@@ -1503,8 +1518,12 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	    CCPU_GPR[NG_LP] = CCPU_USR[NC_IFCLP];
 	}
 
+      if (insn & __BIT (24))	/* jump-and-link */
+	if (sd->gprof)
+	  nds32_gmon_mcount (cia, next_cia);
+
       CCPU_SR_CLEAR (PSW, PSW_IFCON);
-      nds32_set_nia (cpu, cia);
+      nds32_set_nia (cpu, next_cia);
       return;
     case 0x25:			/* jreg */
       nds32_decode32_jreg (cpu, insn, cia);
@@ -1873,6 +1892,8 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
 	      nds32_set_nia (cpu, CCPU_GPR[ra5].u);
 	      return;
 	    case 1:		/* jral5 */
+	      if (sd->gprof)
+		nds32_gmon_mcount (cia, CCPU_GPR[ra5].u);
 	      CCPU_GPR[NG_LP].u = cia + 2;
 	      if (CCPU_SR_TEST (PSW, PSW_IFCON))
 		CCPU_GPR[NG_LP] = CCPU_USR[NC_IFCLP];
@@ -1940,6 +1961,9 @@ sim_engine_run (SIM_DESC sd, int next_cpu_nr, int nr_cpus, int siggnal)
 
       recent_cia[recent_cia_idx] = cia;
       recent_cia_idx = (recent_cia_idx + 1) & RECENT_CIA_MASK;
+
+      if (sd->gprof)
+	nds32_gmon_sample (cia);
 
       r = sim_read (sd, cia, (unsigned char *) &insn, 4);
       insn = extract_unsigned_integer ((unsigned char *) &insn, 4,
@@ -2159,6 +2183,29 @@ nds32_initialize_cpu (SIM_DESC sd, sim_cpu *cpu, struct bfd *abfd)
   CCPU_SR_PUT (IVB, IVB_IVBASE, 0);	/* (IM) */
 }
 
+static SIM_RC
+nds32_option_handler (SIM_DESC sd, sim_cpu *cpu, int opt, char *arg,
+		      int is_command)
+{
+  switch (opt)
+    {
+    case OPTION_GPROF:
+      if (arg == NULL || strcmp (arg, "on") == 0)
+	sd->gprof = 1;
+      break;
+
+    default:
+      return SIM_RC_FAIL;
+    }
+  return SIM_RC_OK;
+}
+
+static const OPTION nds32_options[] = {
+  {{"gprof", optional_argument, NULL, OPTION_GPROF},
+    '\0', "on|off", "Enable gprof", nds32_option_handler},
+  {{NULL, no_argument, NULL, 0}, '\0', NULL, NULL, NULL}
+};
+
 SIM_DESC
 sim_open (SIM_OPEN_KIND kind, host_callback * callback,
 	  struct bfd *abfd, char **argv)
@@ -2179,6 +2226,8 @@ sim_open (SIM_OPEN_KIND kind, host_callback * callback,
       nds32_free_state (sd);
       return 0;
     }
+
+  sim_add_option_table (sd, NULL, nds32_options);
 
   /* Handle target sim arguments. */
   if (sim_parse_args (sd, argv) != SIM_RC_OK)
@@ -2237,6 +2286,9 @@ sim_close (SIM_DESC sd, int quitting)
   struct nds32_mm *mm = STATE_MM (sd);
   nds32_freeall_vma (mm);
 
+  if (sd->gprof)
+    nds32_gmon_cleanup (STATE_PROG_BFD (sd));
+
 #if 0 && defined (USE_TLB)
   /* Dump VMA usage for debugging.  */
   char *SIM_DEBUG = getenv ("SIM_DEBUG");
@@ -2263,6 +2315,9 @@ sim_create_inferior (SIM_DESC sd, struct bfd *prog_bfd, char **argv,
   if (prog_bfd == NULL)
     return SIM_RC_OK;
 
+  if (sd->gprof)
+    nds32_gmon_start (prog_bfd);
+
   /* Set PC to entry point address.  */
   (*CPU_PC_STORE (cpu)) (cpu, bfd_get_start_address (prog_bfd));
 
@@ -2278,12 +2333,6 @@ sim_create_inferior (SIM_DESC sd, struct bfd *prog_bfd, char **argv,
     nds32_init_libgloss (sd, prog_bfd, argv, env);
 
   return SIM_RC_OK;
-}
-
-void
-sim_kill (SIM_DESC sd)
-{
-  /* Nothing to do.  */
 }
 
 void
