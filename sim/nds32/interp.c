@@ -52,6 +52,10 @@
 #include <unistd.h>
 #include <time.h>
 
+struct disassemble_info dis_info; /* For print insn.  */
+
+static void nds32_set_nia (sim_cpu *cpu, sim_cia nia);
+
 enum {
   OPTION_GPROF = OPTION_START,
 };
@@ -202,13 +206,16 @@ nds32_raise_exception (sim_cpu *cpu, enum nds32_exceptions e, int sig,
     {
       va_list va;
       va_start (va, msg);
-      sim_io_vprintf (sd, msg, va);
+      sim_io_evprintf (sd, msg, va);
       va_end (va);
     }
 
   /* Dump registers before halt.  */
   if (STATE_OPEN_KIND (sd) != SIM_OPEN_DEBUG)
     {
+      fprintf (stderr, "  ");
+      print_insn_nds32 (cia, &dis_info);
+      fprintf (stderr, "\n");
       nds32_dump_registers (sd);
 
       sim_io_eprintf (sd, "Recent $pc:\n");
@@ -2305,6 +2312,16 @@ sim_close (SIM_DESC sd, int quitting)
 #endif
 }
 
+static int
+sim_dis_read (bfd_vma memaddr, bfd_byte *myaddr, unsigned int length,
+	      struct disassemble_info *dinfo)
+{
+  SIM_DESC sd = (SIM_DESC) dinfo->application_data;
+
+  return sim_read (sd, memaddr, (unsigned char *) myaddr, length)
+	 != length;
+}
+
 SIM_RC
 sim_create_inferior (SIM_DESC sd, struct bfd *prog_bfd, char **argv,
 		     char **env)
@@ -2317,6 +2334,15 @@ sim_create_inferior (SIM_DESC sd, struct bfd *prog_bfd, char **argv,
 
   if (sd->gprof)
     nds32_gmon_start (prog_bfd);
+
+  memset (&dis_info, 0, sizeof (dis_info));
+  /* See opcode/dis-init.c and dis-asm.h for details.  */
+  INIT_DISASSEMBLE_INFO (dis_info, stderr, fprintf);
+  dis_info.application_data = (void *) sd;
+  dis_info.read_memory_func = sim_dis_read;
+  dis_info.arch = bfd_get_arch (prog_bfd);
+  dis_info.mach = bfd_get_mach (prog_bfd);
+  disassemble_init_for_target (&dis_info);
 
   /* Set PC to entry point address.  */
   (*CPU_PC_STORE (cpu)) (cpu, bfd_get_start_address (prog_bfd));
