@@ -38,6 +38,7 @@ SIM_OBJS = \
 	sim-reason.o \
 	sim-reg.o \
 	sim-trace.o \
+	rbtree.o \
 	@NDS32_SIM_EXTRA_OBJS@ \
 	$(SIM_EXTRA_OBJS)
 ## COMMON_POST_CONFIG_FRAG

@@ -30,29 +30,37 @@
 #include "elf-bfd.h"
 
 #include "nds32-gmon.h"
+#include "rbtree.h"
 
 #define HIST_GRANULARITY_SHIFT	2
 #define HIST_GRANULARITY	(HIST_GRANULARITY_SHIFT << 1)
 #define CG_GRANULARITY_SHIFT	2
 #define CG_GRANULARITY		(CG_GRANULARITY_SHIFT << 1)
+#define CYCLE_GRANULARITY	1
 
 /* Data structure for recording call-graph.  */
-struct tostruct
+struct cg_node
 {
-  /* PC of current function, callee.  */
+  /* PC of caller.  */
+  uint32_t from_pc;
+  /* PC of callee.  */
   uint32_t self_pc;
   /* The number of times the function was called.  */
   uint32_t count;
-  /* Next function called by the same caller.  */
-  struct tostruct *next;
 };
 
-/* Call edges are index by the caller.  */
-static struct tostruct **froms;
-/* Histogram.  */
+/* Used for pass handlers for writing call-graph data.  */
+
+struct cg_handlers
+{
+  bfd *abfd;
+  FILE *fp;
+};
+
 static uint16_t *hist;
 /* Range of text.  */
 static uint32_t low_pc, high_pc;
+rbtree_t cg_tree;
 
 /* Find the upper/lower bound of the text.
    FROMS and HIST are allocated based on this range.  */
@@ -89,7 +97,7 @@ write_hist (FILE *fp, bfd *abfd, uint16_t *hist)
   bfd_put_32 (abfd, low_pc, hdr.low_pc);
   bfd_put_32 (abfd, high_pc, hdr.high_pc);
   bfd_put_32 (abfd, (high_pc - low_pc) >> HIST_GRANULARITY_SHIFT, hdr.hist_size);
-  bfd_put_32 (abfd, 1, hdr.prof_rate);
+  bfd_put_32 (abfd, CYCLE_GRANULARITY, hdr.prof_rate);
   strcpy (hdr.dimen, "cycle");
   hdr.dimen_abbrev = 'c';
   fwrite (&hdr, sizeof (hdr), 1, fp);
@@ -106,34 +114,24 @@ write_hist (FILE *fp, bfd *abfd, uint16_t *hist)
 /* Write call-graph data to file.  */
 
 static void
-write_cg (FILE *fp, bfd *abfd, struct tostruct **froms)
+cg_free_node (rbtree_t tree, rbnode_t node, void *dontcare)
 {
-  int i;
-  int tag = GMON_TAG_CG_ARC;
+  free (node->key);
+}
 
-  bfd_put_32 (abfd, tag, &tag);
+static int
+cg_cmp (void *lhs, void *rhs)
+{
+  struct cg_node *lcg = (struct cg_node *) lhs;
+  struct cg_node *rcg = (struct cg_node *) rhs;
 
-  for (i = 0; i < (high_pc - low_pc) >> CG_GRANULARITY_SHIFT; i++)
+  if (lcg->from_pc == rcg->from_pc)
     {
-      char buf[4];
-      uint32_t from_pc;
-      struct tostruct *tos;
-
-      if ((tos = froms[i]) == NULL)
-	continue;
-
-      bfd_put_32 (abfd, low_pc + (i << CG_GRANULARITY_SHIFT), &from_pc);
-      do
-	{
-	  fwrite (&tag, 1, 1, fp);
-	  fwrite (&from_pc, 4, 1, fp);
-	  bfd_put_32 (abfd, tos->self_pc, buf);
-	  fwrite (buf, 4, 1, fp);
-	  bfd_put_32 (abfd, tos->count, buf);
-	  fwrite (buf, 4, 1, fp);
-	}
-      while ((tos = tos->next) != NULL);
+      if (lcg->self_pc == rcg->self_pc)
+	return 0;
+      return lcg->self_pc < rcg->self_pc ? -1 : 1;
     }
+  return lcg->from_pc < rcg->from_pc ? -1 : 1;
 }
 
 /* Initialization called when the program started.  */
@@ -145,15 +143,34 @@ nds32_gmon_start (struct bfd *abfd)
   high_pc = 0;
   bfd_map_over_sections (abfd, find_text_range, NULL);
 
-  free (hist);
-  free (froms);
+  if (cg_tree)
+    {
+      rbtree_traverse_node (cg_tree, cg_tree->root, cg_free_node, NULL);
+      rbtree_destroy_tree (cg_tree);
+    }
+  cg_tree = rbtree_create_tree (cg_cmp, NULL);
 
+  free (hist);
   hist = (uint16_t *)
     calloc ((high_pc - low_pc) >> HIST_GRANULARITY_SHIFT,
 	    sizeof (uint16_t));
-  froms = (struct tostruct **)
-    calloc ((high_pc - low_pc) >> CG_GRANULARITY_SHIFT,
-	    sizeof (void *));
+}
+
+static void
+write_cg_trav (rbtree_t tree, rbnode_t n, void *arg)
+{
+  struct cg_node *cgn = (struct cg_node *) n->key;
+  char buf[8];
+  struct cg_handlers *hp = (struct cg_handlers *) arg;
+
+  bfd_put_32 (hp->abfd, GMON_TAG_CG_ARC, buf);
+  fwrite (buf, 1, 1, hp->fp);
+  bfd_put_32 (hp->abfd, cgn->from_pc, buf);
+  fwrite (buf, 4, 1, hp->fp);
+  bfd_put_32 (hp->abfd, cgn->self_pc, buf);
+  fwrite (buf, 4, 1, hp->fp);
+  bfd_put_32 (hp->abfd, cgn->count, buf);
+  fwrite (buf, 4, 1, hp->fp);
 }
 
 /* Clean-up and write out collected data.  */
@@ -162,21 +179,22 @@ void
 nds32_gmon_cleanup (bfd *abfd)
 {
   struct gmon_hdr hdr;
-  FILE *fp;
+  struct cg_handlers h;
 
-  fp = fopen ("gmon.out", "w");
+  h.abfd = abfd;
+  h.fp = fopen ("gmon.out", "w");
 
   memset (&hdr, 0, sizeof (hdr));
   memcpy (hdr.cookie, "gmon", 4);
   bfd_put_32 (abfd, 1, hdr.version);
 
-  fwrite (&hdr, sizeof (hdr), 1, fp);
+  fwrite (&hdr, sizeof (hdr), 1, h.fp);
 
-  write_hist (fp, abfd, hist);
+  write_hist (h.fp, abfd, hist);
 
-  write_cg (fp, abfd, froms);
+  rbtree_traverse_node (cg_tree, cg_tree->root, write_cg_trav, &h);
 
-  fclose (fp);
+  fclose (h.fp);
 }
 
 /* Simulate mcount function.
@@ -185,38 +203,25 @@ nds32_gmon_cleanup (bfd *abfd)
 void
 nds32_gmon_mcount (uint32_t from_pc, uint32_t self_pc)
 {
-  int fromidx = (from_pc - low_pc) >> CG_GRANULARITY_SHIFT;
-  struct tostruct *tos;
+  struct cg_node n;
+  struct cg_node *new_cg;
+  rbnode_t p;
 
-  if (froms[fromidx] == NULL)
+  n.from_pc = from_pc;
+  n.self_pc = self_pc;
+  p = rbtree_find (cg_tree, &n);
+
+  if (p)
     {
-      froms[fromidx] = (struct tostruct *) calloc (1, sizeof (struct tostruct));
-      tos = froms[fromidx];
-      tos->self_pc = self_pc;
-      tos->count = 1;
-      return;			/* Done */
-    }
-
-  tos = froms[fromidx];
-
-  do
-    {
-      if (tos->self_pc == self_pc)
-	break;
-    }
-  while ((tos = tos->next) != NULL);
-
-  if (tos->self_pc != self_pc)
-    {
-      /* Not found.  */
-      tos->next = (struct tostruct *) calloc (1, sizeof (struct tostruct));
-      tos = tos->next;
-      tos->self_pc = self_pc;
-      tos->count = 1;
+      ((struct cg_node *) p->key)->count++;
       return;
     }
-  else
-    tos->count++;
+
+  new_cg = (struct cg_node *) calloc (1, sizeof (struct cg_node));
+  new_cg->from_pc = from_pc;
+  new_cg->self_pc = self_pc;
+  new_cg->count = 1;
+  rbtree_insert (cg_tree, new_cg);
 }
 
 /* Simulate time-sampling.
