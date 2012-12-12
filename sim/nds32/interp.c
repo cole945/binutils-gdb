@@ -42,6 +42,7 @@
 #include "nds32-mm.h"
 #include "nds32-syscall.h"
 #include "nds32-gmon.h"
+#include "nds32-pfm.h"
 
 #if defined (__linux__) || defined (__CYGWIN__)
 /* FIXME */
@@ -1301,6 +1302,12 @@ nds32_decode32_misc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	  {
 	  case 0:		/* mtsr */
 	    CCPU_SR[sridx] = CCPU_GPR[rt];
+	    switch (sridx)
+	      {
+	      case SRIDX_PFM_CTL:
+		nds32_pfm_ctl (cpu);
+		break;
+	      }
 	    break;
 	  case 1:		/* setend */
 	    if (sridx != 0x80)
@@ -1971,6 +1978,9 @@ sim_engine_run (SIM_DESC sd, int next_cpu_nr, int nr_cpus, int siggnal)
 
       if (sd->gprof)
 	nds32_gmon_sample (cia);
+
+      nds32_pfm_event (cpu, PFM_CYCLE);
+      nds32_pfm_event (cpu, PFM_INST);
 
       r = sim_read (sd, cia, (unsigned char *) &insn, 4);
       insn = extract_unsigned_integer ((unsigned char *) &insn, 4,
