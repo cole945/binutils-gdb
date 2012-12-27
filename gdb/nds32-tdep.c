@@ -2897,8 +2897,12 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_get_longjmp_target (gdbarch, nds32_get_longjmp_target);
 
   /* The order of appending is the order it check frame.  */
+#if 0
+  COLE: This will cause trouble when stepping into the middle of
+	a function. See handle_step_into_function () for details.
   if (nds32_config.use_ifcret)
     frame_unwind_append_unwinder (gdbarch, &nds32_ifc_frame_unwind);
+#endif
   dwarf2_frame_set_init_reg (gdbarch, nds32_dwarf2_frame_init_reg);
   if (nds32_config.use_cfi)
     dwarf2_append_unwinders (gdbarch);
