@@ -32,6 +32,14 @@ set trust-readonly-sections 1
 # 'monitor reset target' may take over 2s
 set remotetimeout 60
 
+# Force return (goto $ifc_lp) in ifc common block.
+set $NDS32_FORCE_IFC_RETURN = 1
+define hook-stop
+  if (((int)$ir0 & 0x8000) && $ifc_lp && $NDS32_FORCE_IFC_RETURN)
+     advance *$ifc_lp
+  end
+end
+
 # Set limit to workaround issues about backtrace in ISR or borken debug information.
 set backtrace limit 100
 
