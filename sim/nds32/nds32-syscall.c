@@ -248,6 +248,8 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
   sc.read_mem = syscall_read_mem;
   sc.write_mem = syscall_write_mem;
 
+  /* FIXME and TODO: Handling big endian.  */
+
   /* switch (swid) */
   switch (cbid = cb_target_to_host_syscall (cb, sc.func))
     {
@@ -327,16 +329,30 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 
     case CB_SYS_gettimeofday:
       {
-	struct timeval t;
+	struct timeval tv;
 	struct timezone tz;
+	struct {
+	  uint32_t tv_sec;
+	  uint32_t tv_usec;
+	} target_tv;
+	struct {
+	  uint32_t tz_minuteswest;
+	  uint32_t tz_dsttime;
+	} target_tz;
 
-	sc.result = gettimeofday (&t, &tz);
+	sc.result = gettimeofday (&tv, &tz);
+
+	target_tv.tv_sec = tv.tv_sec;
+	target_tv.tv_usec = tv.tv_usec;
+	target_tz.tz_minuteswest = tz.tz_minuteswest;
+	target_tz.tz_dsttime = tz.tz_dsttime;
+
 	if (CCPU_GPR[0].u)
-	  sim_write (sd, CCPU_GPR[0].u, (const unsigned char *) &t,
-		     sizeof (t));
+	  sim_write (sd, CCPU_GPR[0].u, (const unsigned char *) &target_tv,
+		     sizeof (target_tv));
 	if (CCPU_GPR[1].u)
-	  sim_write (sd, CCPU_GPR[1].u, (const unsigned char *) &t,
-		     sizeof (tz));
+	  sim_write (sd, CCPU_GPR[1].u, (const unsigned char *) &target_tz,
+		     sizeof (target_tz));
       }
       break;
 
@@ -366,11 +382,24 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
     case CB_SYS_times:
       {
 	struct tms tms;
+	struct {
+	  uint32_t tms_utime;
+	  uint32_t tms_stime;
+	  uint32_t tms_cutime;
+	  uint32_t tms_cstime;
+	} target_tms;
 
 	sc.result = times (&tms);
+	target_tms.tms_utime = tms.tms_utime;
+	target_tms.tms_stime = tms.tms_stime;
+	target_tms.tms_cutime = tms.tms_cutime;
+	target_tms.tms_cstime = tms.tms_cstime;
+
+	SIM_ASSERT (sizeof (target_tms) == 16);
+
 	if (CCPU_GPR[0].u)
-	  sim_write (sd, CCPU_GPR[0].u, (const unsigned char *) &tms,
-		     sizeof (tms));
+	  sim_write (sd, CCPU_GPR[0].u, (const unsigned char *) &target_tms,
+		     sizeof (target_tms));
       }
       break;
 
