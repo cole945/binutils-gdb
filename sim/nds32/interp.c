@@ -845,6 +845,33 @@ nds32_decode32_alu2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0xb:			/* btst */
       CCPU_GPR[rt].u = (CCPU_GPR[ra].u & (1 << imm5u)) != 0;
       break;
+
+    /* FIXME: This is just a partial implementation.
+	      $rb is not updated after extract/pack.  */
+    case 0xc:			/* bse */
+      {
+	int dist = __GF (CCPU_GPR[rb].u, 0, 5);
+	int len = __GF (CCPU_GPR[rb].u, 8, 5) + 1;
+	int val;
+
+	dist = 32 - dist - len; /* From LSB.  */
+	val = __GF (CCPU_GPR[ra].u, dist, len);
+
+	CCPU_GPR[rt].u = val;
+      }
+      break;
+    case 0xd:			/* bsp */
+      {
+	int dist = __GF (CCPU_GPR[rb].u, 0, 5);
+	int len = __GF (CCPU_GPR[rb].u, 8, 5) + 1;
+	int val;
+
+	dist = 32 - dist - len; /* From LSB.  */
+	val = __GF (CCPU_GPR[ra].u, 0, len);
+
+	__put_field (&CCPU_GPR[rt].u, dist, len, val);
+      }
+      break;
     case 0xe:			/* ffb */
       {
 	char buff[4];
