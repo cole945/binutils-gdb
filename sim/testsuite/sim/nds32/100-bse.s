@@ -17,44 +17,44 @@ main:
 	movi	$r25, 0
 
 	! case 1 - extract 12 bits from 12 bits
-	! check ra and rb[4:0] (distance)
-	li	$r7, 0x12345678	! input
+	! check rt and rb[4:0] (distance)
+	li	$r7, 0x1234567a	! input
 	li	$r8, 0xb0c	! rb
 	bse	$r6, $r7, $r8	! 456
 
 	li	$r9, 0x456
-	beq	$r6, $r9, 1f	! check ra
+	beq	$r6, $r9, 1f	! check rt
 	addi	$r25, $r25, 1
 	PUTS	.Lfstr0a
 1:
-	andi	$r9, $r7, 0x1f
+	andi	$r9, $r8, 0x1f
 	beqc	$r9, 24, 1f	! check rb[4:0] updated distance
 	addi	$r25, $r25, 1
 	PUTS	.Lfstr0b
 1:
 
 	! case 2 - non-occupied untouched
-	! check ra
+	! check rt
 	li	$r7, 0x87654321 ! input
 	li	$r8, 0x40000b0c	! rb
-	li	$r6, 0xabcdef12	! ra (non-occupied should be untouched)
+	li	$r6, 0xabcdef12	! rt (non-occupied should be untouched)
 	bse	$r6, $r7, $r8	! abcde543
 
 	li	$r9, 0xabcde543
-	beq	$r6, $r9, 1f	! check ra
+	beq	$r6, $r9, 1f	! check rt
 	addi	$r25, $r25, 1
 	PUTS	.Lfstr1
 1:
 
 
 	! case 3 - empty condition
-	! check ra and refill-bit
+	! check rt and refill-bit
 	li	$r7, 0xabcd1234	! input
 	li	$r8, 0x00000b14	! rb
 	bse	$r6, $r7, $r8	! 234
 
 	li	$r9, 0x234
-	beq	$r6, $r9, 1f	! check ra
+	beq	$r6, $r9, 1f	! check rt
 	addi	$r25, $r25, 1
 	PUTS	.Lfstr2a
 1:
@@ -65,13 +65,13 @@ main:
 1:
 
 	! case 4 - underflow condition
-	! check ra and rb
+	! check rt and rb
 	li	$r7, 0x1a2b3c4d ! input
 	li	$r8, 0xb18	! rb
 	bse	$r6, $r7, $r8
 
 	li	$r9, 0x4d0
-	beq	$r6, $r9, 1f	! check ra
+	beq	$r6, $r9, 1f	! check rt
 	addi	$r25, $r25, 1
 	PUTS	.Lfstr3
 1:
@@ -84,7 +84,7 @@ main:
 	bse	$r7, $r7, $r8	! a7b
 
 	li	$r9, 0x5d8
-	beq	$r6, $r9, 1f	! check refilled ra
+	beq	$r6, $r9, 1f	! check refilled rt
 	addi	$r25, $r25, 1
 	PUTS	.Lfstr4a
 1:
