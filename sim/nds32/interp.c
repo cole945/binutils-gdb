@@ -845,9 +845,6 @@ nds32_decode32_alu2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0xb:			/* btst */
       CCPU_GPR[rt].u = (CCPU_GPR[ra].u & (1 << imm5u)) != 0;
       break;
-
-    /* FIXME: This is just a partial implementation.
-	      $rb is not updated after extract/pack.  */
     case 0xc:			/* bse */
       {
 	int n = __GF (CCPU_GPR[rb].u, 0, 5);
@@ -895,7 +892,7 @@ nds32_decode32_alu2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	    CCPU_GPR[rb].u |= __BIT (31);
 	  }
 	/* Undeflow condition.  */
-	else
+	else /* 31 < d */
 	  {
 	    __put_field (&CCPU_GPR[rb].u, 16, 5, m);
 	    __put_field (&CCPU_GPR[rb].u, 8, 5, d - 32);
@@ -905,19 +902,62 @@ nds32_decode32_alu2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	    val = __GF (ora, 0, 32 - n);
 	    __put_field (&CCPU_GPR[rt].u, 0, len, val << (d - 31));
 	  }
-
       }
       break;
     case 0xd:			/* bsp */
       {
-	int dist = __GF (CCPU_GPR[rb].u, 0, 5);
-	int len = __GF (CCPU_GPR[rb].u, 8, 5) + 1;
+	int n = __GF (CCPU_GPR[rb].u, 0, 5);
+	int m = __GF (CCPU_GPR[rb].u, 8, 5);
+	int underflow = CCPU_GPR[rb].u & __BIT (30);
+	int refill = CCPU_GPR[rb].u & __BIT (31);
+	int len = m + 1;
+	int dist = 32 - len - n;	/* From LSB.  */
 	int val;
+	int d = n + m;
+	uint32_t ora = CCPU_GPR[ra].u;
 
-	dist = 32 - dist - len; /* From LSB.  */
-	val = __GF (CCPU_GPR[ra].u, 0, len);
 
-	__put_field (&CCPU_GPR[rt].u, dist, len, val);
+	/* Normal condition.  */
+	if (31 > d)
+	  {
+	    __put_field (&CCPU_GPR[rb].u, 0, 5, d + 1);
+	    val = __GF (ora, 0, len);
+
+	    __put_field (&CCPU_GPR[rt].u, dist, len, val);
+
+	    if (underflow)
+	      {
+		/* Restore old length.  */
+		__put_field (&CCPU_GPR[rb].u, 8, 5, __GF (CCPU_GPR[rb].u, 16, 5));
+		/* Why?  */
+		__put_field (&CCPU_GPR[rb].u, 13, 3, 0);
+	      }
+
+	    CCPU_GPR[rb].u &= ~__BIT (30);
+	    CCPU_GPR[rb].u &= ~__BIT (31);
+	  }
+	/* Empty condition.  */
+	else if (31 == d)
+	  {
+	    CCPU_GPR[rb].u &= ~0x1f;
+	    val = __GF (ora, 0, len);
+
+	    __put_field (&CCPU_GPR[rt].u, dist, len, val);
+
+	    CCPU_GPR[rb].u &= ~__BIT (30);
+	    CCPU_GPR[rb].u |= __BIT (31);
+	  }
+	/* Undeflow condition.  */
+	else /* 31 < d */
+	  {
+	    __put_field (&CCPU_GPR[rb].u, 16, 5, m);
+	    __put_field (&CCPU_GPR[rb].u, 8, 5, d - 32);
+	    CCPU_GPR[rb].u &= ~0x1f;
+	    CCPU_GPR[rb].u |= __BIT (30);
+	    CCPU_GPR[rb].u |= __BIT (31);
+	    val = __GF (ora, 0, len) >> (d - 31);
+	    __put_field (&CCPU_GPR[rt].u, 0, 32 - n, val);
+	  }
       }
       break;
     case 0xe:			/* ffb */
