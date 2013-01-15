@@ -29,54 +29,61 @@ set trust-readonly-sections 1
 # set sysroot /path/to/nds32le-linux/nds32le-linux/libc
 # set solib-search-path /path/to/nds32le-lib
 
-# 'monitor reset target' may take over 2s
-set remotetimeout 60
-
-# Force return (goto $ifc_lp) in ifc common block.
-set $NDS32_FORCE_IFC_RETURN = 1
-define hook-stop
-  if (((int)$ir0 & 0x8000) && $ifc_lp && $NDS32_FORCE_IFC_RETURN)
-     advance *$ifc_lp
-  end
-end
-
 # Set limit to workaround issues about backtrace in ISR or borken debug information.
 set backtrace limit 100
 
 # Handle elf-check and cache control only if the target (sid/iceman) requires.
 # In other words, do not handle elf-check and cache control for sim.
-set $nds32_target = 0
-# Enable elf-check by default. Users(IDE) can disable it by setting it to 0.
-set $nds32_elf_check = 1
-
+# $_nds32_target_type is built-in convenience variable for target type:
+#  0 - unknown (linux gdbserver or sim)
+#  1 - SID
+#  2 - ICE
+#  3 - OpenOCD
 define target hookpost-remote
-  set $nds32_target = 1
+  nds32 query target
 end
 
 define target hookpost-extended-remote
-  set $nds32_target = 1
+  nds32 query target
 end
 
 define target hookpost-sim
-  set $nds32_target = 0
+  nds32 query target
+end
+
+# Force return (goto $ifc_lp) in ifc common block.
+set $nds32_force_ifc_return = 1
+define hook-stop
+  if $_nds32_target_type
+     if ((int)$ir0 & 0x8000) && $ifc_lp && $nds32_force_ifc_return
+       advance *$ifc_lp
+     end
+  end
 end
 
 # Disable cache when loading code
 define hook-load
-  if $nds32_target
-    if $nds32_elf_check
-      nds32 elf-check
-    end
+  if $_nds32_target_type
+    nds32 elf-check
     set $old_mr8 = $mr8
     set $mr8 = 0
-    maintenance packet qPart:nds32:request:InvalidateCache
-    maintenance packet qPart:nds32:request:MemAccBus
+    if $_nds32_target_type != 3
+      maintenance packet qPart:nds32:request:InvalidateCache
+      maintenance packet qPart:nds32:request:MemAccBus
+    else
+      monitor nds cache invalidate
+      monitor nds mem_access bus
+    end
   end
 end
 
 define hookpost-load
-  if $nds32_target
-    maintenance packet qPart:nds32:request:MemAccCPU
+  if $_nds32_target_type
+    if $_nds32_target_type != 3
+      maintenance packet qPart:nds32:request:MemAccCPU
+    else
+      monitor nds mem_access cpu
+    end
     set $mr8 = $old_mr8
     nds32 set-gloss
   end
@@ -85,8 +92,12 @@ end
 # Workaround for bug6907 (avoid cache issue)
 # Always use CPU mode for 'restore'.
 define hook-restore
-  if $nds32_target
-    maintenance packet qPart:nds32:request:InvalidateCache
+  if $_nds32_target_type
+    if $_nds32_target_type != 3
+      maintenance packet qPart:nds32:request:InvalidateCache
+    else
+      monitor nds cache invalidate
+    end
     # if ((int)$cr0 >> 24) != 12
     #   maintenance packet qPart:nds32:request:MemAccBus
     # end
@@ -96,7 +107,7 @@ define hook-restore
 end
 
 define hookpost-restore
-  if $nds32_target
+  if $_nds32_target_type
     set $mr8 = $old_mr8
     # if ((int)$cr0 >> 24) != 12
     #   maintenance packet qPart:nds32:request:MemAccCPU
@@ -113,7 +124,11 @@ end
 # reset and hold
 define reset-and-hold
   if $argc == 0
-    monitor reset hold
+    if $_nds32_target_type != 3
+      monitor reset hold
+    else
+      monitor reset halt
+    end
   else
     echo "targetreset has no parameter"
   end
@@ -126,7 +141,11 @@ end
 # Deprecated. Use reset-and-hold.
 define targetreset
   if $argc == 0
-    monitor reset hold
+    if $_nds32_target_type != 3
+      monitor reset hold
+    else
+      monitor reset halt
+    end
   else
     echo "targetreset has no parameter"
   end
@@ -139,20 +158,28 @@ end
 # default reset address:0x00000000
 # reset and run
 define reset-and-run
-  if $argc == 0
-    monitor reset target 0x00000000
+  if $_nds32_target_type != 3
+    if $argc == 0
+      monitor reset target 0x00000000
+    else
+      monitor reset target $arg0
+    end
   else
-    monitor reset target $arg0
+    monitor reset run
   end
   flushregs
 end
 
 # Decprecated. Use reset-and-run.
 define targetresetrun
-  if $argc == 0
-    monitor reset target 0x00000000
+  if $_nds32_target_type != 3
+    if $argc == 0
+      monitor reset target 0x00000000
+    else
+      monitor reset target $arg0
+    end
   else
-    monitor reset target $arg0
+    monitor reset run
   end
   flushregs
 end
@@ -162,7 +189,11 @@ define change_memory_access_mode
   if $argc == 0
     echo "Missing access MODE. (bus or cpu)"
   else
-    monitor change memory access mode $arg0
+    if $_nds32_target_type != 3
+      monitor change memory access mode $arg0
+    else
+      monitor nds mem_mode $arg0
+    end
   end
 end
 

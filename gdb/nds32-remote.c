@@ -98,9 +98,10 @@ enum nds32_qparts_enum
 
 enum nds32_remote_type
 {
+  nds32_rt_unknown = 0,
   nds32_rt_sid,
   nds32_rt_ice,
-  nds32_rt_unknown,
+  nds32_rt_ocd,
 };
 
 struct
@@ -119,7 +120,8 @@ nds32_remote_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr,
 
   /* SID use KINDPTR for software breakpoints,
       but ICEman, linux-gdbserver doesn't use it. */
-  if (nds32_remote_info.type == nds32_rt_ice)
+  if (nds32_remote_info.type == nds32_rt_ice
+      || nds32_remote_info.type == nds32_rt_ocd)
     {
       /* ICEman/AICE have trouble on reading memory when the pcptr is P/A,
 	 but CPU is in V/A mode.  This code prevent GDB from reading memory.
@@ -494,34 +496,38 @@ nds32_remote_info_init (void)
 
 /* Query target information.  */
 
-static void
-nds32_query_target_command (char *arg, int from_tty)
+static struct value *
+nds32_target_type_make_value (struct gdbarch *gdbarch, struct internalvar *var,
+			      void *ignore)
+{
+  int val = 0;
+
+  if (strcmp (target_shortname, "remote") == 0
+      || strcmp (target_shortname, "extended-remote") == 0)
+    val = target_has_registers ? nds32_remote_info.type
+			       : nds32_rt_unknown;
+
+  return value_from_longest (builtin_type (gdbarch)->builtin_int,
+			     val);
+}
+
+static int
+nds32_query_target_using_qpart (void)
 {
   char *buf;
   long size = 64;
   struct cleanup *back_to;
-  char *cpu = nds32_remote_info.cpu;
-  int cpu_size = ARRAY_SIZE (nds32_remote_info.cpu);
 
-  nds32_remote_info_init ();
-
-  if (strcmp (current_target.to_shortname, "remote") != 0)
-    return;
-  /* FIXME if we don't know, use ELF. */
-
+  /* The buffer passed to getpkt must be allocated using xmalloc,
+     because it might be xrealloc by read_frame.
+     See remote.c for details.  */
   buf = xmalloc (size);
+
+  /* Let caller clean it up.  */
   back_to = make_cleanup (free_current_contents, &buf);
 
-  /* NDS32_Q_TARGET, "qPart:nds32:ask:target"
-     Query target type, "SID" or "ICE"
-
-     NDS32_Q_CPU, "qPart:nds32:ask:cpu"
-     Query CPU name, e.g., "core00"
-     Prompt is changed accordingly. e.g., "core00(gdb) "
-
-     NDS32_Q_ENDIAN, "qPart:nds32:ask:de"
-     Query target default endian, "LE" or "BE" */
-
+  /* qPart:nds32:ask:target - SID or ICE.  */
+  nds32_remote_info.type = nds32_rt_unknown;
   putpkt (nds32_qparts[NDS32_Q_TARGET]);
   getpkt (&buf, &size, 0);
   if (strcmp (buf, "SID") == 0)
@@ -529,19 +535,19 @@ nds32_query_target_command (char *arg, int from_tty)
   else if (strcmp (buf, "ICE") == 0)
     nds32_remote_info.type = nds32_rt_ice;
   else
-    {
-      nds32_remote_info.type = nds32_rt_unknown;
-      goto end_query;
-    }
+    return 0;
 
+  /* qPart:nds32:ask:cpu - prompt, e.g., "core0(gdb) ".  */
   putpkt (nds32_qparts[NDS32_Q_CPU]);
   getpkt (&buf, &size, 0);
   if (strlen (buf) > 0 && buf[0] != 'E')
     {
-      memset (cpu, 0, cpu_size);
-      strncpy (cpu, buf, cpu_size - 1);
+      const int csize = sizeof (nds32_remote_info.cpu);
+      memset (nds32_remote_info.cpu, 0, csize);
+      strncpy (nds32_remote_info.cpu, buf, csize - 1);
     }
 
+  /* qPart:nds32:ask:de - endian, e.g., LE or BE.  */
   putpkt (nds32_qparts[NDS32_Q_ENDIAN]);
   getpkt (&buf, &size, 0);
   if (strcmp (buf, "LE") == 0)
@@ -551,19 +557,65 @@ nds32_query_target_command (char *arg, int from_tty)
   else
     nds32_remote_info.endian = BFD_ENDIAN_UNKNOWN;
 
+  return 1;
+}
+
+static int
+nds32_query_target_using_qrcmd (void)
+{
+  struct cleanup *back_to;
+  struct ui_file *res;
+  struct ui_file_buffer ui_buf;
+  char buf[64];
+
+  /* ui_file for qRcmd.  */
+  res = mem_fileopen ();
+  back_to = make_cleanup_ui_file_delete (res);
+
+  /* ui_file_buffer for reading ui_file.  */
+  ui_buf.buf_size = 64;
+  ui_buf.buf = xmalloc (ui_buf.buf_size);
+
+  target_rcmd ("nds query target", res);
+
+  /* Read data in ui_file.  */
+  memset (ui_buf.buf, 0, ui_buf.buf_size);
+  ui_file_put (res, do_ui_file_put_memcpy, &ui_buf);
+
+  if (strcmp ((char *) ui_buf.buf, "OCD") == 0)
+    nds32_remote_info.type = nds32_rt_ocd;
+  else
+    return 0;
+
+  return 1;
+}
+
+static void
+nds32_query_target_command (char *arg, int from_tty)
+{
+  nds32_remote_info_init ();
+
+  if (strcmp (target_shortname, "remote") != 0)
+    return;
+  /* FIXME if we don't know, use ELF. */
+
+  /* Try to find out the type of target - SID, ICE or OCD.  */
+  if (!nds32_query_target_using_qpart ())
+    nds32_query_target_using_qrcmd ();
+
 end_query:
   /* Set cpu name if ICE and CPU!="cpu".  */
-  if (nds32_remote_info.type == nds32_rt_ice && strcmp ("cpu", cpu) != 0)
+  if (strcmp ("cpu", nds32_remote_info.cpu) != 0)
     {
-      snprintf (buf, size, "%s(gdb) ", cpu);
+      char buf[64];
+      snprintf (buf, sizeof (buf), "(%s|gdb) ", nds32_remote_info.cpu);
       set_prompt (buf);
     }
   else
     {
+      /* Restore to DEFAULT_PROMPT.  */
       set_prompt ("(gdb) ");
     }
-
-  do_cleanups (back_to);
 }
 
 /* Callback for elf-check.  */
@@ -774,22 +826,21 @@ nds32_set_gloss_command (char *arg, int from_tty)
   do_cleanups (back_to);
 }
 
-static void
-nds32_remote_inferior_created_observer (struct target_ops *ops, int from_tty)
-{
-  nds32_query_target_command (NULL, 0);
-}
-
 static struct cmd_list_element *nds32_pipeline_cmdlist;
 static struct cmd_list_element *nds32_query_cmdlist;
 static struct cmd_list_element *nds32_reset_cmdlist;
 static struct cmd_list_element *nds32_maint_cmdlist;
 
+static const struct internalvar_funcs nds32_target_type_funcs =
+{
+    nds32_target_type_make_value,
+    NULL,
+    NULL
+};
+
 void
 nds32_init_remote_cmds (void)
 {
-  /* Hook for query remote target information.  */
-  observer_attach_inferior_created (nds32_remote_inferior_created_observer);
   nds32_remote_info_init ();
 
   /* nds32 elf-check */
@@ -839,4 +890,7 @@ nds32_init_remote_cmds (void)
 	   _("Query profiling results."), &nds32_reset_cmdlist);
   add_cmd ("perf-meter", no_class, nds32_reset_perfmeter_command,
 	   _("Query perf-meter results."), &nds32_reset_cmdlist);
+
+  create_internalvar_type_lazy ("_nds32_target_type", &nds32_target_type_funcs,
+				NULL);
 }
