@@ -321,7 +321,6 @@ nds32_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 
   if (tdesc_data)
     {
-      set_gdbarch_num_regs (gdbarch, NDS32_LINUX_FUCPR_REGNUM + 1);
       feature = tdesc_find_feature (tdesc, "org.gnu.gdb.nds32.linux");
       if (feature)
 	{

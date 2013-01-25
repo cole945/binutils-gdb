@@ -93,6 +93,14 @@ initialize_tdesc_nds32_linux_sid (void)
   tdesc_create_reg (feature, "", 69, 1, NULL, 128, "uint128");
   tdesc_create_reg (feature, "", 70, 1, NULL, 128, "uint128");
   tdesc_create_reg (feature, "", 71, 1, NULL, 128, "uint128");
+  tdesc_create_reg (feature, "", 72, 1, NULL, 128, "uint128");
+  tdesc_create_reg (feature, "", 73, 1, NULL, 128, "uint128");
+  tdesc_create_reg (feature, "", 74, 1, NULL, 128, "uint128");
+  tdesc_create_reg (feature, "", 75, 1, NULL, 128, "uint128");
+  tdesc_create_reg (feature, "", 76, 1, NULL, 128, "uint128");
+  tdesc_create_reg (feature, "", 77, 1, NULL, 128, "uint128");
+  tdesc_create_reg (feature, "", 78, 1, NULL, 128, "uint128");
+  tdesc_create_reg (feature, "", 79, 1, NULL, 128, "uint128");
 
   tdesc_nds32_linux_sid = result;
 }
