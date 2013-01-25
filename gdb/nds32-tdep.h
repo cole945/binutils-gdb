@@ -41,8 +41,7 @@
 			 NDS32_NUM_DR + NDS32_NUM_PFR + 1 + NDS32_NUM_DMAR + \
 			 NDS32_NUM_RACR + NDS32_NUM_IDR + NDS32_NUM_AUMR )
 
-#define NDS32_NUM_REGS	(NDS32_NUM_GR + NDS32_NUM_SPR + NDS32_NUM_SR)
-#define NDS32_NUM_PSEUDO_REGS	(NDS32_NUM_FPR)
+#define NDS32_NUM_PSEUDO_REGS     (NDS32_NUM_FPR)
 
 /* NDS32 virtual registers layout for GDB.  */
 enum nds32_regnum
@@ -64,20 +63,71 @@ enum nds32_regnum
   NDS32_D1LO_REGNUM = 35,
   NDS32_D1HI_REGNUM = 36,
   NDS32_IFCLP_REGNUM = 37,
-  NDS32_PSW_REGNUM = 44,
+  NDS32_PSW_REGNUM = 38,
 
   /* for linux */
-  NDS32_LINUX_ORIG_R0_REGNUM = 37,
-  NDS32_LINUX_FUCPR_REGNUM = 38,
+  NDS32_LINUX_ORIG_R0_REGNUM = 39,
+  NDS32_LINUX_FUCPR_REGNUM = 40,
 
-  /* FPR registers may be pesudo or not */
-  NDS32_FPCFG_REGNUM = 0x100,
+  NDS32_LEGACY_NUM_REGS,
+  /* Old ICEman/SID sends 169 registers in g-packet.  */
+  NDS32_LEGACY_G_NUM_REGS = 169,
+  /*
+     FPU registers may be pesudo registers or not.
+     For target supporting tdesc, FPRs are no different from GPRs.
+     For legacy target (e.g., SID), FPRs are pseudo registers and accessed
+     by qRcmd.
+
+     Either case, in order to simplify the implementation of GDB.
+     we should make register numbering the same,
+     so we don't have to handle them differently in these functions,
+
+       # nds32_pseudo_register*
+       # nds32_push_dummy_call
+       # nds32_return_value
+   */
+  NDS32_PSEUDO_BASE_REGNUM = 0x100,
+
+  NDS32_FPCFG_REGNUM = NDS32_PSEUDO_BASE_REGNUM,
   NDS32_FPCSR_REGNUM,
   NDS32_FS0_REGNUM,			/* FS0-FS31. */
   NDS32_FD0_REGNUM = NDS32_FS0_REGNUM + 32,	/* FD0-FD31.  */
-
   NDS32_FPU_REGNUM = NDS32_FPCFG_REGNUM,
   NDS32_FPU_END_REGNUM = NDS32_FPU_REGNUM + 2 + 32 + 32,
+
+  /* Register numbers for target which does'not support tdesc.
+
+       * These are sent by g-packet.
+       r0   - r32        0 -  31
+       pc               32
+       d0lo - d1hi      33 -  36
+       cr0  - cr6       37 -  43
+       ir0  - ir15      44 -  59
+       mr0  - mr10      60 -  70
+       dr0  - dr47      71 - 118
+       pfr0 - pfr3     119 - 122
+       fucpr           123
+       dmar0-dmar10    124 - 134
+       racr0           135
+       idr0 - idr1     136 - 137
+       AUDIO*          138 - 169
+
+       * These are sent by p-packet.
+       ir16 - ir17     170 - 171
+       dr48            172
+       ir18 - ir19     173 - 174
+       ir20 - ir25     176 - 181
+       mr11            182
+       secur0          183
+       irb             184
+       ir26 - ir29     185 - 188
+   */
+
+
+  /* This must be bigger enough to cover all _numbered_ registers,
+     (i.e., GPRs, FPRs, et al.) Otherwise, it fails the assertion
+     in tdesc_use_registers (). */
+  NDS32_NUM_REGS,
 };
 
 /* All the possible NDS32 ABIs.  They must be consistent with elf/nds32.h.  */

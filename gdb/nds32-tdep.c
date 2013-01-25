@@ -672,7 +672,12 @@ nds32_register_type (struct gdbarch *gdbarch, int reg_nr)
   type = nds32_types (gdbarch, user_reg_map_regnum_to_name (gdbarch, reg_nr));
   if (type)
     return type;
-  return tdesc_register_type (gdbarch, reg_nr);
+
+  type = tdesc_register_type (gdbarch, reg_nr);
+  if (type)
+    return type;
+
+  return bt->builtin_data_ptr;
 }
 
 /* nds32 register groups.  */
@@ -910,29 +915,20 @@ nds32_pseudo_register_read (struct gdbarch *gdbarch,
 			    struct regcache *regcache, int regnum,
 			    gdb_byte *buf)
 {
-  if (regnum >= NDS32_FD0_REGNUM)
-    {
-      regnum = ((regnum - NDS32_FD0_REGNUM) << 1) + NDS32_FS0_REGNUM;
-      if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_LITTLE)
-	{
-	  nds32_pseudo_register_read (gdbarch, regcache, regnum, buf + 4);
-	  nds32_pseudo_register_read (gdbarch, regcache, regnum + 1, buf);
-	}
-      else
-	{
-	  nds32_pseudo_register_read (gdbarch, regcache, regnum, buf);
-	  nds32_pseudo_register_read (gdbarch, regcache, regnum + 1, buf + 4);
-	}
-      return REG_VALID;
-    }
+  int reg_size;
 
-  if (regnum >= NDS32_FS0_REGNUM && regnum < NDS32_FS0_REGNUM + 64)
-    nds32_remote_mfcp (gdbarch, 0, (regnum - NDS32_FS0_REGNUM) % 32, 0, 0,
-		       register_size (gdbarch, regnum), buf);
+  reg_size = register_size (gdbarch, regnum);
+
+  if (regnum >= NDS32_FS0_REGNUM && regnum < NDS32_FS0_REGNUM + 32)
+    nds32_remote_mfcp (gdbarch, 0, regnum - NDS32_FS0_REGNUM, 0, 0,
+		       reg_size, buf);
+  else if (regnum >= NDS32_FD0_REGNUM && regnum < NDS32_FD0_REGNUM + 32)
+    nds32_remote_mfcp (gdbarch, 0, regnum - NDS32_FD0_REGNUM, 0, 0,
+		       reg_size, buf);
   else if (regnum >= NDS32_FPU_REGNUM)
     nds32_remote_mfcp (gdbarch, 0, 0, regnum - NDS32_FPU_REGNUM, 0x3,
-		       register_size (gdbarch, regnum), buf);
-      return REG_VALID;
+		       reg_size, buf);
+  return REG_VALID;
 }
 
 /* Implement the gdbarch_pseudo_register_write method.  */
@@ -942,28 +938,19 @@ nds32_pseudo_register_write (struct gdbarch *gdbarch,
 			     struct regcache *regcache, int regnum,
 			     const gdb_byte *buf)
 {
-  if (regnum >= NDS32_FD0_REGNUM)
-    {
-      regnum = ((regnum - NDS32_FD0_REGNUM) << 1) + NDS32_FS0_REGNUM;
-      if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_LITTLE)
-	{
-	  nds32_pseudo_register_write (gdbarch, regcache, regnum, buf + 4);
-	  nds32_pseudo_register_write (gdbarch, regcache, regnum + 1, buf);
-	}
-      else
-	{
-	  nds32_pseudo_register_write (gdbarch, regcache, regnum, buf);
-	  nds32_pseudo_register_write (gdbarch, regcache, regnum + 1, buf + 4);
-	}
-      return;
-    }
+  int reg_size;
 
-  if (regnum >= NDS32_FS0_REGNUM && regnum < NDS32_FS0_REGNUM + 64)
-    nds32_remote_mtcp (gdbarch, 0, (regnum - NDS32_FS0_REGNUM) % 32, 0, 0,
-		       register_size (gdbarch, regnum), buf);
+  reg_size = register_size (gdbarch, regnum);
+
+  if (regnum >= NDS32_FS0_REGNUM && regnum < NDS32_FS0_REGNUM + 32)
+    nds32_remote_mtcp (gdbarch, 0, regnum - NDS32_FS0_REGNUM, 0, 0,
+		       reg_size, buf);
+  else if (regnum >= NDS32_FD0_REGNUM && regnum < NDS32_FD0_REGNUM + 32)
+    nds32_remote_mtcp (gdbarch, 0, regnum - NDS32_FD0_REGNUM, 0, 0,
+		       reg_size, buf);
   else if (regnum >= NDS32_FPU_REGNUM)
     nds32_remote_mtcp (gdbarch, 0, 0, regnum - NDS32_FPU_REGNUM, 0x3,
-		       register_size (gdbarch, regnum), buf);
+		       reg_size, buf);
 }
 
 /* Skip prologue should be conservative, and frame-unwind should be
@@ -2601,8 +2588,6 @@ nds32_validate_tdesc_p (struct gdbarch *gdbarch,
 	  if (valid_p)
 	    tdep->nds32_fpu_dp_num++;
 	}
-
-      set_gdbarch_num_regs (gdbarch, NDS32_FD0_REGNUM + 32);
     }
 
   return 1;
@@ -2671,13 +2656,12 @@ nds32_init_pseudo_registers (struct gdbarch *gdbarch)
     {
       /* Only use FPR for call for FP ABI.  */
       tdep->nds32_fpu_pseudo = TRUE;
-
       if (gdbarch_num_regs (gdbarch) > NDS32_FPU_REGNUM)
 	internal_error (__FILE__, __LINE__,
 			"too many gdbarch_num_regs overlapped with "
 			"pseudo registers.\n");
-      /* Adjust num_regs, since range of regs should be
-	 0..(num_regs + num_pesudo_regs) */
+      /* This is a dirty hacking for making register numbering
+	 consistent with non-pseudo FPRs.  */
       set_gdbarch_num_regs (gdbarch, NDS32_FPU_REGNUM);
       set_gdbarch_num_pseudo_regs (gdbarch, NDS32_NUM_PSEUDO_REGS);
 
@@ -2688,6 +2672,8 @@ nds32_init_pseudo_registers (struct gdbarch *gdbarch)
       set_tdesc_pseudo_register_type (gdbarch, nds32_pseudo_register_type);
       set_tdesc_pseudo_register_name (gdbarch, nds32_pseudo_register_name);
     }
+  else
+    set_gdbarch_num_regs (gdbarch, NDS32_LEGACY_G_NUM_REGS);
 }
 
 /* Implement the gdbarch_overlay_update method.  */
@@ -2767,16 +2753,20 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
       nds32_abi = (eflags >> 4) & 0xF;
     }
 
-  if (!tdesc_has_registers (info.target_desc))
-    tdesc = tdesc_nds32;
-  else
-    tdesc = info.target_desc;
-
   /* Allocate space for the new architecture.  */
   tdep = XCALLOC (1, struct gdbarch_tdep);
   gdbarch = gdbarch_alloc (&info, tdep);
-  /* set_gdbarch_num_regs (gdbarch, NDS32_NUM_GR + NDS32_NUM_SPR); */
-  set_gdbarch_num_regs (gdbarch, NDS32_PSW_REGNUM + 1);
+
+  if (!tdesc_has_registers (info.target_desc))
+    {
+      tdesc = tdesc_nds32;
+      set_gdbarch_num_regs (gdbarch, NDS32_LEGACY_NUM_REGS);
+    }
+  else
+    {
+      tdesc = info.target_desc;
+      set_gdbarch_num_regs (gdbarch, NDS32_NUM_REGS);
+    }
 
   tdep->tdesc = tdesc;
   tdep->nds32_abi = nds32_abi;
@@ -2822,7 +2812,7 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   tdesc_use_registers (gdbarch, tdesc, tdesc_data);
 
   if (tdesc == tdesc_nds32)
-      nds32_init_pseudo_registers (gdbarch);
+    nds32_init_pseudo_registers (gdbarch);
 
   /* If there is already a candidate, use it.  */
   for (best_arch = gdbarch_list_lookup_by_info (arches, &info);

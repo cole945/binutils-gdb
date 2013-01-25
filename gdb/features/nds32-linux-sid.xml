@@ -50,5 +50,13 @@
     <reg name="" bitsize="128" type="uint128"/>
     <reg name="" bitsize="128" type="uint128"/>
     <reg name="" bitsize="128" type="uint128"/>
+    <reg name="" bitsize="128" type="uint128"/>
+    <reg name="" bitsize="128" type="uint128"/>
+    <reg name="" bitsize="128" type="uint128"/>
+    <reg name="" bitsize="128" type="uint128"/>
+    <reg name="" bitsize="128" type="uint128"/>
+    <reg name="" bitsize="128" type="uint128"/>
+    <reg name="" bitsize="128" type="uint128"/>
+    <reg name="" bitsize="128" type="uint128"/>
   </feature>
 </target>
