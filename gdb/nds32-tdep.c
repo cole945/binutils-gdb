@@ -2672,7 +2672,7 @@ nds32_init_pseudo_registers (struct gdbarch *gdbarch)
       set_tdesc_pseudo_register_type (gdbarch, nds32_pseudo_register_type);
       set_tdesc_pseudo_register_name (gdbarch, nds32_pseudo_register_name);
     }
-  else
+  else if (gdbarch_num_regs (gdbarch) < NDS32_LEGACY_G_NUM_REGS)
     set_gdbarch_num_regs (gdbarch, NDS32_LEGACY_G_NUM_REGS);
 }
 
