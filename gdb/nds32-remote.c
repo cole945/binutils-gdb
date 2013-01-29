@@ -608,7 +608,7 @@ end_query:
   if (strcmp ("cpu", nds32_remote_info.cpu) != 0)
     {
       char buf[64];
-      snprintf (buf, sizeof (buf), "(%s|gdb) ", nds32_remote_info.cpu);
+      snprintf (buf, sizeof (buf), "%s(gdb) ", nds32_remote_info.cpu);
       set_prompt (buf);
     }
   else
