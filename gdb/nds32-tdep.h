@@ -70,8 +70,9 @@ enum nds32_regnum
   NDS32_LINUX_FUCPR_REGNUM = 40,
 
   NDS32_LEGACY_NUM_REGS,
-  /* Old ICEman/SID sends 169 registers in g-packet.  */
-  NDS32_LEGACY_G_NUM_REGS = 169,
+  /* Old ICEman/SID sends 170 registers in g-packet,
+     some version might transfer 189 registers.  */
+  NDS32_LEGACY_G_NUM_REGS = 189,
   /*
      FPU registers may be pesudo registers or not.
      For target supporting tdesc, FPRs are no different from GPRs.
