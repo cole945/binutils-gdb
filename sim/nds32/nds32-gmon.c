@@ -24,7 +24,6 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
-#include <sys/gmon_out.h>
 
 #include "bfd.h"
 #include "elf-bfd.h"
@@ -87,11 +86,11 @@ find_text_range (bfd *abfd, asection *sect, void *obj)
 static void
 write_hist (FILE *fp, bfd *abfd, uint16_t *hist)
 {
-  struct gmon_hist_hdr hdr;
+  struct nds32_gmon_hist_hdr hdr;
   int i;
   int tag;
 
-  tag = GMON_TAG_TIME_HIST;
+  tag = NDS32_GMON_TAG_TIME_HIST;
   fwrite (&tag, 1, 1, fp);
 
   bfd_put_32 (abfd, low_pc, hdr.low_pc);
@@ -163,7 +162,7 @@ write_cg_trav (rbtree_t tree, rbnode_t n, void *arg)
   char buf[8];
   struct cg_handlers *hp = (struct cg_handlers *) arg;
 
-  bfd_put_32 (hp->abfd, GMON_TAG_CG_ARC, buf);
+  bfd_put_32 (hp->abfd, NDS32_GMON_TAG_CG_ARC, buf);
   fwrite (buf, 1, 1, hp->fp);
   bfd_put_32 (hp->abfd, cgn->from_pc, buf);
   fwrite (buf, 4, 1, hp->fp);
@@ -178,7 +177,7 @@ write_cg_trav (rbtree_t tree, rbnode_t n, void *arg)
 void
 nds32_gmon_cleanup (bfd *abfd)
 {
-  struct gmon_hdr hdr;
+  struct nds32_gmon_hdr hdr;
   struct cg_handlers h;
 
   h.abfd = abfd;
