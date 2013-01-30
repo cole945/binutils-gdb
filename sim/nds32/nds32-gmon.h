@@ -26,4 +26,31 @@ void nds32_gmon_cleanup (struct bfd *abfd);
 void nds32_gmon_mcount (uint32_t from_pc, uint32_t self_pc);
 void nds32_gmon_sample (uint32_t pc);
 
+/* sys/gmon_out.h is missing on cygwin,
+   so I copied some declaration here
+   in order to avoid portability issues.  */
+enum
+{
+  NDS32_GMON_TAG_TIME_HIST = 0,
+  NDS32_GMON_TAG_CG_ARC = 1,
+  NDS32_GMON_TAG_BB_COUNT = 2
+};
+
+struct nds32_gmon_hdr
+{
+  char cookie[4];
+  char version[4];
+  char spare[3 * 4];
+};
+
+struct nds32_gmon_hist_hdr
+{
+  char low_pc[sizeof (char *)];		/* Base pc address of sample buffer.  */
+  char high_pc[sizeof (char *)];	/* Max pc address of sampled buffer.  */
+  char hist_size[4];			/* Size of sample buffer.  */
+  char prof_rate[4];			/* Profiling clock rate.  */
+  char dimen[15];			/* Phys. dim., usually "seconds".  */
+  char dimen_abbrev;			/* Usually 's' for "seconds".  */
+};
+
 #endif
