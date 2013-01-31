@@ -517,10 +517,11 @@ nds32_query_target_using_qpart (void)
   char *buf;
   long size = 64;
   struct cleanup *back_to;
+  int ret = FALSE;
 
   /* The buffer passed to getpkt must be allocated using xmalloc,
      because it might be xrealloc by read_frame.
-     See remote.c for details.  */
+     See remote.c for details.  `buf' must be freed before return.  */
   buf = xmalloc (size);
 
   /* Let caller clean it up.  */
@@ -535,7 +536,7 @@ nds32_query_target_using_qpart (void)
   else if (strcmp (buf, "ICE") == 0)
     nds32_remote_info.type = nds32_rt_ice;
   else
-    return 0;
+    goto out;
 
   /* qPart:nds32:ask:cpu - prompt, e.g., "core0(gdb) ".  */
   putpkt (nds32_qparts[NDS32_Q_CPU]);
@@ -556,8 +557,11 @@ nds32_query_target_using_qpart (void)
     nds32_remote_info.endian = BFD_ENDIAN_BIG;
   else
     nds32_remote_info.endian = BFD_ENDIAN_UNKNOWN;
+  ret = TRUE;
 
-  return 1;
+out:
+  do_cleanups (back_to);
+  return ret;
 }
 
 static int
@@ -567,6 +571,7 @@ nds32_query_target_using_qrcmd (void)
   struct ui_file *res;
   struct ui_file_buffer ui_buf;
   char buf[64];
+  int ret = FALSE;
 
   /* ui_file for qRcmd.  */
   res = mem_fileopen ();
@@ -575,6 +580,7 @@ nds32_query_target_using_qrcmd (void)
   /* ui_file_buffer for reading ui_file.  */
   ui_buf.buf_size = 64;
   ui_buf.buf = xmalloc (ui_buf.buf_size);
+  make_cleanup (free_current_contents, &ui_buf.buf);
 
   target_rcmd ("nds query target", res);
 
@@ -585,9 +591,12 @@ nds32_query_target_using_qrcmd (void)
   if (strcmp ((char *) ui_buf.buf, "OCD") == 0)
     nds32_remote_info.type = nds32_rt_ocd;
   else
-    return 0;
+    goto out;
 
-  return 1;
+  ret = TRUE;
+out:
+  do_cleanups (back_to);
+  return ret;
 }
 
 static void
