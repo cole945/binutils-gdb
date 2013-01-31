@@ -30,6 +30,7 @@
 #include "inferior.h"		/* get_inferior_args () */
 #include "top.h"		/* set_prompt () */
 #include "ui-out.h"		/* current_uiout */
+#include "exceptions.h"		/* TRY_CATCH */
 
 #include <elf/external.h>	/* Elf32_External_Ehdr */
 #include <elf/internal.h>	/* Elf_Internal_Ehdr */
@@ -572,6 +573,7 @@ nds32_query_target_using_qrcmd (void)
   struct ui_file_buffer ui_buf;
   char buf[64];
   int ret = FALSE;
+  volatile struct gdb_exception except;
 
   /* ui_file for qRcmd.  */
   res = mem_fileopen ();
@@ -582,7 +584,12 @@ nds32_query_target_using_qrcmd (void)
   ui_buf.buf = xmalloc (ui_buf.buf_size);
   make_cleanup (free_current_contents, &ui_buf.buf);
 
-  target_rcmd ("nds query target", res);
+  TRY_CATCH (except, RETURN_MASK_ERROR)
+    {
+      target_rcmd ("nds query target", res);
+    }
+  if (except.reason < 0)
+    goto out;
 
   /* Read data in ui_file.  */
   memset (ui_buf.buf, 0, ui_buf.buf_size);
@@ -591,7 +598,10 @@ nds32_query_target_using_qrcmd (void)
   if (strcmp ((char *) ui_buf.buf, "OCD") == 0)
     nds32_remote_info.type = nds32_rt_ocd;
   else
-    goto out;
+    {
+      printf ("Unknown remote target %s\n", ui_buf.buf);
+      goto out;
+    }
 
   ret = TRUE;
 out:
