@@ -586,6 +586,10 @@ nds32_query_target_using_qrcmd (void)
 
   TRY_CATCH (except, RETURN_MASK_ERROR)
     {
+      make_cleanup_restore_ui_file (&gdb_stdtarg);
+      /* Supress error messages from gdbserver
+	 if gdbserver doesn't support the monitor command.  */
+      gdb_stdtarg = res;
       target_rcmd ("nds query target", res);
     }
   if (except.reason < 0)
