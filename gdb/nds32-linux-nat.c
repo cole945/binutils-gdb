@@ -42,6 +42,7 @@
 
 #include "nds32-tdep.h"
 #include "nds32-linux-tdep.h"
+#include "features/nds32-linux.c"
 
 void _initialize_nds32_linux_nat (void);
 
