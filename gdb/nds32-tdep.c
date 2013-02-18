@@ -1095,19 +1095,6 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 		then we are in the prologue.
 	     3. If we don't know what's it, then stop.  */
 
-	  if (__GF (insn, 13, 2) == 2)
-	    {
-	      /* These are all branch instructions.  */
-	      pc -= 2;
-	      break;
-	    }
-	  else if (__GF (insn, 9, 6) == 0x34)
-	    {
-	      /* beqzs8, bnezs8 */
-	      pc -= 2;
-	      break;
-	    }
-
 	  if (CHOP_BITS (insn, 10) == N16_TYPE10 (ADDI10S, 0))
 	    {
 	      /* addi10s */
@@ -1141,6 +1128,8 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 	      && (insn & __BIT (7)))
 	    continue;
 
+	  /* If the a instruction is not accepted,
+	     don't go futher.  */
 	  pc -= 2;
 	  break;
 	}
