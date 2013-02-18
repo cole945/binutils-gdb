@@ -660,11 +660,14 @@ nds32_elf_check_get_register (unsigned int regno)
   ULONGEST regval;
   struct regcache *regcache = get_current_regcache ();
   struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  int byte_order;
   int regnum = -1;
   gdb_byte regbuf[4] = { 0 };
 
   if (nds32_remote_info.endian == BFD_ENDIAN_UNKNOWN)
-    error (_("Cannot get target endian."));
+    byte_order = gdbarch_byte_order (gdbarch);
+  else
+    byte_order = nds32_remote_info.endian;
 
   switch ((INDEX_HW_MASK & regno))
     {
@@ -702,7 +705,7 @@ nds32_elf_check_get_register (unsigned int regno)
       /* Use target-endian instead of gdbarch-endian.  */
       if (regcache_cooked_read (regcache, regnum, regbuf) != REG_VALID)
 	return -1;
-      regval = extract_unsigned_integer (regbuf, 4, nds32_remote_info.endian);
+      regval = extract_unsigned_integer (regbuf, 4, byte_order);
 
       return regval;
     }
