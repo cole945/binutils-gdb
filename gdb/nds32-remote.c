@@ -31,6 +31,7 @@
 #include "top.h"		/* set_prompt () */
 #include "ui-out.h"		/* current_uiout */
 #include "exceptions.h"		/* TRY_CATCH */
+#include <ctype.h>
 
 #include <elf/external.h>	/* Elf32_External_Ehdr */
 #include <elf/internal.h>	/* Elf_Internal_Ehdr */
@@ -574,6 +575,7 @@ nds32_query_target_using_qrcmd (void)
   char buf[64];
   int ret = FALSE;
   volatile struct gdb_exception except;
+  int len;
 
   /* ui_file for qRcmd.  */
   res = mem_fileopen ();
@@ -584,12 +586,15 @@ nds32_query_target_using_qrcmd (void)
   ui_buf.buf = xmalloc (ui_buf.buf_size);
   make_cleanup (free_current_contents, &ui_buf.buf);
 
+  /* make_cleanup outside TRY_CACHE,
+     because it save and reset cleanup-chain.  */
+  make_cleanup_restore_ui_file (&gdb_stdtarg);
+  /* Supress error messages from gdbserver
+     if gdbserver doesn't support the monitor command.  */
+  gdb_stdtarg = res;
+
   TRY_CATCH (except, RETURN_MASK_ERROR)
     {
-      make_cleanup_restore_ui_file (&gdb_stdtarg);
-      /* Supress error messages from gdbserver
-	 if gdbserver doesn't support the monitor command.  */
-      gdb_stdtarg = res;
       target_rcmd ("nds query target", res);
     }
   if (except.reason < 0)
@@ -598,6 +603,12 @@ nds32_query_target_using_qrcmd (void)
   /* Read data in ui_file.  */
   memset (ui_buf.buf, 0, ui_buf.buf_size);
   ui_file_put (res, do_ui_file_put_memcpy, &ui_buf);
+
+  /* Trim trailing newline characters.  */
+  len = strlen ((char *) ui_buf.buf);
+  while (isspace (ui_buf.buf[len - 1]) && len > 0)
+    len--;
+  ui_buf.buf[len] = '\0';
 
   if (strcmp ((char *) ui_buf.buf, "OCD") == 0)
     nds32_remote_info.type = nds32_rt_ocd;
