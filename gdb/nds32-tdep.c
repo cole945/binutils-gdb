@@ -1355,9 +1355,14 @@ nds32_frame_unwind_cache (struct frame_info *this_frame,
 	      int aligned;
 	      int m = 0;
 	      int di;	   /* dec=-1 or inc=1 */
+	      int rn;	   /* number of registers.  */
 	      char enb4map[2][4] = {
 		  {0, 1, 2, 3} /* smw */,
 		  {3, 1, 2, 0} /* smwa */ };
+	      /* `base' is the highest/last address for access memory.
+		 e.g., [ lp ] ___ base shoule be here.
+		       [ fp ]
+		       [ r6 ] */
 	      LONGEST base = ~1 + 1;
 
 	      rb = N32_RT5 (insn);
@@ -1367,20 +1372,22 @@ nds32_frame_unwind_cache (struct frame_info *this_frame,
 	      aligned = (insn & 3) ? 1 : 0;
 	      di = (insn & (1 << 3)) ? -1 : 1;
 
+	      rn = 0;
+	      rn += (enable4 & 0x1) ? 1 : 0;
+	      rn += (enable4 & 0x2) ? 1 : 0;
+	      rn += (enable4 & 0x4) ? 1 : 0;
+	      rn += (enable4 & 0x8) ? 1 : 0;
+	      if (rb < NDS32_FP_REGNUM && re < NDS32_FP_REGNUM)
+		{
+		  /* reg-list should not include fp,gp,lp,sp
+		     ie, the rb==re==sp case, anyway... */
+		  rn += (re - rb) + 1;
+		}
+
 	      /* Let's consider how Ra should update.  */
 	      if (insn & (1 << 0x2))    /* m-bit is set */
 		{
-		  m += (enable4 & 0x1) ? 1 : 0;
-		  m += (enable4 & 0x2) ? 1 : 0;
-		  m += (enable4 & 0x4) ? 1 : 0;
-		  m += (enable4 & 0x8) ? 1 : 0;
-		  if (rb < NDS32_FP_REGNUM && re < NDS32_FP_REGNUM)
-		    {
-		      /* Reg-list should not include fp, gp, lp, sp
-			 i.e., the rb==re==sp case, anyway... */
-		      m += (re - rb) + 1;
-		    }
-		  m *= 4;       /* 4 * TNReg */
+		  m = rn * 4;			/* 4*TNReg */
 		}
 	      else
 		m = 0;	  /* don't update Ra */
@@ -1415,7 +1422,7 @@ nds32_frame_unwind_cache (struct frame_info *this_frame,
 		 I used the same pushing order, but from different side.  */
 
 	      if (di == 1)		/* Increasing.  */
-		base += (m - 4);
+		base += (rn * 4 - 4);
 	      /* else, in des case, we already are on the top */
 
 	      for (i = 0; i < 4; i++)
