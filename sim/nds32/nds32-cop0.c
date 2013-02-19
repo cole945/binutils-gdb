@@ -273,6 +273,23 @@ nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	case 0x1:		/* fsubs */
 	  sim_fpu_sub (&sft, &sfa, &sfb);
 	  break;
+	case 0x2:		/* fcpynsd */
+	  if (!dp)
+	    {
+	      /* fcpynss */
+	      u32 = CCPU_FPR[fsa].u & 0x7fffffff;
+	      u32 |= (CCPU_FPR[fsb].u & 0x80000000) ^ 0x80000000;
+	      CCPU_FPR[fst].u = u32;
+	    }
+	  else
+	    {
+	      /* fcpynsd */
+	      u32 = CCPU_FPR[fda_].u & 0x7fffffff;
+	      u32 |= (CCPU_FPR[fdb_].u & 0x80000000) ^ 0x80000000;
+	      CCPU_FPR[fdt_].u = u32;
+	      CCPU_FPR[fdt_ + 1].u = CCPU_FPR[fda_ + 1].u;
+	    }
+	  goto done;
 	case 0x3:
 	  if (!dp)
 	    {
@@ -315,7 +332,6 @@ nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	  sim_fpu_div (&sft, &sfa, &sfb);
 	  break;
 #if 0
-	case 0x2:		/* fcpynsd */
 	case 0x4:		/* fmaddd */
 	case 0x5:		/* fmsubd */
 	case 0x8:		/* fnmaddd */

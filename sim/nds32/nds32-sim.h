@@ -38,18 +38,20 @@ enum nds32_gdb_regnum
   NG_GP = 29,
   NG_LP = 30,
   NG_SP = 31,
-  NG_PC = 32,
 
+  NG_PC = 32,
   NG_D0LO = 33,
   NG_D0HI = 34,
   NG_D1LO = 35,
   NG_D1HI = 36,
-  NG_ITB = 184,
-  NG_IFCLP = 175,
+  NG_ITB = 37,
+  NG_IFCLP = 38,
 
-  NG_PSW = 44,
+  NG_PSW = 64,
 
-  NG_FS0 = 0x100 + 2,
+  NG_FPCFG = 126,
+  NG_FPCSR = 127,
+  NG_FS0 = 128,
   NG_FD0 = NG_FS0 + 32,
 };
 

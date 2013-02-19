@@ -91,6 +91,10 @@ initialize_tdesc_nds32 (void)
   tdesc_create_reg (feature, "ir23", 179, 1, "ir", 32, "data_ptr");
   tdesc_create_reg (feature, "ir24", 180, 1, "ir", 32, "data_ptr");
   tdesc_create_reg (feature, "ir25", 181, 1, "ir", 32, "data_ptr");
+  tdesc_create_reg (feature, "ir26", 185, 1, "ir", 32, "data_ptr");
+  tdesc_create_reg (feature, "ir27", 186, 1, "ir", 32, "data_ptr");
+  tdesc_create_reg (feature, "ir28", 187, 1, "ir", 32, "data_ptr");
+  tdesc_create_reg (feature, "ir29", 188, 1, "ir", 32, "data_ptr");
   tdesc_create_reg (feature, "mr0", 60, 1, "mr", 32, "data_ptr");
   tdesc_create_reg (feature, "mr1", 61, 1, "mr", 32, "data_ptr");
   tdesc_create_reg (feature, "mr2", 62, 1, "mr", 32, "data_ptr");
