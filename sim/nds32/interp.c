@@ -2193,6 +2193,7 @@ nds32_fetch_register (sim_cpu *cpu, int rn, unsigned char *memory, int length)
   if (rn >= NG_FS0 && rn < NG_FS0 + 64)
     {
       int fr = rn - NG_FS0;
+
       if (fr < 32)
 	val = cpu->reg_fpr[fr].u;
       else
@@ -2211,6 +2212,7 @@ nds32_fetch_register (sim_cpu *cpu, int rn, unsigned char *memory, int length)
       val = cpu->reg_sr[SRIDX (1, 0, 0)].u;
       goto do_fetch;
     }
+
   return 0;
 
 do_fetch:
@@ -2218,7 +2220,7 @@ do_fetch:
 			  CCPU_SR_TEST (PSW, PSW_BE)
 			  ? BIG_ENDIAN : LITTLE_ENDIAN,
 			  val);
-  return 4;
+  return length;
 }
 
 static int
@@ -2263,6 +2265,24 @@ nds32_store_register (sim_cpu *cpu, int rn, unsigned char *memory, int length)
       return 4;
     }
 
+  if (rn >= NG_FS0 && rn < NG_FS0 + 64)
+    {
+      int fr = rn - NG_FS0;
+
+      if (fr < 32)
+	{
+	  cpu->reg_fpr[fr].u = val;
+	  return 4;
+	}
+      else
+	{
+	  fr = (fr - 32) << 1;
+	  cpu->reg_fpr[fr + 1].u = val & 0xffffffff;
+	  cpu->reg_fpr[fr].u = (val >> 32) & 0xffffffff;
+	  return 8;
+	}
+    }
+
   /* System registers.  */
   switch (rn)
     {
@@ -2270,6 +2290,7 @@ nds32_store_register (sim_cpu *cpu, int rn, unsigned char *memory, int length)
       cpu->reg_sr[SRIDX (1, 0, 0)].u = val;
       return 4;
     }
+
   return 0;
 }
 

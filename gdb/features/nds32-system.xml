@@ -41,6 +41,10 @@
   <reg name="ir23" bitsize="32" group="ir" type="data_ptr" regnum="179"/>
   <reg name="ir24" bitsize="32" group="ir" type="data_ptr" regnum="180"/>
   <reg name="ir25" bitsize="32" group="ir" type="data_ptr" regnum="181"/>
+  <reg name="ir26" bitsize="32" group="ir" type="data_ptr" regnum="185"/>
+  <reg name="ir27" bitsize="32" group="ir" type="data_ptr" regnum="186"/>
+  <reg name="ir28" bitsize="32" group="ir" type="data_ptr" regnum="187"/>
+  <reg name="ir29" bitsize="32" group="ir" type="data_ptr" regnum="188"/>
 
   <reg name="mr0" bitsize="32" group="mr" type="data_ptr" regnum="60"/>
   <reg name="mr1" bitsize="32" group="mr" type="data_ptr"/>
