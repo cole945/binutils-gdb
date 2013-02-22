@@ -1594,7 +1594,8 @@ nds32_frame_unwind_cache (struct frame_info *this_frame,
 	      info->sp_offset -= imm8u;
 
 	      /* Operation 3 - if (Re >= 1) R8 = concat (PC(31,2), 2`b0) */
-	     }
+	      continue;
+	    }
 
 	  /* mov55 fp, sp */
 	  if (insn == N16_TYPE55 (MOV55, REG_FP, REG_SP))
