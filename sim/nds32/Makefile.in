@@ -44,4 +44,4 @@ SIM_OBJS = \
 	$(SIM_EXTRA_OBJS)
 ## COMMON_POST_CONFIG_FRAG
 
-interp.o: interp.c
+nds32-syscall.o: nds32-syscall.c targ-vals.h mingw32-hdep.h nds32-sim.h nds32-mm.h nds32-syscall.h
