@@ -2756,31 +2756,8 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   if (!tdesc_has_registers (info.target_desc))
     {
-      static int tdesc_hack = 0;
-
-      if (strcmp (target_shortname, "sim") == 0)
-	{
-	  tdesc = tdesc_nds32_sim;
-	  set_gdbarch_num_regs (gdbarch, NDS32_NUM_REGS);
-	}
-      else
-	{
-	  tdesc = tdesc_nds32;
-	  set_gdbarch_num_regs (gdbarch, NDS32_LEGACY_NUM_REGS);
-	}
-
-      /* Dirty hack to make gdb reload target-description
-	 at the first time we using simulator.
-	 All these dirty hack is for nds32-SID compatilbity issues.
-	 nds32-SID doesn't support target-description,
-	 and FPU registers are pseudo.
-	 We don't need these when nds32-SID supports target-descrption,
-	 and old SID are never supported.  */
-      if (strcmp (target_shortname, "None") == 0)
-	{
-	  target_find_description ();
-	  tdesc_hack = 1;
-	}
+      tdesc = tdesc_nds32;
+      set_gdbarch_num_regs (gdbarch, NDS32_LEGACY_NUM_REGS);
     }
   else
     {
