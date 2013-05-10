@@ -362,16 +362,17 @@ nds32_init_libgloss (SIM_DESC sd, struct bfd *abfd, char **argv, char **env)
 }
 
 static uint32_t
-nds32_push_auxv (SIM_DESC sd, struct bfd *abfd,  uint32_t sp, uint32_t type, uint32_t val)
+nds32_push_auxv (SIM_DESC sd, struct bfd *abfd, uint32_t sp, uint32_t type,
+		 uint32_t val)
 {
   unsigned char buf[4];
 
   bfd_put_32 (abfd, type, buf);
-  sim_write (sd, sp, buf, sizeof (buf));
+  sim_write (sd, sp - 8, buf, sizeof (buf));
   bfd_put_32 (abfd, val, buf);
-  sim_write (sd, sp + 4, buf, sizeof (buf));
+  sim_write (sd, sp - 4, buf, sizeof (buf));
 
-  return sp + 8;
+  return sp - 8;
 }
 
 void
@@ -382,10 +383,11 @@ nds32_init_linux (SIM_DESC sd, struct bfd *abfd, char **argv, char **env)
   int auxvc = 0;
   SIM_CPU *cpu = STATE_CPU (sd, 0);
   uint32_t sp = STACK_TOP;
-  uint32_t sp_argv, sp_envp, sp_auxv;	/* Markers for argv, envp and auxv.  */
+  uint32_t sp_argv, sp_envp;		/* Pointers to argv amd envp array.  */
   uint32_t flat;			/* Beginning of argv/env strings.  */
   unsigned char buf[8];
   int i;
+  Elf_Internal_Ehdr *exec = elf_elfheader (abfd);
 
   STATE_CALLBACK (sd)->syscall_map = cb_nds32_linux_syscall_map;
 
@@ -396,9 +398,6 @@ nds32_init_linux (SIM_DESC sd, struct bfd *abfd, char **argv, char **env)
      TODO: Push AUXV vector (especially AT_ENTRY,
 	   so we can run dynamically linked executables.  */
 
-  if (sd->interp_bfd)
-    auxvc = 6;
-
   for (argc = 0; argv && argv[argc]; argc++)
     argv_len += strlen (argv[argc]) + 1;
 
@@ -406,21 +405,47 @@ nds32_init_linux (SIM_DESC sd, struct bfd *abfd, char **argv, char **env)
     env_len += strlen (env[envc]) + 1;
 
   /*
-    | argc | argv[0..N] | envp[0..N] | auxv[0..N] | arg-strs | env-strs
-    sp						  flat
-   */
-  flat = sp - (argv_len + env_len);
-  sp = flat - (4 + (argc + 1) * 4 + (envc + 1) * 4 + (auxvc + 1) * 8);
-  sp = sp & ~0xf;
+			<---- STACK_TOP
+     env strings
+     argv strings	<---- flat pointer
+     auxv[term] = AT_NULL
+     auxv[...]
+     auxv[0]
+     envp[term] = NULL
+     envp[...]
+     envp[0]
+     argv[n] = NULL
+     argv[...]
+     argv[0]
+     argc		<---- $sp  */
+  sp = flat = STACK_TOP - ROUNDUP (argv_len + env_len, 8);
 
+  /* Adjust sp so that the final $sp is 8-byte aligned.  */
+  if ((argc + envc + 1) % 2 != 0)
+    sp -= 4;
+
+  /* Push AUXV.  */
+  sp = nds32_push_auxv (sd, abfd, sp, AT_NULL, 0);
+  sp = nds32_push_auxv (sd, abfd, sp, AT_PAGESZ, PAGE_SIZE);
+  sp = nds32_push_auxv (sd, abfd, sp, AT_PHDR, sd->exec_base + exec->e_phoff);
+  sp = nds32_push_auxv (sd, abfd, sp, AT_PHENT, sizeof (Elf_Internal_Phdr));
+  sp = nds32_push_auxv (sd, abfd, sp, AT_PHNUM, exec->e_phnum);
+  sp = nds32_push_auxv (sd, abfd, sp, AT_BASE, sd->interp_base);
+  sp = nds32_push_auxv (sd, abfd, sp, AT_ENTRY, exec->e_entry);
+  sp = nds32_push_auxv (sd, abfd, sp, AT_HWCAP, 0x9dc6f);
+
+  /* Make room for argc, argv[] and envp[] arrays.  */
+  sp -= 4 + (argc + 1 + envc + 1) * 4;
   sp_argv = sp + 4;
   sp_envp = sp_argv + (argc + 1) * 4;
-  sp_auxv = sp_envp + (envc + 1) * 4;
+  CCPU_GPR[NG_SP].u = sp;
+  SIM_ASSERT ((sp % 8) == 0);
 
   /* Write argc.  */
   bfd_put_32 (abfd, argc, buf);
   sim_write (sd, sp, buf, 4);
 
+  /* Write argv[] array and argument strings.  */
   for (i = 0; i < argc; i++)
     {
       int len = strlen (argv[i]) + 1;	/* 1 for trailing \0.  */
@@ -433,6 +458,7 @@ nds32_init_linux (SIM_DESC sd, struct bfd *abfd, char **argv, char **env)
   bfd_put_32 (abfd, 0, buf);
   sim_write (sd, sp_argv + argc * 4, buf, 4); /* term-zero */
 
+  /* Write envp[] array and environment strings.  */
   for (i = 0; i < envc; i++)
     {
       int len = strlen (env[i]) + 1;	/* 1 for trailing \0.  */
@@ -444,21 +470,6 @@ nds32_init_linux (SIM_DESC sd, struct bfd *abfd, char **argv, char **env)
     }
   bfd_put_32 (abfd, 0, buf);
   sim_write (sd, sp_envp + envc * 4, buf, 4); /* term-zero */
-
-  if (auxvc > 0)
-    {
-      Elf_Internal_Ehdr *exec = elf_elfheader (abfd);
-
-      sp_auxv = nds32_push_auxv (sd, abfd, sp_auxv, AT_PAGESZ, PAGE_SIZE);
-      sp_auxv = nds32_push_auxv (sd, abfd, sp_auxv, AT_PHDR, sd->exec_base + exec->e_phoff);
-      sp_auxv = nds32_push_auxv (sd, abfd, sp_auxv, AT_PHENT, sizeof (Elf_Internal_Phdr));
-      sp_auxv = nds32_push_auxv (sd, abfd, sp_auxv, AT_PHNUM, exec->e_phnum);
-      sp_auxv = nds32_push_auxv (sd, abfd, sp_auxv, AT_BASE, sd->interp_base);
-      sp_auxv = nds32_push_auxv (sd, abfd, sp_auxv, AT_ENTRY, exec->e_entry);
-    }
-  sp_auxv = nds32_push_auxv (sd, abfd, sp_auxv, AT_NULL, 0);
-
-  CCPU_GPR[NG_SP].u = sp;
 
   if (sd->interp_bfd)
     {
