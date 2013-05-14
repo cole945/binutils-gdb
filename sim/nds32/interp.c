@@ -352,6 +352,8 @@ nds32_decode32_mem (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0x5:			/* lh.bi */
     case 0x6:			/* lw.bi */
     /* case 0x7: */		/* ld.bi */
+      /* UNPREDICTABLE if rt is equal to ra.
+	 Compute address before load, because rb could be rt.  */
       addr = CCPU_GPR[ra].u + (CCPU_GPR[rb].u << sv);
       CCPU_GPR[rt].u = nds32_ld_aligned (cpu, CCPU_GPR[ra].u, (1 << (op & 0x3)));
       CCPU_GPR[ra].u = addr;
@@ -385,10 +387,12 @@ nds32_decode32_mem (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0x14:			/* lbs.bi */
     case 0x15:			/* lhs.bi */
     /* case 0x16: */		/* lws.bi */
-      CCPU_GPR[rt].u = nds32_ld_aligned (cpu, CCPU_GPR[ra].u,
-					 (1 << (op & 0x3)));
+      /* UNPREDICTABLE if rt is equal to ra.
+	Compute address before load, because rb could be rt.  */
+      addr = CCPU_GPR[ra].u + (CCPU_GPR[rb].u << sv);
+      CCPU_GPR[rt].u = nds32_ld_aligned (cpu, CCPU_GPR[ra].u, (1 << (op & 0x3)));
       CCPU_GPR[rt].u = __SEXT (CCPU_GPR[rt].u, (1 << (op & 0x3)) * 8);
-      CCPU_GPR[ra].u += (CCPU_GPR[rb].u << sv);
+      CCPU_GPR[ra].u = addr;
       break;
     case 0x18:			/* llw */
       CCPU_GPR[rt].u =
