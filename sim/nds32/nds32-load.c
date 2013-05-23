@@ -93,6 +93,11 @@ nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
   getrlimit (RLIMIT_DATA, &limit);
   mm->limit_data = limit.rlim_cur;
 
+  if (mm->limit_sp & 1) /* Unlimited?  */
+    mm->limit_sp = 0x800000;
+  if (mm->limit_data & 1) /* Unlimited?  */
+    mm->limit_data = 0x800000;
+
   if (STATE_ENVIRONMENT (sd) == ALL_ENVIRONMENT)
     {
       bfd_map_over_sections (abfd, nds32_simple_osabi_sniff_sections, &osabi);
