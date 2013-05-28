@@ -206,8 +206,10 @@ struct linux_target_ops the_low_target = {
   nds32_arch_setup,
   nds32_num_regs,
   nds32_regmap,
+  NULL, /* regset_bitmap */
   nds32_cannot_fetch_register,
   nds32_cannot_store_register,
+  NULL, /* fetch_register */
   nds32_get_pc,
   nds32_set_pc,
   NDS32_BREAK,
