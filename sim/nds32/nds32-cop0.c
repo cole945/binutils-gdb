@@ -237,10 +237,9 @@ nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
   uint64_t u64;
   uint32_t u32;
   uint32_t i32;
-  sim_fpu sft;
+  sim_fpu sft, sft2;
   sim_fpu sfa;
   sim_fpu sfb;
-
 
   SIM_ASSERT (cop == 0);
 
@@ -250,6 +249,14 @@ nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       /* FS1,  FS2 */
       sim_fpu_32to (&sfa, CCPU_FPR[fsa].u);
       sim_fpu_32to (&sfb, CCPU_FPR[fsb].u);
+
+      /* MAC instructions use value in fst.  */
+      switch (__GF (insn, 6, 4))
+	{
+	case 4: case 5: case 8: case 9:
+	  sim_fpu_32to (&sft, CCPU_FPR[fst].u);
+	  break;
+	}
     }
   else if ((insn & 0xb) == 8)
     {
@@ -258,6 +265,15 @@ nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       sim_fpu_64to (&sfa, u64);
       u64 = nds32_fd_to_64 (cpu, fdb_ >> 1);
       sim_fpu_64to (&sfb, u64);
+
+      /* MAC instructions use value in fst.  */
+      switch (__GF (insn, 6, 4))
+	{
+	case 4: case 5: case 8: case 9:
+	  u64 = nds32_fd_to_64 (cpu, fdt_ >> 1);
+	  sim_fpu_64to (&sft, u64);
+	  break;
+	}
     }
 
   if ((insn & 0x7) == 0)	/* FS1 or FD1 */
@@ -316,6 +332,14 @@ nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	      CCPU_FPR[fdt_ + 1].u = CCPU_FPR[fda_ + 1].u;
 	    }
 	  goto done; /* Just return.  */
+	case 0x4:		/* fmaddd */
+	  sim_fpu_mul (&sft2, &sfa, &sfb);
+	  sim_fpu_add (&sft, &sft, &sft2);
+	  break;
+	case 0x5:		/* fmsubd */
+	  sim_fpu_mul (&sft2, &sfa, &sfb);
+	  sim_fpu_sub (&sft, &sft, &sft2);
+	  break;
 	case 0x6:		/* fcmovnX */
 	case 0x7:		/* fcmovzX */
 	  if (!dp)
@@ -334,6 +358,16 @@ nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 		}
 	    }
 	  goto done;
+	case 0x8:		/* fnmaddd */
+	  sim_fpu_mul (&sft2, &sfa, &sfb);
+	  sim_fpu_add (&sft, &sft, &sft2);
+	  sim_fpu_neg (&sft, &sft);
+	  break;
+	case 0x9:		/* fnmsubd */
+	  sim_fpu_mul (&sft2, &sfa, &sfb);
+	  sim_fpu_sub (&sft, &sft, &sft2);
+	  sim_fpu_neg (&sft, &sft);
+	  break;
 	case 0xc:		/* fmuls */
 	  sim_fpu_mul (&sft, &sfa, &sfb);
 	  break;
@@ -341,10 +375,6 @@ nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	  sim_fpu_div (&sft, &sfa, &sfb);
 	  break;
 #if 0
-	case 0x4:		/* fmaddd */
-	case 0x5:		/* fmsubd */
-	case 0x8:		/* fnmaddd */
-	case 0x9:		/* fnmsubd */
 	case 0xa:
 	case 0xb:		/* reserved */
 #endif
