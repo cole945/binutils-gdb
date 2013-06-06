@@ -265,6 +265,15 @@ nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       int dp = (insn & 0x8) > 0;
       int sft_to_dp = dp;
 
+      /* To simplify the operations,
+	 all the single-precision operations are
+	 promoted and double-precision.
+
+	 sft_to_dp determines whether the final destination
+	 is single or double.
+	 dp determines whether the source operands are
+	 single or double.  */
+
       switch (__GF (insn, 6, 4))
 	{
 	case 0x0:		/* fadds */
@@ -340,42 +349,40 @@ nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	case 0xb:		/* reserved */
 #endif
 	case 0xf:		/* F2OP */
-#define	DP (1 << 8)
-	  switch (__GF (insn, 10, 5) | (dp ? DP : 0))
+	  switch (__GF (insn, 10, 5))
 	    {
-	    case 0x0:		/* fs2d */
-	    case 0x0 | DP:	/* fd2s */
+	    case 0x0:		/* fs2d, fd2s */
 	      sft = sfa;
 	      sft_to_dp = !dp;
 	      break;
-	    case 0x1:		/* sqrts */
-	    case 0x1 | DP:	/* sqrtd */
+	    case 0x1:		/* sqrts, sqrtd */
 	      sim_fpu_sqrt (&sft, &sfa);
 	      break;
-	    case 0x5:		/* fabss */
-	      CCPU_FPR[fst].u = CCPU_FPR[fsa].u & 0x7fffffff;
+	    case 0x5:
+	      if (!dp)
+		{
+		  /* fabss */
+		  CCPU_FPR[fst].u = CCPU_FPR[fsa].u & 0x7fffffff;
+		}
+	      else
+		{
+		  /* fabsd */
+		  CCPU_FPR[fdt_].u = CCPU_FPR[fda_].u & 0x7fffffff;
+		  CCPU_FPR[fdt_ + 1].u = CCPU_FPR[fda_ + 1].u;
+		}
 	      goto done; /* Just return.  */
-	    case 0x5 | DP:	/* fabsd */
-	      CCPU_FPR[fdt_].u = CCPU_FPR[fda_].u & 0x7fffffff;
-	      CCPU_FPR[fdt_ + 1].u = CCPU_FPR[fda_ + 1].u;
-	      goto done; /* Just return.  */
-	    case 0xc:		/* fsi2s */
-	    case 0xc | DP:	/* fsi2d */
+	    case 0xc:		/* fsi2s, fsi2d */
 	      sim_fpu_i32to (&sft, CCPU_FPR[fsa].u, sim_fpu_round_near);
 	      break;
-	    case 0x10:		/* fs2ui */
-	    case 0x14:		/* fs2ui.z */
-	    case 0x10 | DP:	/* fd2ui */
-	    case 0x14 | DP:	/* fd2ui.z */
+	    case 0x10:		/* fs2ui, fd2ui */
+	    case 0x14:		/* fs2ui.z, fd2ui.z */
 	      sim_fpu_to32u (&u32, &sfa, (insn & (1 << 12))
 					 ? sim_fpu_round_zero
 					 : sim_fpu_round_near);
 	      CCPU_FPR[fst].u = u32;
-	      goto done; /* Just return.  */
-	    case 0x18:		/* fs2si */
-	    case 0x1c:		/* fs2si.z */
-	    case 0x18 | DP:	/* fd2si */
-	    case 0x1c | DP:	/* fd2si.z */
+	      goto done;	/* just return */
+	    case 0x18:		/* fs2si, fd2si */
+	    case 0x1c:		/* fs2si.z, fd2si.z */
 	      sim_fpu_to32i (&i32, &sfa, (insn & (1 << 12))
 					 ? sim_fpu_round_zero
 					 : sim_fpu_round_near);
