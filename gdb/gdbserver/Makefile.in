@@ -154,6 +154,7 @@ SFILES=	$(srcdir)/gdbreplay.c $(srcdir)/inferiors.c $(srcdir)/dll.c \
 	$(srcdir)/linux-ia64-low.c $(srcdir)/linux-low.c \
 	$(srcdir)/linux-m32r-low.c \
 	$(srcdir)/linux-m68k-low.c $(srcdir)/linux-mips-low.c \
+	$(srcdir)/linux-nds32-low.c \
 	$(srcdir)/linux-nios2-low.c \
 	$(srcdir)/linux-ppc-low.c \
 	$(srcdir)/linux-s390-low.c \
@@ -339,6 +340,7 @@ clean:
 	rm -f $(IPA_LIB)
 	rm -f aarch64.c
 	rm -f reg-arm.c reg-bfin.c i386.c reg-ia64.c reg-m32r.c reg-m68k.c
+	rm -f reg-nds32.c nds32-linux.c
 	rm -f reg-sh.c reg-sparc.c reg-spu.c amd64.c i386-linux.c
 	rm -f reg-cris.c reg-crisv32.c amd64-linux.c reg-xtensa.c
 	rm -f reg-tilegx.c reg-tilegx32.c
@@ -636,6 +638,10 @@ mips64-linux.c : $(srcdir)/../regformats/mips64-linux.dat $(regdat_sh)
 	$(SHELL) $(regdat_sh) $(srcdir)/../regformats/mips64-linux.dat mips64-linux.c
 mips64-dsp-linux.c : $(srcdir)/../regformats/mips64-dsp-linux.dat $(regdat_sh)
 	$(SHELL) $(regdat_sh) $(srcdir)/../regformats/mips64-dsp-linux.dat mips64-dsp-linux.c
+reg-nds32.c : $(srcdir)/../regformats/reg-nds32.dat $(regdat_sh)
+	$(SHELL) $(regdat_sh) $(srcdir)/../regformats/reg-nds32.dat reg-nds32.c
+nds32-linux.c : $(srcdir)/../regformats/nds32-linux.dat $(regdat_sh)
+	$(SHELL) $(regdat_sh) $(srcdir)/../regformats/nds32-linux.dat nds32-linux.c
 nios2-linux.c :	$(srcdir)/../regformats/nios2-linux.dat $(regdat_sh)
 	$(SHELL) $(regdat_sh) $(srcdir)/../regformats/nios2-linux.dat nios2-linux.c
 powerpc-32.c : $(srcdir)/../regformats/rs6000/powerpc-32.dat $(regdat_sh)
