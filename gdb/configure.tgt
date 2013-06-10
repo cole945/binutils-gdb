@@ -396,6 +396,18 @@ mt-*-*)
 	gdb_target_obs="mt-tdep.o"
 	;;
 
+nds32*-*-linux*)
+	# Target: GNU/Linux NDS32
+	gdb_target_obs="nds32-tdep.o nds32-linux-tdep.o nds32-utils.o nds32-remote.o \
+			glibc-tdep.o solib-svr4.o symfile-mem.o linux-tdep.o"
+	build_gdbserver=yes
+	;;
+
+nds32*)
+	# Target: AndesTech nds32 core
+	gdb_target_obs="nds32-tdep.o nds32-utils.o nds32-remote.o monitor.o dsrec.o"
+	;;
+
 nios2*-*-linux*)
 	# Target: Altera Nios II running Linux
 	gdb_target_obs="nios2-tdep.o nios2-linux-tdep.o solib-svr4.o \

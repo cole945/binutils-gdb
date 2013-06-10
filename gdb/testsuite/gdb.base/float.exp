@@ -85,6 +85,15 @@ if { [istarget "aarch64*-*-*"] } then {
             pass "info float (without FPU)"
 	}
     }
+} elseif [istarget "nds32*-*"] then {
+    gdb_test_multiple "info float" "info_float" {
+        -re "fd0.*fd3.*$gdb_prompt $" {
+            pass "info float (with FPU)"
+	}
+        -re "No floating.point info available for this processor.*" {
+            pass "info float (without FPU)"
+	}
+    }
 } elseif [istarget "s390*-*-*"] then {
     gdb_test "info float" "fpc.*f0.*f1.*f15.*" "info float"
 } elseif [istarget "sh*-*"] then {

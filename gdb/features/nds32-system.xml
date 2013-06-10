@@ -1,0 +1,124 @@
+<?xml version="1.0"?>
+<!-- Copyright (C) 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
+
+     Copying and distribution of this file, with or without modification,
+     are permitted in any medium without royalty provided the copyright
+     notice and this notice are preserved.  -->
+
+<!DOCTYPE feature SYSTEM "gdb-target.dtd">
+<feature name="org.gnu.gdb.nds32.system">
+  <reg name="cr0" bitsize="32" group="cr" type="data_ptr" regnum="37"/>
+  <reg name="cr1" bitsize="32" group="cr" type="data_ptr"/>
+  <reg name="cr2" bitsize="32" group="cr" type="data_ptr"/>
+  <reg name="cr3" bitsize="32" group="cr" type="data_ptr"/>
+  <reg name="cr4" bitsize="32" group="cr" type="data_ptr"/>
+  <reg name="cr5" bitsize="32" group="cr" type="data_ptr"/>
+  <reg name="cr6" bitsize="32" group="cr" type="data_ptr"/>
+
+  <reg name="ir0" bitsize="32" group="ir" type="data_ptr" regnum="44"/>
+  <reg name="ir1" bitsize="32" group="ir" type="data_ptr"/>
+  <reg name="ir2" bitsize="32" group="ir" type="data_ptr"/>
+  <reg name="ir3" bitsize="32" group="ir" type="data_ptr"/>
+  <reg name="ir4" bitsize="32" group="ir" type="data_ptr"/>
+  <reg name="ir5" bitsize="32" group="ir" type="data_ptr"/>
+  <reg name="ir6" bitsize="32" group="ir" type="data_ptr"/>
+  <reg name="ir7" bitsize="32" group="ir" type="data_ptr"/>
+  <reg name="ir8" bitsize="32" group="ir" type="data_ptr"/>
+  <reg name="ir9" bitsize="32" group="ir" type="data_ptr"/>
+  <reg name="ir10" bitsize="32" group="ir" type="data_ptr"/>
+  <reg name="ir11" bitsize="32" group="ir" type="data_ptr"/>
+  <reg name="ir12" bitsize="32" group="ir" type="data_ptr"/>
+  <reg name="ir13" bitsize="32" group="ir" type="data_ptr"/>
+  <reg name="ir14" bitsize="32" group="ir" type="data_ptr"/>
+  <reg name="ir15" bitsize="32" group="ir" type="data_ptr"/>
+  <reg name="ir16" bitsize="32" group="ir" type="data_ptr" regnum="170"/>
+  <reg name="ir17" bitsize="32" group="ir" type="data_ptr" regnum="171"/>
+  <reg name="ir18" bitsize="32" group="ir" type="data_ptr" regnum="173"/>
+  <reg name="ir19" bitsize="32" group="ir" type="data_ptr" regnum="174"/>
+
+  <reg name="mr0" bitsize="32" group="mr" type="data_ptr" regnum="60"/>
+  <reg name="mr1" bitsize="32" group="mr" type="data_ptr"/>
+  <reg name="mr2" bitsize="32" group="mr" type="data_ptr"/>
+  <reg name="mr3" bitsize="32" group="mr" type="data_ptr"/>
+  <reg name="mr4" bitsize="32" group="mr" type="data_ptr"/>
+  <reg name="mr5" bitsize="32" group="mr" type="data_ptr"/>
+  <reg name="mr6" bitsize="32" group="mr" type="data_ptr"/>
+  <reg name="mr7" bitsize="32" group="mr" type="data_ptr"/>
+  <reg name="mr8" bitsize="32" group="mr" type="data_ptr"/>
+  <reg name="mr9" bitsize="32" group="mr" type="data_ptr"/>
+  <reg name="mr10" bitsize="32" group="mr" type="data_ptr"/>
+
+  <reg name="dr0" bitsize="32" group="dr" type="data_ptr" regnum="71"/>
+  <reg name="dr1" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr2" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr3" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr4" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr5" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr6" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr7" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr8" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr9" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr10" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr11" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr12" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr13" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr14" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr15" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr16" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr17" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr18" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr19" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr20" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr21" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr22" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr23" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr24" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr25" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr26" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr27" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr28" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr29" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr30" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr31" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr32" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr33" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr34" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr35" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr36" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr37" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr38" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr39" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr40" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr41" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr42" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr43" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr44" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr45" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr46" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr47" bitsize="32" group="dr" type="data_ptr"/>
+  <reg name="dr48" bitsize="32" group="dr" regnum="172"/>
+
+  <reg name="pfr0" bitsize="32" group="pfr" type="data_ptr" regnum="119"/>
+  <reg name="pfr1" bitsize="32" group="pfr" type="data_ptr"/>
+  <reg name="pfr2" bitsize="32" group="pfr" type="data_ptr"/>
+  <reg name="pfr3" bitsize="32" group="pfr" type="data_ptr"/>
+
+  <reg name="fucpr" bitsize="32" group="system" type="data_ptr" regnum="123"/>
+
+  <reg name="dmar0" bitsize="32" group="dmar" type="data_ptr" regnum="124"/>
+  <reg name="dmar1" bitsize="32" group="dmar" type="data_ptr"/>
+  <reg name="dmar2" bitsize="32" group="dmar" type="data_ptr"/>
+  <reg name="dmar3" bitsize="32" group="dmar" type="data_ptr"/>
+  <reg name="dmar4" bitsize="32" group="dmar" type="data_ptr"/>
+  <reg name="dmar5" bitsize="32" group="dmar" type="data_ptr"/>
+  <reg name="dmar6" bitsize="32" group="dmar" type="data_ptr"/>
+  <reg name="dmar7" bitsize="32" group="dmar" type="data_ptr"/>
+  <reg name="dmar8" bitsize="32" group="dmar" type="data_ptr"/>
+  <reg name="dmar9" bitsize="32" group="dmar" type="data_ptr"/>
+  <reg name="dmar10" bitsize="32" group="dmar" type="data_ptr"/>
+
+  <reg name="racr0" bitsize="32" group="racr" type="data_ptr" regnum="135"/>
+
+  <reg name="idr0" bitsize="32" group="idr" type="data_ptr" regnum="136"/>
+  <reg name="idr1" bitsize="32" group="idr" type="data_ptr"/>
+</feature>
