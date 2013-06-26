@@ -443,7 +443,7 @@ nds32_init_linux (SIM_DESC sd, struct bfd *abfd, char **argv, char **env)
   sp -= 4 + (argc + 1 + envc + 1) * 4;
   sp_argv = sp + 4;
   sp_envp = sp_argv + (argc + 1) * 4;
-  CCPU_GPR[NG_SP].u = sp;
+  CCPU_GPR[GPR_SP].u = sp;
   SIM_ASSERT ((sp % 8) == 0);
 
   /* Write argc.  */

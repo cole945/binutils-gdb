@@ -31,39 +31,21 @@
 typedef unsigned long long ulongest_t;
 typedef signed long long longest_t;
 
-enum nds32_gdb_regnum
-{
-  NG_TA = 15,
-  NG_FP = 28,
-  NG_GP = 29,
-  NG_LP = 30,
-  NG_SP = 31,
-
-  NG_PC = 32,
-  NG_D0LO = 33,
-  NG_D0HI = 34,
-  NG_D1LO = 35,
-  NG_D1HI = 36,
-  NG_ITB = 37,
-  NG_IFCLP = 38,
-
-  NG_PSW = 64,
-
-  NG_FPCFG = 126,
-  NG_FPCSR = 127,
-  NG_FS0 = 128,
-  NG_FD0 = NG_FS0 + 32,
-};
-
 enum nds32_cpu_regnum
 {
-  NC_D0LO = 0,
-  NC_D0HI = 1,
-  NC_D1LO = 2,
-  NC_D1HI = 3,
-  NC_ITB = 28,
-  NC_IFCLP = 29,
-  NC_PC = 31,
+  GPR_TA = 15,
+  GPR_FP = 28,
+  GPR_GP = 29,
+  GPR_LP = 30,
+  GPR_SP = 31,
+
+  USR0_D0LO = 0,
+  USR0_D0HI = 1,
+  USR0_D1LO = 2,
+  USR0_D1HI = 3,
+  USR0_ITB = 28,
+  USR0_IFCLP = 29,
+  USR0_PC = 31,
 };
 
 #define SRIDX(M,m,e)  ((M << 7) | (m << 3) | e)

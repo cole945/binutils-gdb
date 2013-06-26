@@ -47,15 +47,15 @@
 #include "dwarf2-frame.h"
 #include "ui-file.h"
 #include "remote.h"
+#include "target-descriptions.h"
 #include "sim-regno.h"
+#include "gdb/sim-nds32.h"
 
 #include "nds32-tdep.h"
 #include "nds32-utils.h"
 #include "nds32-remote.h"
 #include "elf/nds32.h"
 #include "opcode/nds32.h"
-#include "features/nds32.c"
-#include "features/nds32-sim.c"
 
 /* Simple macro for chop LSB immediate bits from an instruction.  */
 #define CHOP_BITS(insn, n)	(insn & ~__MASK (n))
@@ -68,30 +68,13 @@ struct nds32_gdb_config nds32_config;
 static char *nds32_regnames[] =
 {
   /* 32 GPRs.  */
-  "r0", "r1", "r2", "r3",
-  "r4", "r5", "r6", "r7",
-  "r8", "r9", "r10", "r11",
-  "r12", "r13", "r14", "r15",
-  "r16", "r17", "r18", "r19",
-  "r20", "r21", "r22", "r23",
-  "r24", "r25", "r26", "r27",
-  "fp", "gp", "lp", "sp",
-  /* USR : 5 */
-  "pc",
-  "d0lo", "d0hi", "d1lo", "d1hi",
-};
+  "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
+  "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15",
+  "r16", "r17", "r18", "r19", "r20", "r21", "r22", "r23",
+  "r24", "r25", "r26", "r27", "fp", "gp", "lp", "sp",
 
-static char *nds32_fpu_regnames[] = {
-  /* 64 + 2 FPRs.  */
-  "fpcfg", "fpcsr",
-  "fs0", "fs1", "fs2", "fs3", "fs4", "fs5", "fs6", "fs7", "fs8", "fs9",
-  "fs10", "fs11", "fs12", "fs13", "fs14", "fs15",
-  "fs16", "fs17", "fs18", "fs19", "fs20", "fs21", "fs22", "fs23", "fs24",
-  "fs25", "fs26", "fs27", "fs28", "fs29", "fs30", "fs31",
-  "fd0", "fd1", "fd2", "fd3", "fd4", "fd5", "fd6", "fd7", "fd8", "fd9",
-  "fd10", "fd11", "fd12", "fd13", "fd14", "fd15",
-  "fd16", "fd17", "fd18", "fd19", "fd20", "fd21", "fd22", "fd23", "fd24",
-  "fd25", "fd26", "fd27", "fd28", "fd29", "fd30", "fd31"
+  /* 5 User Registers. */
+  "pc", "d0lo", "d0hi", "d1lo", "d1hi",
 };
 
 /* Mnemonic names for registers.  */
@@ -177,38 +160,7 @@ nds32_value_of_reg (struct frame_info *frame, const void *baton)
   return value_of_register ((int) baton, frame);
 }
 
-/* Swap byte orders.  */
-
-static inline void
-swapbytes (unsigned char *buf, int len)
-{
-  char t;
-  register int i, j;
-
-  i = 0;
-  j = len - 1;
-  while (i < j)
-    {
-      t = buf[i];
-      buf[i] = buf[j];
-      buf[j] = t;
-      i++;
-      j--;
-    }
-}
-
-/* nib to hex.  */
-
-static int
-tohex (int nib)
-{
-  if (nib < 10)
-    return '0' + nib;
-  else
-    return 'a' + nib - 10;
-}
-
-/* Implement the gdbarch_frame_align method.  */
+/* gdbarch_frame_align () */
 
 static CORE_ADDR
 nds32_frame_align (struct gdbarch *gdbarch, CORE_ADDR sp)
@@ -244,13 +196,19 @@ nds32_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr,
 static int
 nds32_dwarf_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int num)
 {
-  /* R0 - R31 */
-  if (num >= 0 && num < 32)
+  const int GPR = 0;
+  const int DXR = 34;
+  const int FSR = 38;
+  const int FDR = FSR + 32;
+
+  if (num >= 0 && num < 32)			/* R0 - R31 */
     return num;
-  else if (num >= 34 && num < 34 + 4)
-    return num - 34 + NDS32_D0LO_REGNUM;
-  else if (num >= 38 && num < 38 + 64)
-    return num - 38 + NDS32_FS0_REGNUM;
+  else if (num >= DXR && num < DXR + 4)		/* D0/D1 */
+    return num - DXR + NDS32_D0LO_REGNUM;
+  else if (num >= FSR && num < FSR + 32)	/* FS */
+    return num - FSR + user_reg_map_name_to_regnum (gdbarch, "fs0", -1);
+  else if (num >= FDR && num < FDR + 32)	/* FD */
+    return num - FDR + user_reg_map_name_to_regnum (gdbarch, "fd0", -1);
 
   /* No match, return a inaccessible register number.  */
   return gdbarch_num_regs (gdbarch) + gdbarch_num_pseudo_regs (gdbarch);
@@ -259,17 +217,27 @@ nds32_dwarf_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int num)
 static int
 nds32_register_sim_regno (struct gdbarch *gdbarch, int regnum)
 {
+  const char *reg_name;
   /* Use target-descriptions for register mapping. */
 
   /* Only makes sense to supply raw registers.  */
   gdb_assert (regnum >= 0 && regnum < gdbarch_num_regs (gdbarch));
 
-  /* It should have a non-empty name. */
-  if (gdbarch_register_name (gdbarch, regnum) != NULL
-      && gdbarch_register_name (gdbarch, regnum)[0] != '\0')
-    return gdbarch_remote_register_number (gdbarch, regnum);
-  else
-    return LEGACY_SIM_REGNO_IGNORE;
+  if (regnum < NDS32_NUM_REGS)
+    return regnum;
+  if (regnum >= NDS32_SIM_FD0_REGNUM && regnum < NDS32_SIM_FD0_REGNUM + 32)
+    return SIM_NDS32_FD0_REGNUM + regnum - NDS32_SIM_FD0_REGNUM;
+  switch (regnum)
+    {
+    case NDS32_SIM_IFCLP_REGNUM:
+      return SIM_NDS32_IFCLP_REGNUM;
+    case NDS32_SIM_ITB_REGNUM:
+      return SIM_NDS32_ITB_REGNUM;
+    case NDS32_SIM_PSW_REGNUM:
+      return SIM_NDS32_PSW_REGNUM;
+    }
+
+  return LEGACY_SIM_REGNO_IGNORE;
 }
 
 /* Create types for registers and insert them to type table by name.  */
@@ -626,22 +594,7 @@ nds32_alloc_types (struct gdbarch *gdbarch)
   nds32_type_insert (tdep->type_tab, "cr6", type);
 }
 
-static struct type *
-nds32_types (struct gdbarch *gdbarch, const char *reg_name)
-{
-  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-
-  if (reg_name == NULL || reg_name[0] == '\0')
-    return NULL;
-
-  /* lookup the list for reg_name */
-  if (tdep->type_tab == NULL)
-    nds32_alloc_types (gdbarch);
-
-  return nds32_type_lookup (tdep->type_tab, reg_name);
-}
-
-/* Implement the gdbarch_register_type method.
+/* gdbarch_register_type ()
 
    Return the GDB type object for the "standard" data type
    of data in register N.
@@ -650,33 +603,59 @@ nds32_types (struct gdbarch *gdbarch, const char *reg_name)
    tdesc-xml.  */
 
 static struct type *
-nds32_register_type (struct gdbarch *gdbarch, int reg_nr)
+nds32_register_type (struct gdbarch *gdbarch, int regnum)
 {
+  int num_regs = gdbarch_num_regs (gdbarch);
   const struct builtin_type *bt = builtin_type (gdbarch);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   struct type *type;
+  const char *reg_name;
 
-  if (reg_nr == NDS32_PC_REGNUM || reg_nr == NDS32_LP_REGNUM)
+  /* Currently, only FSR are supported.  */
+  if (regnum >= num_regs && regnum < num_regs + 32)
+    return builtin_type (gdbarch)->builtin_float;
+  else if (regnum >= num_regs)
+    return NULL;
+
+  /* NDS32 predefined types for specific registers.  */
+  if (tdep->type_tab == NULL)
+    nds32_alloc_types (gdbarch);
+
+  reg_name = user_reg_map_regnum_to_name (gdbarch, regnum);
+  if (reg_name == NULL)
+    reg_name = "";
+  type = nds32_type_lookup (tdep->type_tab, reg_name);
+  if (type)
+    return type;
+
+  /* Type provided by target-description.  */
+  if (tdesc_has_registers (gdbarch_target_desc (gdbarch)))
+    {
+      type = tdesc_register_type (gdbarch, regnum);
+      if (type)
+	return type;
+    }
+
+  /* Floating pointer registers. e.g., fs0 or fd0.  */
+  if (strlen (reg_name) >= 3 && reg_name[0] == 'f' && reg_name[2] >= '0'
+      && reg_name[2] <= '9')
+    {
+      if (reg_name[1] == 's')
+	return bt->builtin_float;
+      else if (reg_name[1] == 'd')
+	return bt->builtin_double;
+    }
+
+  /* GPRs.  */
+  if (regnum == NDS32_PC_REGNUM || regnum == NDS32_LP_REGNUM)
     return bt->builtin_func_ptr;
-  else if (reg_nr == NDS32_SP_REGNUM || reg_nr == NDS32_FP_REGNUM)
+  else if (regnum == NDS32_SP_REGNUM || regnum == NDS32_FP_REGNUM
+	   || regnum == NDS32_GP_REGNUM)
     return bt->builtin_data_ptr;
-  else if ((reg_nr >= NDS32_FS0_REGNUM)
-	   && (reg_nr < NDS32_FS0_REGNUM + tdep->nds32_fpu_sp_num))
-    return bt->builtin_float;
-  else if ((reg_nr >= NDS32_FD0_REGNUM)
-	   && (reg_nr < NDS32_FD0_REGNUM + tdep->nds32_fpu_dp_num))
-    return bt->builtin_double;
-  else if (reg_nr >= NDS32_R0_REGNUM && reg_nr <= NDS32_R0_REGNUM + 27)
-    return tdesc_register_type (gdbarch, reg_nr);
+  else if (regnum < 32)
+    return bt->builtin_int32;
 
-  type = nds32_types (gdbarch, user_reg_map_regnum_to_name (gdbarch, reg_nr));
-  if (type)
-    return type;
-
-  type = tdesc_register_type (gdbarch, reg_nr);
-  if (type)
-    return type;
-
+  /* We don't know.  Display it in hex-form.  */
   return bt->builtin_data_ptr;
 }
 
@@ -771,137 +750,49 @@ nds32_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
   return default_register_reggroup_p (gdbarch, regnum, group);
 }
 
-static enum register_status
-nds32_remote_mfcp (struct gdbarch *gdbarch, int cpid, int fsa, int f14_10,
-		   int f9_8, int len, gdb_byte *buf)
-{
-  struct ui_file *res;
-  struct ui_file_buffer ui_buf;
-  char cmd[128];
-  struct cleanup *back_to;
+/* Implement the tdesc_pseudo_register_name method.
 
-  /* Cole Jan. 7th 2011
-     the arguments used in Rcmd is quiet not straight forward.
-	monitor mfcp (word|double) $arg0 $arg1
-
-     When access sp/dr,
-     word or double determine field 9-5 for SR(0000) or DR (0001),
-     and fsa determine which fp register.
-     Correspond to arg0 and arg1, arg0 is composited from 19-15 (FSa),
-     14-10(00000), and field 9-6. arg1 should be cp0 for FPu.
-
-     When access FPCFR and CPCSR, field 9-5 should be XR (1100),
-     so field89 would be 0x3.  And 14-10 should be CFR (00000)
-     or CSR (00001).  */
-
-  res = mem_fileopen ();
-  gdb_assert ((fsa & ~0x1F) == 0);
-  gdb_assert ((f14_10 & ~0x1F) == 0);
-  gdb_assert ((f9_8 & ~0x3) == 0);
-
-  res = mem_fileopen ();
-  ui_file_buffer_init (&ui_buf, 16);
-
-  sprintf (cmd, "mfcp %s %d 0x%x", (len == 4) ? "word" : "double", cpid,
-	   (fsa << 7) | (f14_10 << 2) | f9_8);
-  target_rcmd (cmd, res);
-
-  /* Copy the result to buffer.  */
-  /* FIXME: Handle buffer overflow.  */
-  ui_file_put (res, do_ui_file_put_memcpy, &ui_buf);
-
-  /* Rcmd always returns big-endian, but gdb expects target-byte-order.  */
-  if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_LITTLE)
-    swapbytes (ui_buf.buf, len);
-  memcpy (buf, ui_buf.buf, len);
-
-  ui_file_delete (res);
-  free_ui_file_buffer (&ui_buf);
-
-  return REG_VALID;
-}
-
-static enum register_status
-nds32_remote_mtcp (struct gdbarch *gdbarch, int cpid, int fsa, int f14_10,
-		   int f9_8, int len, const gdb_byte *buf)
-{
-  struct ui_file *res = mem_fileopen ();
-  char cmd[64];
-  char value[17] = { 0 };	/* 1 for tailing \0.  */
-  unsigned char tmp[8];		/* 8 bytes for double at most.  */
-  int i;
-
-  gdb_assert ((fsa & ~0x1F) == 0);
-  gdb_assert ((f14_10 & ~0x1F) == 0);
-  gdb_assert ((f9_8 & ~0x3) == 0);
-
-  /* Rcmd wants big-endian */
-  memcpy (tmp, buf, len);
-  if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_LITTLE)
-    swapbytes (tmp, len);
-
-  for (i = 0; i < len; i++)
-    {
-      value[(i << 1)] = tohex ((tmp[i] >> 4) & 0xF);
-      value[(i << 1) + 1] = tohex (tmp[i] & 0xF);
-    }
-
-  sprintf (cmd, "mtcp %s %d 0x%x 0x%s",
-	   (len == 4) ? "word" : "double", cpid,
-	   (fsa << 7) | (f14_10 << 2) | f9_8, value);
-  target_rcmd (cmd, res);
-
-  return REG_VALID;
-}
-
-/* Implement the tdesc_pseudo_register_name method.  */
+   This function is called when
+   1. Target-description is used, and the register is pseudo.
+   2. Target-description is NOT used, because
+       i. the target is simulator,
+      ii. or the target is legacy target, so tdesc is not supported.  */
 
 static const char *
-nds32_pseudo_register_name (struct gdbarch *gdbarch, int regnum)
+nds32_register_name (struct gdbarch *gdbarch, int regnum)
 {
+  static char *fpu_pseudo_names[] =
+  {
+    "fs0", "fs1", "fs2", "fs3", "fs4", "fs5", "fs6", "fs7",
+    "fs8", "fs9", "fs10", "fs11", "fs12", "fs13", "fs14", "fs15",
+    "fs16", "fs17", "fs18", "fs19", "fs20", "fs21", "fs22", "fs23",
+    "fs24", "fs25", "fs26", "fs27", "fs28", "fs29", "fs30", "fs31"
+  };
+  static char *sim_names[] =
+  {
+    "fd0", "fd1", "fd2", "fd3", "fd4", "fd5", "fd6", "fd7",
+    "fd8", "fd9", "fd10", "fd11", "fd12", "fd13", "fd14", "fd15",
+    "fd16", "fd17", "fd18", "fd19", "fd20", "fd21", "fd22", "fd23",
+    "fd24", "fd25", "fd26", "fd27", "fd28", "fd29", "fd30", "fd31",
+    "ifclp", "itb", "ir0"
+  };
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-  ULONGEST fucpr = 0;
+  int num_regs = gdbarch_num_regs (gdbarch);
 
-  if (regnum > gdbarch_num_regs (gdbarch) + gdbarch_num_pseudo_regs (gdbarch))
-    return NULL;
+  /* Currently, only pseudo FSR are supported.  */
+  if (regnum >= num_regs && regnum < num_regs + 32)
+    return fpu_pseudo_names[regnum - num_regs];
 
-  /* Target doesn't support tdesc, default is used.  */
-  gdb_assert (tdep->tdesc == tdesc_nds32);
+  /* GPRs.  */
+  if (regnum < ARRAY_SIZE (nds32_regnames))
+    return nds32_regnames[regnum];
 
-  if (regnum >= NDS32_FS0_REGNUM && regnum < NDS32_FS0_REGNUM + 32)
-    {
-      if (regnum < NDS32_FS0_REGNUM + tdep->nds32_fpu_sp_num)
-	return nds32_fpu_regnames[regnum - NDS32_FPU_REGNUM];
-    }
-  else if (regnum >= NDS32_FD0_REGNUM && regnum < NDS32_FD0_REGNUM + 32)
-    {
-      if (regnum < NDS32_FD0_REGNUM + tdep->nds32_fpu_dp_num)
-	return nds32_fpu_regnames[regnum - NDS32_FPU_REGNUM];
-    }
-  else if ((regnum >= NDS32_FPU_REGNUM)
-	   && (regnum < NDS32_FPU_REGNUM + ARRAY_SIZE (nds32_fpu_regnames)))
-    {
-      if (tdep->nds32_fpu_sp_num > 0)	/* or > dp_num */
-	return nds32_fpu_regnames[regnum - NDS32_FPU_REGNUM];
-    }
+  /* Registers between NUM_REGS and SMI_NUM_REGS are
+     simulator registers.  */
+  if (regnum >= NDS32_NUM_REGS && regnum < NDS32_SIM_NUM_REGS)
+    return sim_names[regnum - NDS32_NUM_REGS];
 
-  return NULL;
-}
-
-/* Implement the tdesc_pseudo_register_type method.  */
-
-static struct type *
-nds32_pseudo_register_type (struct gdbarch *gdbarch, int regnum)
-{
-  if (regnum == NDS32_FPCSR_REGNUM)
-    return builtin_type (gdbarch)->builtin_data_ptr;
-  if (regnum == NDS32_FPCFG_REGNUM)
-    return builtin_type (gdbarch)->builtin_data_ptr;
-  if (regnum >= NDS32_FS0_REGNUM && regnum < NDS32_FS0_REGNUM + 32)
-    return builtin_type (gdbarch)->builtin_float;
-  if (regnum >= NDS32_FD0_REGNUM && regnum < NDS32_FD0_REGNUM + 32)
-    return builtin_type (gdbarch)->builtin_double;
-
+  warning (_("Unknown nds32 pseudo register %d."), regnum);
   return NULL;
 }
 
@@ -915,20 +806,36 @@ nds32_pseudo_register_read (struct gdbarch *gdbarch,
 			    struct regcache *regcache, int regnum,
 			    gdb_byte *buf)
 {
-  int reg_size;
+  char name_buf[8];
+  gdb_byte reg_buf[8];
+  int offset;
+  enum register_status status = REG_UNKNOWN;
 
-  reg_size = register_size (gdbarch, regnum);
+  /* Sanity check.  */
+  regnum -= gdbarch_num_regs (gdbarch);
+  if (regnum > gdbarch_num_pseudo_regs (gdbarch))
+    return status;
 
-  if (regnum >= NDS32_FS0_REGNUM && regnum < NDS32_FS0_REGNUM + 32)
-    nds32_remote_mfcp (gdbarch, 0, regnum - NDS32_FS0_REGNUM, 0, 0,
-		       reg_size, buf);
-  else if (regnum >= NDS32_FD0_REGNUM && regnum < NDS32_FD0_REGNUM + 32)
-    nds32_remote_mfcp (gdbarch, 0, regnum - NDS32_FD0_REGNUM, 0, 0,
-		       reg_size, buf);
-  else if (regnum >= NDS32_FPU_REGNUM)
-    nds32_remote_mfcp (gdbarch, 0, 0, regnum - NDS32_FPU_REGNUM, 0x3,
-		       reg_size, buf);
-  return REG_VALID;
+  /* Currently, only FSR are supported.  */
+  if (regnum < 32)
+    {
+      int fd_regnum;
+
+      /* fs0 is always the high-part of fd0.  */
+      if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
+	offset = (regnum & 1) ? 4 : 0;
+      else
+	offset = (regnum & 1) ? 0 : 4;
+
+      sprintf (name_buf, "fd%d", regnum >> 1);
+      fd_regnum = user_reg_map_name_to_regnum (gdbarch, name_buf,
+					       strlen (name_buf));
+      status = regcache_raw_read (regcache, fd_regnum, reg_buf);
+      if (status == REG_VALID)
+	memcpy (buf, reg_buf + offset, 4);
+    }
+
+  return status;
 }
 
 /* Implement the gdbarch_pseudo_register_write method.  */
@@ -938,19 +845,35 @@ nds32_pseudo_register_write (struct gdbarch *gdbarch,
 			     struct regcache *regcache, int regnum,
 			     const gdb_byte *buf)
 {
-  int reg_size;
+  char name_buf[8];
+  gdb_byte reg_buf[8];
+  int offset;
 
-  reg_size = register_size (gdbarch, regnum);
+  /* Sanity check.  */
+  regnum -= gdbarch_num_regs (gdbarch);
+  if (regnum > gdbarch_num_pseudo_regs (gdbarch))
+    return;
 
-  if (regnum >= NDS32_FS0_REGNUM && regnum < NDS32_FS0_REGNUM + 32)
-    nds32_remote_mtcp (gdbarch, 0, regnum - NDS32_FS0_REGNUM, 0, 0,
-		       reg_size, buf);
-  else if (regnum >= NDS32_FD0_REGNUM && regnum < NDS32_FD0_REGNUM + 32)
-    nds32_remote_mtcp (gdbarch, 0, regnum - NDS32_FD0_REGNUM, 0, 0,
-		       reg_size, buf);
-  else if (regnum >= NDS32_FPU_REGNUM)
-    nds32_remote_mtcp (gdbarch, 0, 0, regnum - NDS32_FPU_REGNUM, 0x3,
-		       reg_size, buf);
+  /* Currently, only FSR are supported.  */
+  if (regnum < 32)
+    {
+      int fd_regnum;
+
+      /* fs0 is always the high-part of fd0.  */
+      if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
+	offset = (regnum & 1) ? 4 : 0;
+      else
+	offset = (regnum & 1) ? 0 : 4;
+
+      sprintf (name_buf, "fd%d", regnum >> 1);
+      fd_regnum = user_reg_map_name_to_regnum (gdbarch, name_buf,
+					       strlen (name_buf));
+      regcache_raw_read (regcache, fd_regnum, reg_buf);
+      memcpy (reg_buf + offset, buf, 4);
+      regcache_raw_write (regcache, fd_regnum, reg_buf);
+    }
+
+  return;
 }
 
 /* Skip prologue should be conservative, and frame-unwind should be
@@ -1820,6 +1743,28 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   CORE_ADDR regval;
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  int use_spill;
+  int use_fpr;
+  int fs0_regnum = -1, fd0_regnum = -1;
+
+  switch (tdep->nds32_abi)
+    {
+    case NDS32_ABI_V2:
+    case NDS32_ABI_V2FP:
+      use_spill = FALSE;
+      break;
+    default:
+      use_spill = TRUE;
+    break;
+  }
+
+  /* Use FP registers for calling iff when ABI==V2FP.  */
+  use_fpr = (tdep->nds32_abi == NDS32_ABI_V2FP);
+  if (use_fpr)
+    {
+      fs0_regnum = user_reg_map_name_to_regnum (gdbarch, "fs0", -1);
+      fd0_regnum = user_reg_map_name_to_regnum (gdbarch, "fd0", -1);
+    }
 
   /* Set the return address.  For the nds32, the return breakpoint is
      always at BP_ADDR.  */
@@ -1876,26 +1821,24 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 
       /* Once we start using stack, all arguments should go to stack
 	 When use_fpr, all flt must go to fs/fd; otherwise go to stack.  */
-      if (tdep->use_fpr && typecode == TYPE_CODE_FLT)
+      if (use_fpr && typecode == TYPE_CODE_FLT)
 	{
 	  /* Adjust alignment.  */
 	  foff = (foff + ((align - 1) >> 2)) & ~((align - 1) >> 2);
 
 	  if (foff < REND && !soff)
 	    {
-	      if (tdep->use_fpr && tdep->nds32_fpu_sp_num < 6)
+	      if (use_fpr && fs0_regnum == -1)
 		goto error_no_fpr;
 
 	      switch (len)
 		{
 		case 4:
-		  regcache_cooked_write (regcache, NDS32_FS0_REGNUM + foff,
-					 val);
+		  regcache_cooked_write (regcache, fs0_regnum + foff, val);
 		  foff++;
 		  continue;
 		case 8:
-		  regcache_cooked_write (regcache,
-					 NDS32_FD0_REGNUM + foff / 2, val);
+		  regcache_cooked_write (regcache, fd0_regnum + foff / 2, val);
 		  foff += 2;
 		  continue;
 		default:
@@ -1911,7 +1854,7 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 	{
 	  /* Adjust alignment, and only adjust one time for one argument.  */
 	  goff = (goff + ((align - 1) >> 2)) & ~((align - 1) >> 2);
-	  if (!tdep->use_spill && len > (REND - goff) * 4)
+	  if (!use_spill && len > (REND - goff) * 4)
 	    goff = REND;
 	}
 
@@ -1962,7 +1905,7 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
       while (len > 0)
 	{
 	  if (soff
-	      || (typecode == TYPE_CODE_FLT && tdep->use_fpr && foff == REND)
+	      || (typecode == TYPE_CODE_FLT && use_fpr && foff == REND)
 	      || goff == REND)
 	    {
 	      int rlen = (len > 4) ? 4 : len;
@@ -1994,6 +1937,7 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 
 error_no_fpr:
   /* If use_fpr, but no fs reigster exists, then it is an error.  */
+  /* FIXME: Restore stack.  */
   error (_("Fail to call. FS0-FS5 is required."));
 }
 
@@ -2009,6 +1953,10 @@ nds32_extract_return_value (struct type *type, struct regcache *regcache,
   struct gdbarch *gdbarch = get_regcache_arch (regcache);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int i;
+  int fs0_regnum, fd0_regnum;
+  int use_fpr;
+
+  use_fpr = (tdep->nds32_abi == NDS32_ABI_V2FP);
 
   /* TODO: one-float, one-double is special case in V2FP.
      Passed in FS/FD */
@@ -2016,12 +1964,15 @@ nds32_extract_return_value (struct type *type, struct regcache *regcache,
   if (nds32_float_in_struct (type))
     typecode = TYPE_CODE_FLT;
 
-  if (typecode == TYPE_CODE_FLT && tdep->use_fpr)
+  if (typecode == TYPE_CODE_FLT && use_fpr)
     {
+      fs0_regnum = user_reg_map_name_to_regnum (gdbarch, "fs0", -1);
+      fd0_regnum = user_reg_map_name_to_regnum (gdbarch, "fd0", -1);
+
       if (len == 4)
-	regcache_cooked_read (regcache, NDS32_FS0_REGNUM, readbuf);
+	regcache_cooked_read (regcache, fs0_regnum, readbuf);
       else if (len == 8)
-	regcache_cooked_read (regcache, NDS32_FD0_REGNUM, readbuf);
+	regcache_cooked_read (regcache, fd0_regnum, readbuf);
       else
 	internal_error (__FILE__, __LINE__,
 			_("Cannot extract return value of %d bytes "
@@ -2104,6 +2055,10 @@ nds32_store_return_value (struct type *type, struct regcache *regcache,
   struct gdbarch *gdbarch = get_regcache_arch (regcache);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int i;
+  int fs0_regnum, fd0_regnum;
+  int use_fpr;
+
+  use_fpr = (tdep->nds32_abi == NDS32_ABI_V2FP);
 
   /* TODO: one-float, one-double is special case in V2FP.
      Passed in FS/FD */
@@ -2111,12 +2066,15 @@ nds32_store_return_value (struct type *type, struct regcache *regcache,
   if (nds32_float_in_struct (type))
     typecode = TYPE_CODE_FLT;
 
-  if (typecode == TYPE_CODE_FLT && tdep->use_fpr)
+  if (typecode == TYPE_CODE_FLT && use_fpr)
     {
+      fs0_regnum = user_reg_map_name_to_regnum (gdbarch, "fs0", -1);
+      fd0_regnum = user_reg_map_name_to_regnum (gdbarch, "fd0", -1);
+
       if (len == 4)
-	regcache_cooked_write (regcache, NDS32_FS0_REGNUM, writebuf);
+	regcache_cooked_write (regcache, fs0_regnum, writebuf);
       else if (len == 8)
-	regcache_cooked_write (regcache, NDS32_FD0_REGNUM, writebuf);
+	regcache_cooked_write (regcache, fd0_regnum, writebuf);
       else
 	internal_error (__FILE__, __LINE__,
 			_("Cannot store return value of %d bytes long "
@@ -2454,168 +2412,6 @@ static const struct frame_base nds32_frame_base =
   nds32_frame_base_address
 };
 
-static int
-nds32_validate_tdesc_p (struct gdbarch *gdbarch,
-			struct tdesc_arch_data *tdesc_data)
-{
-  int i;
-  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-  const struct tdesc_feature *feature_core;
-  const struct tdesc_feature *feature_fpu, *feature_system;
-  const struct target_desc *tdesc = tdep->tdesc;
-  unsigned int eflags = tdep->eflags;
-  int valid_p;
-
-  /* We only care core registers and FPU registers, since gdb only
-     needs FP, LP, SP, PC for handling frames and R0-R5, FS0-FS5 for
-     call setup.
-
-     If ABI is not 2FP, FS0-FS5 is optional.  User may change ABI
-     after initilization, so FS0-FS5 should be optional
-
-    FIXME: Properly validate registers.  */
-
-  /* If tdesc == tdesc_nds32, we use the built-in tdesc,
-     because target doesn't support tdesc. */
-
-  feature_core = tdesc_find_feature (tdesc, "org.gnu.gdb.nds32.core");
-  if (!feature_core)
-    return 0;
-
-  for (i = NDS32_R0_REGNUM; i <= NDS32_D1HI_REGNUM; i++)
-    {
-      valid_p = tdesc_numbered_register (feature_core, tdesc_data, i,
-					 nds32_regnames[i]);
-    }
-
-  feature_system = tdesc_find_feature (tdesc, "org.gnu.gdb.nds32.system");
-  if (feature_system)
-    {
-	tdep->nds32_psw = tdesc_numbered_register (feature_system, tdesc_data,
-						   NDS32_PSW_REGNUM, "ir0");
-	if (!tdep->nds32_psw)
-	  tdep->nds32_psw = tdesc_numbered_register (feature_system, tdesc_data,
-						     NDS32_PSW_REGNUM, "psw");
-    }
-
-  feature_fpu = tdesc_find_feature (tdesc, "org.gnu.gdb.nds32.fpu");
-  if (feature_fpu)
-    {
-      /* FP control register.  */
-      for (i = NDS32_FPU_REGNUM; i < NDS32_FS0_REGNUM; i++)
-	  tdesc_numbered_register (feature_fpu, tdesc_data, i,
-				   nds32_fpu_regnames[i - NDS32_FPU_REGNUM]);
-      /* FS register.  */
-      valid_p = 1;
-      tdep->nds32_fpu_sp_num = 0;
-      for (i = NDS32_FS0_REGNUM; (i < NDS32_FS0_REGNUM + 32) && valid_p; i++)
-	{
-	  valid_p = tdesc_numbered_register (feature_fpu, tdesc_data, i,
-					     nds32_fpu_regnames[i - NDS32_FPU_REGNUM]);
-	  if (valid_p)
-	    tdep->nds32_fpu_sp_num++;
-	}
-
-      /* FD register.  */
-      valid_p = 1;
-      tdep->nds32_fpu_dp_num = 0;
-      for (i = NDS32_FD0_REGNUM; (i < NDS32_FD0_REGNUM + 32) && valid_p; i++)
-	{
-	  valid_p = tdesc_numbered_register (feature_fpu, tdesc_data, i,
-					     nds32_fpu_regnames[i - NDS32_FPU_REGNUM]);
-	  if (valid_p)
-	    tdep->nds32_fpu_dp_num++;
-	}
-    }
-
-  return 1;
-}
-
-static void
-nds32_init_pseudo_registers (struct gdbarch *gdbarch)
-{
-  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-  unsigned int eflags = tdep->eflags;
-  int fpreg;
-
-  /* For legacy target does not implement target-description,
-     so we try to use Rcmd to access FPU registers.  */
-  /* TODO build pseudo register */
-  fpreg = (eflags >> 22) & 0x3; /* fpcfg */
-
-  switch (nds32_config.use_fpreg)
-    {
-    case 3232:
-      fpreg = NDS32_FPU_32SP_32DP;
-      break;
-    case 3216:
-      fpreg = NDS32_FPU_32SP_16DP;
-      break;
-    case 168:
-    case 1608:
-      fpreg = NDS32_FPU_16SP_8DP;
-      break;
-    case 84:
-    case 804:
-      fpreg = NDS32_FPU_8SP_4DP;
-      break;
-    default:
-      if (!(eflags & (E_NDS32_HAS_FPU_INST | E_NDS32_HAS_FPU_DP_INST)))
-	fpreg = NDS32_FPU_NONE;
-      break;
-    }
-
-  switch (fpreg) /* fpcfg */
-    {
-    case NDS32_FPU_8SP_4DP:
-      tdep->nds32_fpu_sp_num = 8;
-      tdep->nds32_fpu_dp_num = 4;
-      break;
-    case NDS32_FPU_16SP_8DP:
-      tdep->nds32_fpu_sp_num = 16;
-      tdep->nds32_fpu_dp_num = 8;
-      break;
-    case NDS32_FPU_32SP_16DP:
-      tdep->nds32_fpu_sp_num = 32;
-      tdep->nds32_fpu_dp_num = 16;
-      break;
-    case NDS32_FPU_32SP_32DP:
-      tdep->nds32_fpu_sp_num = 32;
-      tdep->nds32_fpu_dp_num = 32;
-      break;
-    default:
-      tdep->nds32_fpu_sp_num = 0;
-      tdep->nds32_fpu_dp_num = 0;
-      break;
-    }
-
-  /* Make sure FPU pseudo reg num doesn't overlapped with tdesc reg.  */
-  if (tdep->nds32_fpu_sp_num > 0 || tdep->nds32_fpu_dp_num > 0)
-    {
-      /* Only use FPR for call for FP ABI.  */
-      tdep->nds32_fpu_pseudo = TRUE;
-      if (gdbarch_num_regs (gdbarch) > NDS32_FPU_REGNUM)
-	internal_error (__FILE__, __LINE__,
-			"too many gdbarch_num_regs overlapped with "
-			"pseudo registers.\n");
-      /* This is a dirty hacking for making register numbering
-	 consistent with non-pseudo FPRs.  */
-      set_gdbarch_num_regs (gdbarch, NDS32_FPU_REGNUM);
-      set_gdbarch_num_pseudo_regs (gdbarch, NDS32_NUM_PSEUDO_REGS);
-
-      /* Remote-command is used.  */
-      set_gdbarch_pseudo_register_read (gdbarch, nds32_pseudo_register_read);
-      set_gdbarch_pseudo_register_write (gdbarch, nds32_pseudo_register_write);
-
-      set_tdesc_pseudo_register_type (gdbarch, nds32_pseudo_register_type);
-      set_tdesc_pseudo_register_name (gdbarch, nds32_pseudo_register_name);
-    }
-  else if (gdbarch_num_regs (gdbarch) < NDS32_LEGACY_G_NUM_REGS)
-    set_gdbarch_num_regs (gdbarch, NDS32_LEGACY_G_NUM_REGS);
-}
-
-/* Implement the gdbarch_overlay_update method.  */
-
 static void
 nds32_simple_overlay_update (struct obj_section *osect)
 {
@@ -2677,9 +2473,8 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   struct gdbarch *gdbarch;
   struct gdbarch_tdep *tdep;
   struct gdbarch_list *best_arch;
-  const struct target_desc *tdesc;
+  const struct target_desc *tdesc = NULL;
   unsigned int nds32_abi = NDS32_ABI_AUTO;
-  const struct tdesc_feature *feature;
   struct tdesc_arch_data *tdesc_data = NULL;
   unsigned int eflags = 0;
   int i;
@@ -2695,18 +2490,102 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   tdep = XCALLOC (1, struct gdbarch_tdep);
   gdbarch = gdbarch_alloc (&info, tdep);
 
-  if (!tdesc_has_registers (info.target_desc))
+  if (tdesc_has_registers (info.target_desc))
     {
-      tdesc = tdesc_nds32;
-      set_gdbarch_num_regs (gdbarch, NDS32_LEGACY_NUM_REGS);
+      int valid_p;
+      int fpregs = -1;
+      static const char *const nds32_fp_names[] = { "r28", "fp", NULL };
+      static const char *const nds32_lp_names[] = { "r30", "lp", NULL };
+      static const char *const nds32_sp_names[] = { "r31", "sp", NULL };
+      const struct tdesc_feature *feature;
+
+      /* Validate and initialize target-description here.  */
+      tdesc = info.target_desc;
+      tdesc_data = tdesc_data_alloc ();
+
+      info.tdep_info = (void *) tdesc_data;
+
+      feature = tdesc_find_feature (tdesc, "org.gnu.gdb.nds32.core");
+      if (!feature)
+	return 0;
+
+      /* Validate  for FP, LP, GP, PC.  */
+      valid_p = 1;
+      valid_p &= tdesc_numbered_register_choices (feature, tdesc_data,
+						  NDS32_FP_REGNUM,
+						  nds32_fp_names);
+      valid_p &= tdesc_numbered_register_choices (feature, tdesc_data,
+						  NDS32_LP_REGNUM,
+						  nds32_lp_names);
+      valid_p &= tdesc_numbered_register_choices (feature, tdesc_data,
+						  NDS32_SP_REGNUM,
+						  nds32_sp_names);
+      valid_p &= tdesc_numbered_register (feature, tdesc_data,
+					  NDS32_PC_REGNUM, "pc");
+
+      if (!valid_p)
+	{
+	  tdesc_data_cleanup (tdesc_data);
+	  xfree (tdep);
+	  gdbarch_free (gdbarch);
+	  return NULL;
+	}
+
+      /* Number R0-R27.  */
+      for (i = NDS32_R0_REGNUM; i < NDS32_FP_REGNUM; i++)
+	tdesc_numbered_register (feature, tdesc_data, i, nds32_regnames[i]);
+
+      /* Number D0 and D1.  */
+      for (i = NDS32_D0LO_REGNUM; i <= NDS32_D1HI_REGNUM; i++)
+	tdesc_numbered_register (feature, tdesc_data, i, nds32_regnames[i]);
+
+      /* Find register configuration of FPU.  */
+      feature = tdesc_find_feature (tdesc, "org.gnu.gdb.nds32.fpu");
+      if (feature)
+	{
+	  if (tdesc_unnumbered_register (feature, "fd31"))
+	    fpregs = 3;
+	  else if (tdesc_unnumbered_register (feature, "fd15"))
+	    fpregs = 2;
+	  else if (tdesc_unnumbered_register (feature, "fd7"))
+	    fpregs = 1;
+	  else if (tdesc_unnumbered_register (feature, "fd3"))
+	    fpregs = 0;
+	}
+      tdep->fpu_freg = fpregs;
+
+      /* If FS registers do not exist, make them pseudo registers
+	 of FD registers.  */
+      if (fpregs != -1 && tdesc_unnumbered_register (feature, "fs0") == 0)
+	{
+	  int fsregs = (fpregs + 1) * 8;
+
+	  if (fsregs > 32)
+	    fsregs = 32;
+
+	  set_gdbarch_num_pseudo_regs (gdbarch, fsregs);
+	  set_gdbarch_pseudo_register_read (gdbarch, nds32_pseudo_register_read);
+	  set_gdbarch_pseudo_register_write (gdbarch, nds32_pseudo_register_write);
+	  set_tdesc_pseudo_register_name (gdbarch, nds32_register_name);
+	}
+
+      set_gdbarch_num_regs (gdbarch, NDS32_NUM_REGS);
+      tdesc_use_registers (gdbarch, tdesc, tdesc_data);
     }
   else
     {
-      tdesc = info.target_desc;
-      set_gdbarch_num_regs (gdbarch, NDS32_NUM_REGS);
+      /* Simulator or legacy target.  */
+
+      /* Physical 32 FD registers.  */
+      set_gdbarch_num_regs (gdbarch, NDS32_SIM_NUM_REGS);
+      set_gdbarch_register_name (gdbarch, nds32_register_name);
+
+      /* Pseudo 32 FS registers.  */
+      set_gdbarch_num_pseudo_regs (gdbarch, 32);
+      set_gdbarch_pseudo_register_read (gdbarch, nds32_pseudo_register_read);
+      set_gdbarch_pseudo_register_write (gdbarch, nds32_pseudo_register_write);
     }
 
-  tdep->tdesc = tdesc;
   tdep->nds32_abi = nds32_abi;
   tdep->eflags = eflags;
 
@@ -2714,43 +2593,12 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   if (nds32_config.use_abi != NDS32_ABI_AUTO)
     tdep->nds32_abi = nds32_config.use_abi;
 
-  switch (tdep->nds32_abi)
-    {
-    case NDS32_ABI_V2:
-    case NDS32_ABI_V2FP:
-      tdep->use_spill = FALSE;
-      break;
-    default:
-      tdep->use_spill = TRUE;
-    break;
-  }
-
-  /* Use FP registers for calling iff when ABI==V2FP.  */
-  tdep->use_fpr = (tdep->nds32_abi == NDS32_ABI_V2FP);
-
+  /* Set offsets for signal context.  */
   tdep->sigtramp_p = NULL;
   tdep->sigcontext_addr = NULL;
   tdep->sc_pc_offset = -1;
   tdep->sc_sp_offset = -1;
   tdep->sc_fp_offset = -1;
-  tdesc_data = tdesc_data_alloc ();
-
-  /* Initialize osabi before tdesc_use_reg.  */
-  info.tdep_info = (void *) tdesc_data;
-  gdbarch_init_osabi (info, gdbarch);
-  if (!nds32_validate_tdesc_p (gdbarch, tdesc_data))
-  {
-    tdesc_data_cleanup (tdesc_data);
-    xfree (tdep);
-    gdbarch_free (gdbarch);
-    return NULL;
-  }
-  tdesc = tdep->tdesc;
-
-  tdesc_use_registers (gdbarch, tdesc, tdesc_data);
-
-  if (tdesc == tdesc_nds32)
-    nds32_init_pseudo_registers (gdbarch);
 
   /* If there is already a candidate, use it.  */
   for (best_arch = gdbarch_list_lookup_by_info (arches, &info);
@@ -2763,11 +2611,7 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 	continue;
 
       /* Check FPU registers.  */
-      if (idep->nds32_fpu_sp_num != tdep->nds32_fpu_sp_num)
-	continue;
-      if (idep->nds32_fpu_dp_num != tdep->nds32_fpu_dp_num)
-	continue;
-      if (idep->nds32_fpu_pseudo != tdep->nds32_fpu_pseudo)
+      if (idep->fpu_freg != tdep->fpu_freg)
 	continue;
 
       /* Found a match.  */
@@ -2781,16 +2625,14 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
       return best_arch->gdbarch;
     }
 
-  /* Call after tdesc_use_register to overwrite tdesc_.
-     Otherwise, they will be override by target-description.  */
-
   nds32_add_reggroups (gdbarch);
-  /* Use tdesc_ provided version.  */
-  set_gdbarch_register_reggroup_p (gdbarch, nds32_register_reggroup_p);
-  /* Use tdesc_ provided version.
-     set_gdbarch_register_name (gdbarch, nds32_register_name); */
 
+  gdbarch_init_osabi (info, gdbarch);
+
+  /* Override tdesc_register callbacks for system registers.  */
+  set_gdbarch_register_reggroup_p (gdbarch, nds32_register_reggroup_p);
   set_gdbarch_register_type (gdbarch, nds32_register_type);
+
   set_gdbarch_sp_regnum (gdbarch, NDS32_SP_REGNUM);
   set_gdbarch_pc_regnum (gdbarch, NDS32_PC_REGNUM);
   set_gdbarch_read_pc (gdbarch, nds32_read_pc);
@@ -2912,7 +2754,6 @@ nds32_load_config (struct nds32_gdb_config *config)
   config->use_fp = nds32_config_int ("USE_FP", 1);
   config->use_abi = nds32_config_int ("USE_ABI", NDS32_ABI_AUTO);
   config->use_stop_zfp = nds32_config_int ("USE_STOP_ZFP", 0);
-  config->use_fpreg = nds32_config_int ("USE_FPREG", 0);
 }
 
 /* Callback for "nds32" command.  */
@@ -2946,7 +2787,6 @@ _initialize_nds32_tdep (void)
   /* Following are NDS32 specific commands.  */
 
   nds32_init_reggroups ();
-  initialize_tdesc_nds32 ();
-  initialize_tdesc_nds32_sim ();
+
   register_remote_support_xml ("nds32");
 }
