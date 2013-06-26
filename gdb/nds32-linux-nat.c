@@ -302,4 +302,5 @@ _initialize_nds32_linux_nat (void)
 
   /* Register the target.  */
   linux_nat_add_target (t);
+  initialize_tdesc_nds32_linux ();
 }

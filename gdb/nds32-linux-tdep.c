@@ -39,8 +39,7 @@
 
 #include "nds32-tdep.h"
 #include "nds32-linux-tdep.h"
-/* #include "features/nds32-linux.c" */
-#include "features/nds32-linux-sid.c"
+
 extern struct nds32_gdb_config nds32_config;
 
 void _initialize_nds32_linux_tdep (void);
@@ -311,25 +310,6 @@ nds32_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 					nds32_linux_regset_from_core_section);
 
   set_gdbarch_skip_solib_resolver (gdbarch, glibc_skip_solib_resolver);
-  /* No pseudo register on Linux (monitor rcmd) */
-  set_gdbarch_num_pseudo_regs (gdbarch, 0);
-
-  if (!tdesc_has_registers (tdesc))
-    /* tdesc = tdesc_nds32_linux; */
-    tdesc = tdesc_nds32_linux_sid;
-  tdep->tdesc = tdesc;
-
-  if (tdesc_data)
-    {
-      feature = tdesc_find_feature (tdesc, "org.gnu.gdb.nds32.linux");
-      if (feature)
-	{
-	  tdesc_numbered_register (feature, tdesc_data,
-				   NDS32_LINUX_ORIG_R0_REGNUM, "orig_r0");
-	  tdesc_numbered_register (feature, tdesc_data,
-				   NDS32_LINUX_FUCPR_REGNUM, "fucpr");
-	}
-    }
 }
 
 void
@@ -337,10 +317,4 @@ _initialize_nds32_linux_tdep (void)
 {
   gdbarch_register_osabi (bfd_arch_nds32, 0, GDB_OSABI_LINUX,
 			  nds32_linux_init_abi);
-
-  /* FIXME: the sid-tdesc for Linux jams a lot of dummy bytes
-	    in order to workaround SID "g-packet it long" issue.
-	    Remove this when SID implement target-description.  */
-  /* initialize_tdesc_nds32_linux (); */
-  initialize_tdesc_nds32_linux_sid ();
 }
