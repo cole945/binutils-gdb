@@ -209,10 +209,6 @@ struct nds32_gdb_config
      Default true.  */
   int use_cfi;
 
-  /* Backtrace for IFC frame by checking PSW.IFCON.
-     Default true, so monmon is happy about it.  */
-  int use_ifcret;		/* default true */
-
   /* Prefer $fp as framebase instead of analyzing $sp adjustion,
      for dynamic stack, e.g., calling alloca (), this should be reliable.
      Default true.  */
