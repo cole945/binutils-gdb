@@ -193,6 +193,17 @@ nds32_dump_registers (SIM_DESC sd)
       sim_io_eprintf (sd, "psw %08x  ", CCPU_SR[SRIDX_PSW].u);
       sim_io_eprintf (sd, "\n");
     }
+
+  sim_io_eprintf (sd, "Recent $pc:\n");
+  for (i = 0; i <= RECENT_CIA_MASK; i++)
+    {
+      sim_io_eprintf (sd, "  0x%x",
+		      recent_cia[(i + recent_cia_idx) & RECENT_CIA_MASK]);
+      if (i % 6 == 5)
+	sim_io_eprintf (sd, "\n");
+    }
+
+  sim_io_eprintf (sd, "\n");
 }
 
 uint32_t
@@ -219,16 +230,6 @@ nds32_raise_exception (sim_cpu *cpu, enum nds32_exceptions e, int sig,
       print_insn_nds32 (cia, &dis_info);
       fprintf (stderr, "\n");
       nds32_dump_registers (sd);
-
-      sim_io_eprintf (sd, "Recent $pc:\n");
-      for (i = 0; i <= RECENT_CIA_MASK; i++)
-	{
-	  sim_io_eprintf (sd, "  0x%x",
-			  recent_cia[(i + recent_cia_idx) & RECENT_CIA_MASK]);
-	  if (i % 6 == 5)
-	    sim_io_eprintf (sd, "\n");
-	}
-      sim_io_eprintf (sd, "\n");
     }
 
   sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_stopped, sig);
@@ -2106,6 +2107,8 @@ sim_engine_run (SIM_DESC sd, int next_cpu_nr, int nr_cpus, int siggnal)
       insn = extract_unsigned_integer ((unsigned char *) &insn, 4,
 				       BIG_ENDIAN);
 
+      if (r != 4)
+	nds32_dump_registers (sd);
       SIM_ASSERT (r == 4);
 
       if (TRACE_LINENUM_P (cpu))
