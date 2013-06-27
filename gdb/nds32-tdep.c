@@ -150,14 +150,19 @@ struct nds32_register_alias nds32_register_aliases[] =
   {"dmar10", "dma_2dsctl"},
 };
 
-/* Get the values of register alias for user_reg_map_name_to_regnum ().  */
+/* Value of a register alias.  BATON is register name of the alias,
+   because system registers do not have fixed register number.
+   We must look-up them when access.  */
 
 static struct value *
 nds32_value_of_reg (struct frame_info *frame, const void *baton)
 {
   struct gdbarch *gdbarch = get_frame_arch (frame);
+  int regnum;
 
-  return value_of_register ((int) baton, frame);
+  regnum = user_reg_map_name_to_regnum (gdbarch, (const char *) baton, -1);
+
+  return value_of_register (regnum, frame);
 }
 
 /* gdbarch_frame_align () */
@@ -2674,18 +2679,23 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   frame_unwind_append_unwinder (gdbarch, &nds32_frame_unwind);
 
   /* Add nds32 register aliases.  */
+  /* FIXME: This is a simple workaround to force user-reg being
+	    initialized before gdbarch initialized.
+	    Without this, calling user_reg_map_name_to_regnum ()
+	    will crash.  */
+  user_reg_add (gdbarch, "r0", nds32_value_of_reg, "r0");
   for (i = 0; i < ARRAY_SIZE (nds32_register_aliases); i++)
     {
       int regnum;
 
-      regnum = user_reg_map_name_to_regnum (gdbarch,
-					    nds32_register_aliases[i].name,
-					    -1);
+      regnum = user_reg_map_name_to_regnum
+	(gdbarch, nds32_register_aliases[i].name, -1);
+
       if (regnum == -1)
 	continue;
 
       user_reg_add (gdbarch, nds32_register_aliases[i].alias,
-		    nds32_value_of_reg, (const void *) regnum);
+		    nds32_value_of_reg, nds32_register_aliases[i].name);
     }
 
   return gdbarch;
