@@ -120,23 +120,14 @@ nds32_remote_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr,
   if ((*pcptr) & 1)
     error (_("bad address %p for inserting breakpoint"), (void *) *pcptr);
 
-  /* SID use KINDPTR for software breakpoints,
-      but ICEman, linux-gdbserver doesn't use it. */
-  if (nds32_remote_info.type == nds32_rt_ice
-      || nds32_remote_info.type == nds32_rt_ocd)
-    {
-      /* ICEman/AICE have trouble on reading memory when the pcptr is P/A,
-	 but CPU is in V/A mode.  This code prevent GDB from reading memory.
-	 ICEman will read memory itself if needed.  The kind is set to 3,
-	 so target knows GDB doesn't actually read the memory.
+  /* ICEman/AICE have trouble on reading memory when the pcptr is P/A,
+     but CPU is in V/A mode.  This code prevent GDB from reading memory.
+     ICEman will read memory itself if needed.
 
-	 See: Bug 7430 - GDB can't set a hardware break point with PA
-	      if IT/DT is on.  */
+     See: Bug 7430 - GDB can't set a hardware break point with PA
+	  if IT/DT is on.  */
 
-      *kindptr = 3;
-    }
-  else
-    gdbarch_breakpoint_from_pc (gdbarch, pcptr, kindptr);
+  *kindptr = 2;
 }
 
 /* Wrapper for execute a GDB CLI command.  */
