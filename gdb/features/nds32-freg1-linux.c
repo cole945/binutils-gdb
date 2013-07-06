@@ -1,13 +1,13 @@
 /* THIS FILE IS GENERATED.  -*- buffer-read-only: t -*- vi:set ro:
-  Original: nds32-linux.xml */
+  Original: nds32-freg1-linux.xml */
 
 #include "defs.h"
 #include "osabi.h"
 #include "target-descriptions.h"
 
-struct target_desc *tdesc_nds32_linux;
+struct target_desc *tdesc_nds32_freg1_linux;
 static void
-initialize_tdesc_nds32_linux (void)
+initialize_tdesc_nds32_freg1_linux (void)
 {
   struct target_desc *result = allocate_target_description ();
   struct tdesc_feature *feature;
@@ -57,5 +57,15 @@ initialize_tdesc_nds32_linux (void)
   tdesc_create_reg (feature, "orig_r0", 37, 1, "system", 32, "int");
   tdesc_create_reg (feature, "fucpr", 38, 1, "system", 32, "int");
 
-  tdesc_nds32_linux = result;
+  feature = tdesc_create_feature (result, "org.gnu.gdb.nds32.fpu");
+  tdesc_create_reg (feature, "fd0", 39, 1, NULL, 64, "ieee_single");
+  tdesc_create_reg (feature, "fd1", 40, 1, NULL, 64, "ieee_single");
+  tdesc_create_reg (feature, "fd2", 41, 1, NULL, 64, "ieee_single");
+  tdesc_create_reg (feature, "fd3", 42, 1, NULL, 64, "ieee_single");
+  tdesc_create_reg (feature, "fd4", 43, 1, NULL, 64, "ieee_single");
+  tdesc_create_reg (feature, "fd5", 44, 1, NULL, 64, "ieee_single");
+  tdesc_create_reg (feature, "fd6", 45, 1, NULL, 64, "ieee_single");
+  tdesc_create_reg (feature, "fd7", 46, 1, NULL, 64, "ieee_single");
+
+  tdesc_nds32_freg1_linux = result;
 }

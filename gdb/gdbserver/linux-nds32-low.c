@@ -19,22 +19,25 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include <asm/ptrace.h>
-#include <elf.h>                 /* AT_HWCAP */
 #include "server.h"
 #include "linux-low.h"
 
-#define HWCAP_FPU                0x000008
-#define HWCAP_AUDIO              0x000010
-#define HWCAP_REDUCED_REGS       0x000080
-#define HWCAP_FPU_DP             0x040000
+#include <sys/ptrace.h>
+#include <elf.h>
 
-static unsigned long nds32_hwcap;
-
+static int nds32_fpu_freg = -1;
 
 /* Defined in auto-generated files.  */
-void init_registers_nds32 (void);
 void init_registers_nds32_linux (void);
+extern const struct target_desc *tdesc_nds32_linux;
+void init_registers_nds32_freg0_linux (void);
+extern const struct target_desc *tdesc_nds32_freg0_linux;
+void init_registers_nds32_freg1_linux (void);
+extern const struct target_desc *tdesc_nds32_freg1_linux;
+void init_registers_nds32_freg2_linux (void);
+extern const struct target_desc *tdesc_nds32_freg2_linux;
+void init_registers_nds32_freg3_linux (void);
+extern const struct target_desc *tdesc_nds32_freg3_linux;
 
 static int nds32_regmap[] = {
 
@@ -53,24 +56,11 @@ static int nds32_regmap[] = {
   /* nds32-linux only in nds32.linux */
   /* orig_r0, fucop */
   16, 168
-
-
-  /* TODO: add AUDIO and FPU
-           or implment it using PTRACE_GETFPREG
-           and PTRACE_GETAUDIOREGS */
-#if 0
-  /* nds32.audio */
-  /* AUDIO */
-  500, 501, 502, 503, 504, 505, 506, 507,
-  508, 509, 510, 511, 512, 513, 514, 515,
-  516, 517, 518, 519, 520, 521, 522, 523,
-  524, 525, 526, 527, 528, 529, 530, 531
-
-  /* nds32.fpu */
-  /* FPU */
-#endif
 };
 #define nds32_num_regs (sizeof (nds32_regmap) / sizeof (nds32_regmap[0]))
+
+static const unsigned char NDS32_BREAK[] = { 0x64, 0x00, 0x00, 0x0A };
+static const unsigned char NDS32_BREAK16[] = { 0xEA, 0x00 };
 
 static int
 nds32_cannot_store_register (int regno)
@@ -82,6 +72,56 @@ static int
 nds32_cannot_fetch_register (int regno)
 {
   return (regno >= nds32_num_regs);
+}
+
+static void
+nds32_fill_gregset (struct regcache *regcache, void *buf)
+{
+  int i;
+
+  for (i = 0; i < nds32_num_regs; i++)
+    if (nds32_regmap[i] != -1)
+      collect_register (regcache, i, ((char *) buf) + nds32_regmap[i]);
+}
+
+static void
+nds32_store_gregset (struct regcache *regcache, const void *buf)
+{
+  int i;
+  char zerobuf[8];
+
+  memset (zerobuf, 0, 8);
+  for (i = 0; i < nds32_num_regs; i++)
+    if (nds32_regmap[i] != -1)
+      supply_register (regcache, i, ((char *) buf) + nds32_regmap[i]);
+    else
+      supply_register (regcache, i, zerobuf);
+}
+
+static void
+nds32_fill_fpregset (struct regcache *regcache, void *buf)
+{
+  int i, num, base;
+
+  num = 4 << nds32_fpu_freg;
+  base = find_regno (regcache->tdesc, "fd0");
+  for (i = 0; i < num; i++)
+    collect_register (regcache, base + i, (char *) buf + i * 8);
+
+  collect_register_by_name (regcache, "fpscr", (char *) buf + 32 * 8);
+}
+
+static void
+nds32_store_fpregset (struct regcache *regcache, const void *buf)
+{
+  int i, num, base;
+
+  num = 4 << nds32_fpu_freg;
+  base = find_regno (regcache->tdesc, "fd0");
+  for (i = 0; i < num; i++)
+    supply_register (regcache, base + i, (char *) buf + i * 8);
+
+  supply_register_by_name (regcache, "fpscr", (char *) buf + 32 * 8);
 }
 
 extern int debug_threads;
@@ -103,9 +143,6 @@ nds32_set_pc (struct regcache *regcache, CORE_ADDR pc)
   supply_register_by_name (regcache, "pc", &newpc);
 }
 
-static const unsigned char NDS32_BREAK[] = { 0x64, 0x00, 0x00, 0x0A };
-static const unsigned char NDS32_BREAK16[] = { 0xEA, 0x00 };
-
 static int
 nds32_breakpoint_at (CORE_ADDR where)
 {
@@ -113,9 +150,9 @@ nds32_breakpoint_at (CORE_ADDR where)
 
   (*the_target->read_memory) (where, insn, 4);
 
-  if (memcmp(insn, NDS32_BREAK, 4) == 0)
+  if (memcmp (insn, NDS32_BREAK, 4) == 0)
     return 1;
-  else if (memcmp(insn, NDS32_BREAK16, 2) == 0)
+  else if (memcmp (insn, NDS32_BREAK16, 2) == 0)
     return 1;
   else
     return 0;
@@ -135,86 +172,113 @@ nds32_reinsert_addr (void)
   return pc;
 }
 
-static int
-nds32_get_hwcap (unsigned long *valp)
-{
-  unsigned char *data = alloca (8);
-  int offset = 0;
-
-  while ((*the_target->read_auxv) (offset, data, 8) == 8)
-    {
-      unsigned int *data_p = (unsigned int *)data;
-      if (data_p[0] == AT_HWCAP)
-	{
-	  *valp = data_p[1];
-	  return 1;
-	}
-
-      offset += 8;
-    }
-
-  *valp = 0;
-  return 0;
-}
-
 static void
 nds32_arch_setup (void)
 {
-#if 0
-  nds32_hwcap = 0;
-  if (nds32_get_hwcap (&nds32_hwcap) == 0)
+  const struct target_desc *tdesc = tdesc_nds32_linux;
+
+  nds32_fpu_freg = -1;
+
+#if defined (__NDS32_EXT_FPU_SP__) || defined (__NDS32_EXT_FPU_DP__)
     {
-      init_registers_nds32 ();
-      return;
+      /* To find out the FPU register configuration, we should 1. Check whether
+	 COP/FPU extensions if set in CPU_VER.CFGID. 2. Check whether CP0EX and
+	 CP0ISFPU are set in CUCOP_EXIST. 3. Check FPCFG.FREG with fmfcfg
+	 instruction.
+
+	 If COP/FPU doesn't exist, executing fmfcfg will cause
+	 reserved-instruction exception.  However, both CPU_VER and CUCOP_EXIST
+	 are system registers and inaccessible from user programs.  In the
+	 future, kernel should provide these information through AUXV HWCAP.
+	 Currently, we only check whether FPU SP/DP Extension is set.  */
+
+      int fpcfg = 0;
+
+      __asm__ ("fmfcfg %0\n\t" : "=r" (fpcfg));
+      nds32_fpu_freg = (fpcfg >> 2) & 0x3;
+    }
+
+  switch (nds32_fpu_freg)
+    {
+    case 0:
+      tdesc = tdesc_nds32_freg0_linux;
+      break;
+    case 1:
+      tdesc = tdesc_nds32_freg1_linux;
+      break;
+    case 2:
+      tdesc = tdesc_nds32_freg2_linux;
+      break;
+    case 3:
+      tdesc = tdesc_nds32_freg3_linux;
+      break;
     }
 #endif
 
-  /*
-   * TODO:
-   * HWCAP_FPU HWCAP_AUDIO HWCAP_REDUCED_REGS HWCAP_FPU_DP
-   */
-
-  /*
-    1. COP0ISFPU
-    2. SP or DP is set
-    3. FPCFG.FREG
-   */
-
-  /*
-    1. AUDIO
-   */
-
-  init_registers_nds32_linux ();
+  current_process ()->tdesc = tdesc;
 }
 
-#if 0
 /* used by linux-low.c for PTRACE_[GS]ETREGS */
-struct regset_info target_regsets[] = {
+static struct regset_info nds32_regsets[] = {
   { PTRACE_GETREGS, PTRACE_SETREGS, 0, 18 * 4,
     GENERAL_REGS,
     nds32_fill_gregset, nds32_store_gregset },
-  #if 0
-  { PTRACE_GETFPREGS, PTRACE_SETVFPREGS, 0, 32 * 8 + 4,
+  { PTRACE_GETFPREGS, PTRACE_SETFPREGS, 0, 32 * 8 + 4,
     EXTENDED_REGS,
     nds32_fill_fpregset, nds32_store_fpregset },
-  #endif
   { 0, 0, 0, -1, -1, NULL, NULL }
 };
-#endif
+
+static struct regsets_info nds32_regsets_info =
+{
+  nds32_regsets, /* regsets */
+  0, /* num_regsets */
+  NULL, /* disabled_regsets */
+};
+
+static struct usrregs_info nds32_usrregs_info =
+{
+  nds32_num_regs,
+  nds32_regmap,
+};
+
+static struct regs_info regs_info =
+{
+  NULL, /* regset_bitmap */
+  &nds32_usrregs_info,
+  &nds32_regsets_info,
+};
+
+static const struct regs_info *
+nds32_regs_info (void)
+{
+  return &regs_info;
+}
 
 struct linux_target_ops the_low_target = {
   nds32_arch_setup,
-  nds32_num_regs,
-  nds32_regmap,
-  NULL, /* regset_bitmap */
+  nds32_regs_info,
   nds32_cannot_fetch_register,
   nds32_cannot_store_register,
   NULL, /* fetch_register */
   nds32_get_pc,
   nds32_set_pc,
-  NDS32_BREAK,
-  sizeof(NDS32_BREAK),
+  NDS32_BREAK16,
+  sizeof(NDS32_BREAK16),
   nds32_reinsert_addr,
   0,
   nds32_breakpoint_at,
 };
+
+void
+initialize_low_arch (void)
+{
+  /* Initialize the Linux target descriptions.  */
+  init_registers_nds32_linux ();
+  init_registers_nds32_freg0_linux ();
+  init_registers_nds32_freg1_linux ();
+  init_registers_nds32_freg2_linux ();
+  init_registers_nds32_freg3_linux ();
+
+  initialize_regsets_info (&nds32_regsets_info);
+}
