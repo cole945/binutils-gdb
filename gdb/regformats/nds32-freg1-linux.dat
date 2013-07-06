@@ -1,5 +1,6 @@
-name:nds32
-xmlarch:nds32
+# DO NOT EDIT: generated from nds32-freg1-linux.xml
+name:nds32_freg1_linux
+xmltarget:nds32-freg1-linux.xml
 expedite:fp,sp,pc
 32:r0
 32:r1
@@ -27,14 +28,24 @@ expedite:fp,sp,pc
 32:r23
 32:r24
 32:r25
-32:r26
-32:r27
+32:
+32:
 32:fp
 32:gp
 32:lp
 32:sp
 32:pc
 32:d0lo
-32:dohi
+32:d0hi
 32:d1lo
 32:d1hi
+32:orig_r0
+32:fucpr
+64:fd0
+64:fd1
+64:fd2
+64:fd3
+64:fd4
+64:fd5
+64:fd6
+64:fd7

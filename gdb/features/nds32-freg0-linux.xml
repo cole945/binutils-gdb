@@ -10,4 +10,5 @@
   <architecture>nds32</architecture>
   <osabi>GNU/Linux</osabi>
   <xi:include href="nds32-core.xml"/>
+  <xi:include href="nds32-freg0.xml"/>
 </target>
