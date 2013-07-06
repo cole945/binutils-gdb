@@ -33,8 +33,11 @@
   <reg name="r23" bitsize="32"/>
   <reg name="r24" bitsize="32"/>
   <reg name="r25" bitsize="32"/>
-  <reg name="r26" bitsize="32"/>
-  <reg name="r27" bitsize="32"/>
+  <!-- r26, r27 is reserved for linux kernel
+       keep the space for compatibility,
+       but hide them from users -->
+  <reg name="" bitsize="32"/>
+  <reg name="" bitsize="32"/>
 
   <reg name="fp" bitsize="32" type="data_ptr" regnum="28"/>
   <reg name="gp" bitsize="32" type="data_ptr"/>
@@ -47,5 +50,7 @@
   <reg name="d0hi" bitsize="32"/>
   <reg name="d1lo" bitsize="32"/>
   <reg name="d1hi" bitsize="32"/>
-  <reg name="ifc_lp" bitsize="32" type="code_ptr" regnum="175"/>
+
+  <reg name="orig_r0" bitsize="32" regnum="37" group="system"/>
+  <reg name="fucpr" bitsize="32" regnum="38" group="system"/>
 </feature>

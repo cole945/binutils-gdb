@@ -202,15 +202,21 @@ case "${target}" in
 			srv_linux_usrregs=yes
 			srv_linux_thread_db=yes
 			;;
-  nds32*-*-linux*)	srv_regobj="reg-nds32.o"
-			srv_regobj="${srv_regobj} nds32-linux.o"
+  nds32*-*-linux*)	srv_regobj="nds32-linux.o"
+			srv_regobj="${srv_regobj} nds32-freg0-linux.o"
+			srv_regobj="${srv_regobj} nds32-freg1-linux.o"
+			srv_regobj="${srv_regobj} nds32-freg2-linux.o"
+			srv_regobj="${srv_regobj} nds32-freg3-linux.o"
 			srv_tgtobj="linux-low.o linux-osdata.o linux-nds32-low.o linux-procfs.o"
 			srv_tgtobj="${srv_tgtobj} linux-ptrace.o"
 			srv_xmlfiles="nds32-linux.xml"
 			srv_xmlfiles="${srv_xmlfiles} nds32-core.xml"
-			srv_xmlfiles="${srv_xmlfiles} nds32-core-linux.xml"
+			srv_xmlfiles="${srv_xmlfiles} nds32-freg0.xml"
+			srv_xmlfiles="${srv_xmlfiles} nds32-freg1.xml"
+			srv_xmlfiles="${srv_xmlfiles} nds32-freg2.xml"
+			srv_xmlfiles="${srv_xmlfiles} nds32-freg3.xml"
 			srv_linux_usrregs=yes
-			# srv_linux_regsets=yes  FIXME: When the damn 24-byte removed from kerenl.
+			srv_linux_regsets=yes
 			srv_linux_thread_db=yes
 			;;
   powerpc*-*-linux*)	srv_regobj="powerpc-32l.o"
