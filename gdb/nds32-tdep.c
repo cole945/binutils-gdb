@@ -1213,7 +1213,7 @@ nds32_frame_unwind_cache (struct frame_info *this_frame,
   info->base = get_frame_register_unsigned (this_frame, NDS32_FP_REGNUM);
   (*this_prologue_cache) = info;
 
-  if (info->base == 0 && nds32_config.use_stop_zfp)
+  if (info->base == 0)
     return info;
 
   pc = get_frame_func (this_frame);
@@ -1562,7 +1562,7 @@ nds32_frame_unwind_cache (struct frame_info *this_frame,
   next_base = get_frame_register_unsigned (this_frame, NDS32_SP_REGNUM);
   prev_sp = next_base + info->size;
   fp_base = get_frame_register_unsigned (this_frame, NDS32_FP_REGNUM);
-  if (info->use_frame && nds32_config.use_fp && fp_base > 0)
+  if (info->use_frame && fp_base > 0)
     {
       /* Try to use FP if possible. */
       prev_sp = fp_base - info->fp_offset;
@@ -2761,9 +2761,7 @@ static void
 nds32_load_config (struct nds32_gdb_config *config)
 {
   config->use_cfi = nds32_config_int ("USE_CFI", 1);
-  config->use_fp = nds32_config_int ("USE_FP", 1);
   config->use_abi = nds32_config_int ("USE_ABI", NDS32_ABI_AUTO);
-  config->use_stop_zfp = nds32_config_int ("USE_STOP_ZFP", 0);
 }
 
 /* Callback for "nds32" command.  */

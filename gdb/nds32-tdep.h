@@ -116,19 +116,9 @@ struct nds32_gdb_config
      Default true.  */
   int use_cfi;
 
-  /* Prefer $fp as framebase instead of analyzing $sp adjustion,
-     for dynamic stack, e.g., calling alloca (), this should be reliable.
-     Default true.  */
-  int use_fp;
-
   /* ABI for Inferior Call Setup.
      Default AUTO by reading ABI in ELF header.  */
   int use_abi;
-
-  /* Stop backtrace when $fp is 0. If the code does not use $fp
-     for frame setup, backtrace might be broken.
-     Default false.  */
-  int use_stop_zfp;
 };
 
 extern struct cmd_list_element *nds32_cmdlist;
