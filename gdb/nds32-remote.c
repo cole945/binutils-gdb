@@ -33,15 +33,8 @@
 #include "exceptions.h"		/* TRY_CATCH */
 #include <ctype.h>
 
-#include <elf/external.h>	/* Elf32_External_Ehdr */
-#include <elf/internal.h>	/* Elf_Internal_Ehdr */
-#include "elf-bfd.h"		/* elf_elfheader () */
-#include "observer.h"		/* observer_attach_inferior_created () */
-
 #include "nds32-remote.h"
 #include "nds32-tdep.h"
-
-#include "nds32-elf.h"
 
 char *nds32_qparts [] =
 {
@@ -644,143 +637,6 @@ end_query:
     }
 }
 
-/* Callback for elf-check.  */
-
-static unsigned int
-nds32_elf_check_get_register (unsigned int regno)
-{
-  ULONGEST regval;
-  struct regcache *regcache = get_current_regcache ();
-  struct gdbarch *gdbarch = get_regcache_arch (regcache);
-  int byte_order;
-  int regnum = -1;
-  gdb_byte regbuf[4] = { 0 };
-
-  if (nds32_remote_info.endian == BFD_ENDIAN_UNKNOWN)
-    byte_order = gdbarch_byte_order (gdbarch);
-  else
-    byte_order = nds32_remote_info.endian;
-
-  switch ((INDEX_HW_MASK & regno))
-    {
-    case INDEX_HW_CPU:
-      switch ((regno & SR_INDEX_MASK))
-	{
-	case CPU_SR_INDEX (0, 0, 0):	/* cr0 */
-	  regnum = user_reg_map_name_to_regnum (gdbarch, "cr0", -1);
-	  break;
-	case CPU_SR_INDEX (0, 1, 0):	/* cr1 */
-	  regnum = user_reg_map_name_to_regnum (gdbarch, "cr1", -1);
-	  break;
-	case CPU_SR_INDEX (0, 2, 0):	/* cr2 */
-	  regnum = user_reg_map_name_to_regnum (gdbarch, "cr2", -1);
-	  break;
-	case CPU_SR_INDEX (0, 3, 0):	/* cr3 */
-	  regnum = user_reg_map_name_to_regnum (gdbarch, "cr3", -1);
-	  break;
-	case CPU_SR_INDEX (0, 4, 0):	/* cr4 */
-	  regnum = user_reg_map_name_to_regnum (gdbarch, "cr4", -1);
-	  break;
-	case CPU_SR_INDEX (0, 0, 1):	/* cr5 */
-	  regnum = user_reg_map_name_to_regnum (gdbarch, "cr5", -1);
-	  break;
-	case CPU_SR_INDEX (0, 5, 0):	/* cr6 */
-	  regnum = user_reg_map_name_to_regnum (gdbarch, "cr6", -1);
-	  break;
-	default:
-	  return -1;
-	}
-
-      if (regnum == -1)
-	error ("Fail to access system registers for elf-check.");
-
-      /* Use target-endian instead of gdbarch-endian.  */
-      if (regcache_cooked_read (regcache, regnum, regbuf) != REG_VALID)
-	return -1;
-      regval = extract_unsigned_integer (regbuf, 4, byte_order);
-
-      return regval;
-    }
-
-  return -1;
-}
-
-/* Translate an ELF file header in internal format into an ELF file header in
-   external format.
-
-   elf_swap_ehdr_out () is copied from bfd/elfcode.h.  */
-
-#define Elf_External_Ehdr	Elf32_External_Ehdr
-#define H_PUT_WORD		H_PUT_32
-#define H_PUT_SIGNED_WORD	H_PUT_S32
-#define H_GET_WORD		H_GET_32
-#define H_GET_SIGNED_WORD	H_GET_S32
-
-static void
-elf_swap_ehdr_out (bfd *abfd, const Elf_Internal_Ehdr *src,
-		   Elf_External_Ehdr *dst)
-{
-  unsigned int tmp;
-  int signed_vma = get_elf_backend_data (abfd)->sign_extend_vma;
-
-  memcpy (dst->e_ident, src->e_ident, EI_NIDENT);
-  /* Note that all elements of dst are *arrays of unsigned char* already...  */
-  H_PUT_16 (abfd, src->e_type, dst->e_type);
-  H_PUT_16 (abfd, src->e_machine, dst->e_machine);
-  H_PUT_32 (abfd, src->e_version, dst->e_version);
-  if (signed_vma)
-    H_PUT_SIGNED_WORD (abfd, src->e_entry, dst->e_entry);
-  else
-    H_PUT_WORD (abfd, src->e_entry, dst->e_entry);
-  H_PUT_WORD (abfd, src->e_phoff, dst->e_phoff);
-  H_PUT_WORD (abfd, src->e_shoff, dst->e_shoff);
-  H_PUT_32 (abfd, src->e_flags, dst->e_flags);
-  H_PUT_16 (abfd, src->e_ehsize, dst->e_ehsize);
-  H_PUT_16 (abfd, src->e_phentsize, dst->e_phentsize);
-  tmp = src->e_phnum;
-  if (tmp > PN_XNUM)
-    tmp = PN_XNUM;
-  H_PUT_16 (abfd, tmp, dst->e_phnum);
-  H_PUT_16 (abfd, src->e_shentsize, dst->e_shentsize);
-  tmp = src->e_shnum;
-  if (tmp >= (SHN_LORESERVE & 0xffff))
-    tmp = SHN_UNDEF;
-  H_PUT_16 (abfd, tmp, dst->e_shnum);
-  tmp = src->e_shstrndx;
-  if (tmp >= (SHN_LORESERVE & 0xffff))
-    tmp = SHN_XINDEX & 0xffff;
-  H_PUT_16 (abfd, tmp, dst->e_shstrndx);
-}
-
-/* Callback for "nds32 elf-check" command.  */
-
-static void
-nds32_elf_check_command (char *arg, int from_tty)
-{
-  Elf_External_Ehdr x_ehdr;
-  Elf_Internal_Ehdr *i_ehdrp;
-  char check_msg[0x1000];
-  unsigned int buf_status = 0;
-  int err;
-
-  if (exec_bfd == NULL)
-    error (_("Cannot check ELF without executable.\n"
-	     "Use the \"file\" or \"exec-file\" command."));
-
-  /* elf-check with SID/ICE only. */
-  if (nds32_remote_info.type == nds32_rt_unknown)
-    return;
-
-  i_ehdrp = elf_elfheader (exec_bfd);
-  elf_swap_ehdr_out (exec_bfd, i_ehdrp, &x_ehdr);
-
-  err = elf_check ((unsigned char *) &x_ehdr, nds32_elf_check_get_register,
-		   check_msg, sizeof (check_msg), &buf_status);
-
-  if (err)
-    error ("%s", check_msg);
-}
-
 /* This is only used for SID.  Set command-line string.  */
 
 static void
@@ -871,12 +727,6 @@ void
 nds32_init_remote_cmds (void)
 {
   nds32_remote_info_init ();
-
-  /* nds32 elf-check */
-  add_cmd ("elf-check", class_files, nds32_elf_check_command,
-	   _("Check elf/target compatibility before loading. "
-	     "Throwing error if failed."),
-	   &nds32_cmdlist);
 
   /* nds32 set-gloss COMMAND_LINE */
   add_cmd ("set-gloss", class_files, nds32_set_gloss_command,
