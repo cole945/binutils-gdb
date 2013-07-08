@@ -48,13 +48,6 @@ void _initialize_nds32_linux_nat (void);
 
 #define GET_THREAD_ID(PTID)	get_thread_id (PTID)
 
-/* A flag for whether the AUDIO registers are available.  */
-static int nds32_linux_has_audio_registers;
-/* The number of FPU SP/DP registers we have (expect this to be 0,
-   16, or 32). */
-static int nds32_linux_fpu_sp_register_count;
-static int nds32_linux_fpu_dp_register_count;
-
 /* On GNU/Linux, threads are implemented as pseudo-processes, in which
    case we may be tracing more than one process at a time.  In that
    case, inferior_ptid will contain the main process ID and the
@@ -252,7 +245,7 @@ void
 fill_fpregset (const struct regcache *regcache,
 	       gdb_fpregset_t *fpregsetp, int regno)
 {
-  warning ("fill_fpregset not implemented");
+  warning (_("fill_fpregset not implemented"));
 }
 
 /* Fill GDB's register array with the floating-point register values
@@ -261,13 +254,13 @@ fill_fpregset (const struct regcache *regcache,
 void
 supply_fpregset (struct regcache *regcache, const gdb_fpregset_t *fpregsetp)
 {
-  warning ("supply_fpregset not implemented");
+  warning (_("supply_fpregset not implemented"));
 }
 
 /* Fetch the thread-local storage pointer for libthread_db.  */
 
 #if 0
-/* TODO: TLS is not supported.  */
+/* TODO: TLS is not supported, yet.  */
 
 ps_err_e
 ps_get_thread_area (const struct ps_prochandle *ph,

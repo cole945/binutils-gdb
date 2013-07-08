@@ -55,7 +55,7 @@ end
 set $nds32_force_ifc_return = 1
 define hook-stop
   if $_nds32_target_type
-     if ((int)$ir0 & 0x8000) && $ifc_lp && $nds32_force_ifc_return
+     if ((int) $ir0 & 0x8000) && $ifc_lp && $nds32_force_ifc_return
        advance *$ifc_lp
      end
   end
@@ -98,9 +98,6 @@ define hook-restore
     else
       monitor nds cache invalidate
     end
-    # if ((int)$cr0 >> 24) != 12
-    #   maintenance packet qPart:nds32:request:MemAccBus
-    # end
     set $old_mr8 = $mr8
     set $mr8 = 0
   end
@@ -109,9 +106,6 @@ end
 define hookpost-restore
   if $_nds32_target_type
     set $mr8 = $old_mr8
-    # if ((int)$cr0 >> 24) != 12
-    #   maintenance packet qPart:nds32:request:MemAccCPU
-    # end
   end
 end
 

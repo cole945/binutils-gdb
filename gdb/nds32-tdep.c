@@ -2716,7 +2716,7 @@ nds32_dump_command (char *arg, int from_tty)
 
   if (arg == NULL)
     {
-      printf_unfiltered ("filename to put dump should be given\n");
+      printf_unfiltered (_("Missing filename argument.\n"));
       return;
     }
 
@@ -2730,7 +2730,7 @@ nds32_dump_command (char *arg, int from_tty)
   f_script = fopen (cmdline, "w");
   if (f_script == NULL)
     {
-      printf_unfiltered ("fail to generate dump .gdbinit");
+      printf_unfiltered (_("Fail to generate dump .gdbinit."));
       return ;
     }
 
@@ -2769,7 +2769,7 @@ nds32_load_config (struct nds32_gdb_config *config)
 static void
 nds32_command (char *arg, int from_tty)
 {
-  printf_unfiltered ("\"nds32\" must be followed by arguments\n");
+  printf_unfiltered (_("\"nds32\" must be followed by arguments\n"));
 }
 
 struct cmd_list_element *nds32_cmdlist;
