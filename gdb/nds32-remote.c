@@ -605,7 +605,8 @@ nds32_query_target_using_qrcmd (void)
     nds32_remote_info.type = nds32_rt_ocd;
   else
     {
-      printf ("Unknown remote target %s\n", ui_buf.buf);
+      printf_unfiltered (_("Unknown remote target %s\n"),
+			 ui_buf.buf);
       goto out;
     }
 
