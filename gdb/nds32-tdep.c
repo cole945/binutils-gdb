@@ -61,7 +61,7 @@
 extern void _initialize_nds32_tdep (void);
 
 /* The standard register names.  */
-static char *nds32_regnames[] =
+static const char *nds32_regnames[] =
 {
   /* 32 GPRs.  */
   "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
@@ -81,7 +81,7 @@ struct nds32_register_alias
 };
 
 /* Register alias for user_reg_map_name_to_regnum ().  */
-struct nds32_register_alias nds32_register_aliases[] =
+static const struct nds32_register_alias nds32_register_aliases[] =
 {
   {"r15", "ta"},
   {"r26", "p0"},
@@ -762,14 +762,14 @@ nds32_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 static const char *
 nds32_register_name (struct gdbarch *gdbarch, int regnum)
 {
-  static char *fpu_pseudo_names[] =
+  static const char *fpu_pseudo_names[] =
   {
     "fs0", "fs1", "fs2", "fs3", "fs4", "fs5", "fs6", "fs7",
     "fs8", "fs9", "fs10", "fs11", "fs12", "fs13", "fs14", "fs15",
     "fs16", "fs17", "fs18", "fs19", "fs20", "fs21", "fs22", "fs23",
     "fs24", "fs25", "fs26", "fs27", "fs28", "fs29", "fs30", "fs31"
   };
-  static char *sim_names[] =
+  static const char *sim_names[] =
   {
     "fd0", "fd1", "fd2", "fd3", "fd4", "fd5", "fd6", "fd7",
     "fd8", "fd9", "fd10", "fd11", "fd12", "fd13", "fd14", "fd15",
@@ -1744,7 +1744,7 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   CORE_ADDR regval;
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-  int use_spill;
+  int partial_bytes;
   int use_fpr;
   int fs0_regnum = -1, fd0_regnum = -1;
 
@@ -1752,10 +1752,10 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
     {
     case NDS32_ABI_V2:
     case NDS32_ABI_V2FP:
-      use_spill = FALSE;
+      partial_bytes = FALSE;
       break;
     default:
-      use_spill = TRUE;
+      partial_bytes = TRUE;
     break;
   }
 
@@ -1855,7 +1855,7 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 	{
 	  /* Adjust alignment, and only adjust one time for one argument.  */
 	  goff = (goff + ((align - 1) >> 2)) & ~((align - 1) >> 2);
-	  if (!use_spill && len > (REND - goff) * 4)
+	  if (!partial_bytes && len > (REND - goff) * 4)
 	    goff = REND;
 	}
 
