@@ -1,4 +1,4 @@
-/* Common target dependent code for GDB on nds32 systems.
+/* Target-dependent code for NDS32 architecture, for GDB.
 
    Copyright (C) 2006-2013 Free Software Foundation, Inc.
    Contributed by Andes Technology Corporation.
@@ -161,7 +161,7 @@ nds32_value_of_reg (struct frame_info *frame, const void *baton)
   return value_of_register (regnum, frame);
 }
 
-/* gdbarch_frame_align () */
+/* Implement the gdbarch_frame_align method.  */
 
 static CORE_ADDR
 nds32_frame_align (struct gdbarch *gdbarch, CORE_ADDR sp)
@@ -214,6 +214,8 @@ nds32_dwarf_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int num)
   /* No match, return a inaccessible register number.  */
   return gdbarch_num_regs (gdbarch) + gdbarch_num_pseudo_regs (gdbarch);
 }
+
+/* Implement gdbarch_register_sim_regno method.  */
 
 static int
 nds32_register_sim_regno (struct gdbarch *gdbarch, int regnum)
@@ -595,12 +597,11 @@ nds32_alloc_types (struct gdbarch *gdbarch)
   nds32_type_insert (tdep->type_tab, "cr6", type);
 }
 
-/* gdbarch_register_type ()
+/* Implement gdbarch_register_type method.
 
-   Return the GDB type object for the "standard" data type
-   of data in register N.
-   It get pretty messy here. I need enum-types and bit-fields
-   for better representation. But they cannot be done by
+   Return the GDB type object for the "standard" data type of data in
+   register REGNUM.  It get pretty messy here.  I want to specify a type
+   on a bit-field for better representation, but they cannot be done by
    tdesc-xml.  */
 
 static struct type *
@@ -1937,13 +1938,13 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   return sp;
 
 error_no_fpr:
-  /* If use_fpr, but no fs reigster exists, then it is an error.  */
-  /* FIXME: Restore stack.  */
+  /* If use_fpr, but no floating-point register exists,
+     then it is an error.  */
   error (_("Fail to call. FS0-FS5 is required."));
 }
 
-/* Given a return value in `regbuf' with a type `valtype',
-   extract and copy its value into `valbuf'.  */
+/* Extract the value to be returned from REGCACHE and copy it into
+   REGBUF.  */
 
 static void
 nds32_extract_return_value (struct type *type, struct regcache *regcache,
@@ -1959,8 +1960,9 @@ nds32_extract_return_value (struct type *type, struct regcache *regcache,
 
   use_fpr = (tdep->nds32_abi == NDS32_ABI_V2FP);
 
-  /* TODO: one-float, one-double is special case in V2FP.
-     Passed in FS/FD */
+  /* Although struct are returned in r0/r1 registers, but struct have
+     only one single/double floating-point member are returned in FS/FD
+     registers.  */
   gdb_assert (TYPE_LENGTH (type) <= 8);
   if (nds32_float_in_struct (type))
     typecode = TYPE_CODE_FLT;
@@ -2043,9 +2045,7 @@ nds32_extract_return_value (struct type *type, struct regcache *regcache,
     }
 }
 
-/* Write into appropriate registers a function return value
-   of type TYPE, given in virtual format.
-   Things always get returned in RET1_REGNUM, RET2_REGNUM.  */
+/* Store the return value of TYPE in WRITEBUF into REGCACHE.  */
 
 static void
 nds32_store_return_value (struct type *type, struct regcache *regcache,
@@ -2061,8 +2061,9 @@ nds32_store_return_value (struct type *type, struct regcache *regcache,
 
   use_fpr = (tdep->nds32_abi == NDS32_ABI_V2FP);
 
-  /* TODO: one-float, one-double is special case in V2FP.
-     Passed in FS/FD */
+  /* Although struct are returned in r0/r1 registers, but struct have
+     only one single/double floating-point member are returned in FS/FD
+     registers.  */
   gdb_assert (TYPE_LENGTH (type) <= 8);
   if (nds32_float_in_struct (type))
     typecode = TYPE_CODE_FLT;
@@ -2302,6 +2303,8 @@ static const struct frame_base nds32_frame_base =
   nds32_frame_base_address
 };
 
+/* Implement the gdbarch_overlay_update method.  */
+
 static void
 nds32_simple_overlay_update (struct obj_section *osect)
 {
@@ -2322,6 +2325,8 @@ nds32_simple_overlay_update (struct obj_section *osect)
   simple_overlay_update (osect);
 }
 
+/* Implement gdbarch_print_insn method.  */
+
 static int
 gdb_print_insn_nds32 (bfd_vma memaddr, disassemble_info *info)
 {
@@ -2329,8 +2334,15 @@ gdb_print_insn_nds32 (bfd_vma memaddr, disassemble_info *info)
   struct obj_section * s = find_pc_section (memaddr);
   struct cleanup *back_to;
 
-  /* Reload symtab if abfd changed.
-     In case there are multiple ITB in different shared objects.  */
+  /* When disassembling ex9 instructions, they are annotated with
+     the original instructions at the end of line.  For example,
+
+	0x00500122 <+82>:    ex9.it #4		! movi $r13, 10
+
+     Dissembler needs the symbol table to extract the original instruction
+     in _ITB_BASE_ table.  If the object file is changed, reload symbol
+     table.  */
+
   if (s == NULL || info->section != s->the_bfd_section)
     {
       xfree (info->symtab);
