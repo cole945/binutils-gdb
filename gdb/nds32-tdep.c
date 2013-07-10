@@ -2288,117 +2288,6 @@ static const struct frame_unwind nds32_frame_unwind =
   default_frame_sniffer
 };
 
-/* Signal trampolines.  */
-
-static struct nds32_unwind_cache *
-nds32_sigtramp_frame_cache (struct frame_info *this_frame, void **this_cache)
-{
-  struct nds32_unwind_cache *cache;
-  CORE_ADDR addr;
-  gdb_byte buf[4];
-  struct gdbarch *gdbarch = get_frame_arch (this_frame);
-  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-  enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
-
-  if (*this_cache)
-    return *this_cache;
-
-  cache = nds32_alloc_frame_cache (this_frame);
-
-  cache->base = get_frame_register_unsigned (this_frame, NDS32_SP_REGNUM);
-
-  addr = tdep->sigcontext_addr (this_frame);
-
-  if (tdep->sc_reg_offset)
-    {
-      int i;
-
-      /* GPRs, PC and d[01](lo|hi) */
-      gdb_assert (tdep->sc_num_regs <= 37);
-
-      for (i = 0; i < tdep->sc_num_regs; i++)
-	if (tdep->sc_reg_offset[i] != -1)
-	  cache->saved_regs[i].addr = addr + tdep->sc_reg_offset[i];
-    }
-  else
-    {
-      cache->saved_regs[NDS32_PC_REGNUM].addr = addr + tdep->sc_pc_offset;
-      cache->saved_regs[NDS32_LP_REGNUM].addr = addr + tdep->sc_lp_offset;
-      cache->saved_regs[NDS32_SP_REGNUM].addr = addr + tdep->sc_sp_offset;
-      cache->saved_regs[NDS32_FP_REGNUM].addr = addr + tdep->sc_fp_offset;
-    }
-
-  *this_cache = cache;
-  return cache;
-}
-
-static void
-nds32_sigtramp_frame_this_id (struct frame_info *this_frame,
-			      void **this_cache, struct frame_id *this_id)
-{
-  struct nds32_unwind_cache *cache;
-
-  cache = nds32_sigtramp_frame_cache (this_frame, this_cache);
-
-  (*this_id) = frame_id_build (cache->base, get_frame_pc (this_frame));
-}
-
-static struct value *
-nds32_sigtramp_frame_prev_register (struct frame_info *this_frame,
-				    void **this_cache, int regnum)
-{
-  struct nds32_unwind_cache *cache;
-
-  /* Make sure we've initialized the cache.  */
-  cache = nds32_sigtramp_frame_cache (this_frame, this_cache);
-
-  /* For signal frame, unwind PC for PC and LP for LP;
-     otherwise, we will fail to unwind a leaf-function.
-     This different from unwinding a normal-frame.  */
-  return trad_frame_get_prev_register (this_frame, cache->saved_regs, regnum);
-}
-
-static int
-nds32_sigtramp_frame_sniffer (const struct frame_unwind *self,
-			      struct frame_info *this_frame,
-			      void **this_prologue_cache)
-{
-  struct gdbarch_tdep *tdep = gdbarch_tdep (get_frame_arch (this_frame));
-
-  /* We shouldn't even bother if we don't have a sigcontext_addr
-     handler.  */
-  if (tdep->sigcontext_addr == NULL)
-    return 0;
-
-  if (tdep->sigtramp_p != NULL)
-    {
-      if (tdep->sigtramp_p (this_frame))
-	return 1;
-    }
-
-#if 0
-    /* TODO: extend the sniffer as following if (tdep->sigtramp_start != 0) */
-    {
-      CORE_ADDR pc = frame_pc_unwind (this_frame);
-
-      gdb_assert (tdep->sigtramp_end != 0);
-      if (pc >= tdep->sigtramp_start && pc < tdep->sigtramp_end)
-	return &nds32_sigtramp_frame_unwind;
-    }
-#endif
-  return 0;
-}
-
-static const struct frame_unwind nds32_sigtramp_frame_unwind =
-{
-  SIGTRAMP_FRAME,
-  default_frame_unwind_stop_reason,
-  nds32_sigtramp_frame_this_id,
-  nds32_sigtramp_frame_prev_register,
-  NULL /* unwind_data */,
-  nds32_sigtramp_frame_sniffer
-};
-
 static CORE_ADDR
 nds32_frame_base_address (struct frame_info *this_frame, void **this_cache)
 {
@@ -2598,13 +2487,6 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   if (nds32_config.use_abi != NDS32_ABI_AUTO)
     tdep->nds32_abi = nds32_config.use_abi;
 
-  /* Set offsets for signal context.  */
-  tdep->sigtramp_p = NULL;
-  tdep->sigcontext_addr = NULL;
-  tdep->sc_pc_offset = -1;
-  tdep->sc_sp_offset = -1;
-  tdep->sc_fp_offset = -1;
-
   /* If there is already a candidate, use it.  */
   for (best_arch = gdbarch_list_lookup_by_info (arches, &info);
        best_arch != NULL;
@@ -2675,7 +2557,6 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   dwarf2_frame_set_init_reg (gdbarch, nds32_dwarf2_frame_init_reg);
   if (nds32_config.use_cfi)
     dwarf2_append_unwinders (gdbarch);
-  frame_unwind_append_unwinder (gdbarch, &nds32_sigtramp_frame_unwind);
   frame_unwind_append_unwinder (gdbarch, &nds32_frame_unwind);
 
   /* Add nds32 register aliases.  */
