@@ -57,29 +57,16 @@ enum nds32_regnum
   NDS32_SIM_NUM_REGS,
 };
 
-/* All the possible NDS32 ABIs.  They must be consistent with elf/nds32.h.  */
-enum nds32_abi
-{
-  NDS32_ABI_V0 = 0,
-  NDS32_ABI_V1,
-  NDS32_ABI_V2,
-  NDS32_ABI_V2FP,
-  NDS32_ABI_AABI,
-  NDS32_ABI_END,
-  NDS32_ABI_BEGIN = NDS32_ABI_V0,
-  /* ABI flag is only 4-bits long.  */
-  NDS32_ABI_AUTO = 0xFFFFFFFF
-};
-
 struct htab;
 struct gdbarch_tdep
 {
-  /* ABI version */
-  enum nds32_abi nds32_abi;
   /* The configuration of FPU FREG.  */
   int fpu_freg;
 
-  unsigned int eflags;
+  /* Large arguments are split between registers and stack.  */
+  int abi_split;
+  /* Set if fs0-fs5 are used to pass arguments.  */
+  int abi_use_fpr;
 
   /* Type table for registers.  */
   struct htab *type_tab;
