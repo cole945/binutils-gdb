@@ -893,14 +893,14 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
   if (pl_endptr == NULL)
     return 0;
 
-  /* Look up end of prologue */
+  /* Look up end of prologue.  */
   for (; pc < scan_limit; )
     {
       insn = read_memory_unsigned_integer (pc, 4, BFD_ENDIAN_BIG);
 
       if ((insn & 0x80000000) == 0)
 	{
-	  /* 32-bit instruction */
+	  /* 32-bit instruction.  */
 
 	  pc += 4;
 	  if (insn == N32_ALU1 (ADD, REG_GP, REG_TA, REG_GP))
@@ -956,22 +956,9 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 	      /* bit-5 for SMW */
 
 	      /* smwa?.(a|b)(d|i)m? rb,[ra],re,enable4 */
+	      int ra;
 
-	      int rb, re, ra, enable4, i;
-	      int aligned;
-	      int m = 0;
-	      int di;		/* dec=-1 or inc=1 */
-	      char enb4map[2][4] = {
-		  {0, 1, 2, 3} /* smw */,
-		  {3, 1, 2, 0} /* smwa */};
-	      LONGEST base = ~1 + 1;
-
-	      rb = N32_RT5 (insn);
 	      ra = N32_RA5 (insn);
-	      re = N32_RB5 (insn);
-	      enable4 = (insn >> 6) & 0x0F;
-	      aligned = (insn & 3) ? 1 : 0;
-	      di = (insn & (1 << 3)) ? -1 : 1;
 
 	      switch (ra)
 		{
@@ -1286,7 +1273,7 @@ nds32_frame_unwind_cache (struct frame_info *this_frame,
 		 e.g., [ lp ] ___ base shoule be here.
 		       [ fp ]
 		       [ r6 ] */
-	      LONGEST base = ~1 + 1;
+	      ULONGEST base = -1;
 
 	      rb = N32_RT5 (insn);
 	      ra = N32_RA5 (insn);
@@ -1326,11 +1313,12 @@ nds32_frame_unwind_cache (struct frame_info *this_frame,
 		  info->sp_offset += m * di;
 		  break;
 		default:
-		  /* sorry, only ra==sp || ra==fp is handled */
+		  /* Only RA is FP or SP is handled.  */
+		  base = -1;
 		  break;
 		}
-	      if (base == ~1 + 1)
-		break;	  /* skip */
+	      if (base == -1)
+		break;	  /* Exit the loop.  */
 
 	      if (insn & (1 << 0x4))	/* b:0, a:1 */
 		base += 4 * di;		/* a: use Ra+4 (for i),
@@ -1446,7 +1434,6 @@ nds32_frame_unwind_cache (struct frame_info *this_frame,
 	      continue;
 	    }
 
-	  /* TODO: Handle mfsr and addi for interrupt handlers.  */
 	  break;
 	}
       else
