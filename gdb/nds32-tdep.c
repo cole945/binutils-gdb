@@ -179,8 +179,8 @@ nds32_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr,
   static const gdb_byte NDS32_BREAK16[] = { 0xEA, 0x00 };
   const unsigned char *bp;
 
-  gdb_assert (pcptr);
-  gdb_assert (lenptr);
+  gdb_assert (pcptr != NULL);
+  gdb_assert (lenptr != NULL);
 
   if ((*pcptr) & 1)
     error (_("Bad address %p for inserting breakpoint.\n"
@@ -627,14 +627,14 @@ nds32_register_type (struct gdbarch *gdbarch, int regnum)
   if (reg_name == NULL)
     reg_name = "";
   type = nds32_type_lookup (tdep->type_tab, reg_name);
-  if (type)
+  if (type != NULL)
     return type;
 
   /* Type provided by target-description.  */
   if (tdesc_has_registers (gdbarch_target_desc (gdbarch)))
     {
       type = tdesc_register_type (gdbarch, regnum);
-      if (type)
+      if (type != NULL)
 	return type;
     }
 
@@ -726,7 +726,7 @@ nds32_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
       "cr", "ir", "mr", "dr", "pfr", "dmar", "racr", "idr"
   };
 
-  gdb_assert (sizeof (groups) == sizeof (prefix));
+  gdb_assert (ARRAY_SIZE (groups) == ARRAY_SIZE (prefix));
 
   /* GPRs. */
   if (group == general_reggroup)
@@ -1713,7 +1713,7 @@ nds32_type_align (struct type *type)
 
   /* For structs with only one float/double are treated as float/double.  */
   align = nds32_float_in_struct (type);
-  if (align)
+  if (align != 0)
     return align;
 
   for (i = 0; i < TYPE_NFIELDS (type); i++)
@@ -2445,7 +2445,7 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
       /* Find register configuration of FPU.  */
       feature = tdesc_find_feature (tdesc, "org.gnu.gdb.nds32.fpu");
-      if (feature)
+      if (feature != NULL)
 	{
 	  if (tdesc_unnumbered_register (feature, "fd31"))
 	    fpregs = 3;
