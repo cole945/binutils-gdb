@@ -62,8 +62,6 @@
 
 extern void _initialize_nds32_tdep (void);
 
-struct nds32_gdb_config nds32_config;
-
 /* The standard register names.  */
 static char *nds32_regnames[] =
 {
@@ -2483,10 +2481,6 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   tdep->nds32_abi = nds32_abi;
   tdep->eflags = eflags;
 
-  /* Overwrite ABI if set explicitly.  */
-  if (nds32_config.use_abi != NDS32_ABI_AUTO)
-    tdep->nds32_abi = nds32_config.use_abi;
-
   /* If there is already a candidate, use it.  */
   for (best_arch = gdbarch_list_lookup_by_info (arches, &info);
        best_arch != NULL;
@@ -2555,8 +2549,7 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   /* The order of appending is the order it check frame.  */
   dwarf2_frame_set_init_reg (gdbarch, nds32_dwarf2_frame_init_reg);
-  if (nds32_config.use_cfi)
-    dwarf2_append_unwinders (gdbarch);
+  dwarf2_append_unwinders (gdbarch);
   frame_unwind_append_unwinder (gdbarch, &nds32_frame_unwind);
 
   /* Add nds32 register aliases.  */
@@ -2626,25 +2619,6 @@ nds32_dump_command (char *arg, int from_tty)
   fclose (f_script);
 }
 
-static int
-nds32_config_int (const char *str, int def)
-{
-  int val = def;
-
-  if (getenv (str))
-    val = atoi (getenv (str));
-  if (val != def)
-    printf ("%s=%d\n", str, val);
-  return val;
-}
-
-static void
-nds32_load_config (struct nds32_gdb_config *config)
-{
-  config->use_cfi = nds32_config_int ("USE_CFI", 1);
-  config->use_abi = nds32_config_int ("USE_ABI", NDS32_ABI_AUTO);
-}
-
 /* Callback for "nds32" command.  */
 
 static void
@@ -2658,9 +2632,6 @@ struct cmd_list_element *nds32_cmdlist;
 void
 _initialize_nds32_tdep (void)
 {
-  /* Internal used config for testing.  */
-  nds32_load_config (&nds32_config);
-
   add_prefix_cmd ("nds32", no_class, nds32_command,
 		  _("Various nds32-specific commands."), &nds32_cmdlist,
 		  "nds32 ", 0, &cmdlist);
