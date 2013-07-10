@@ -167,7 +167,7 @@ static CORE_ADDR
 nds32_frame_align (struct gdbarch *gdbarch, CORE_ADDR sp)
 {
   /* 8-byte aligned.  */
-  return sp & ~(8 - 1);
+  return align_down (sp, 8);
 }
 
 /* Implement the gdbarch_breakpoint_from_pc method.  */
@@ -1792,12 +1792,12 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
       if (align)
 	{
 	  /* FIXME: Handle empty structure?  */
-	  sp &= ~(align - 1);
+	  sp = align_down (sp, align);
 	}
     }
 
   /* Stack must be 8-byte aligned.  */
-  sp = sp & ~7;
+  sp = align_down (sp, 8);
 
   soff = 0;
   for (i = 0; i < nargs; i++)
@@ -1826,7 +1826,8 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
       if (use_fpr && typecode == TYPE_CODE_FLT)
 	{
 	  /* Adjust alignment.  */
-	  foff = (foff + ((align - 1) >> 2)) & ~((align - 1) >> 2);
+	  if ((align >> 2) > 0)
+	    foff = align_up (foff, align >> 2);
 
 	  if (foff < REND && !soff)
 	    {
@@ -1855,7 +1856,8 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
       else if (!soff)
 	{
 	  /* Adjust alignment, and only adjust one time for one argument.  */
-	  goff = (goff + ((align - 1) >> 2)) & ~((align - 1) >> 2);
+	  if ((align >> 2) > 0)
+	    goff = align_up (goff, align >> 2);
 	  if (!partial_bytes && len > (REND - goff) * 4)
 	    goff = REND;
 	}
@@ -1902,7 +1904,7 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
        */
 
       if (len > 4)
-	len = (len + 0x3) & ~0x3;
+	len = align_up (len, 4);
 
       while (len > 0)
 	{
