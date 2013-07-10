@@ -61,8 +61,8 @@ nds32_execute_command (char *cmd, char *arg, int from_tty)
   if (arg == NULL)
     arg = "";
   len = strlen (arg) + strlen (cmd) + 2;
-  if (len > 1024)
-    error (_("Command line too long."));
+
+  gdb_assert (len < 1024);
 
   line = alloca (len);
   memset (line, 0, len);
