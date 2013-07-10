@@ -1,4 +1,4 @@
-/* Common target dependent code for GDB on nds32 systems.
+/* Target-dependent header for NDS32 architecture, for GDB.
 
    Copyright (C) 2006-2013 Free Software Foundation, Inc.
    Contributed by Andes Technology Corporation.
@@ -71,11 +71,6 @@ enum nds32_abi
   NDS32_ABI_AUTO = 0xFFFFFFFF
 };
 
-/* ----------------------------------------------
-   31   28 27                 8 7   4 3       0
-   ----------------------------------------------
-   | ARCH | CONFUGURAION FIELD | ABI | VERSION  |
-   ---------------------------------------------- */
 struct htab;
 struct gdbarch_tdep
 {
