@@ -60,10 +60,7 @@ nds32_remote_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr,
 
   /* ICEman/AICE have trouble on reading memory when the pcptr is P/A,
      but CPU is in V/A mode.  This code prevent GDB from reading memory.
-     ICEman will read memory itself if needed.
-
-     See: Bug 7430 - GDB can't set a hardware break point with PA
-	  if IT/DT is on.  */
+     ICEman will read memory itself if needed.  */
 
   *kindptr = 2;
 }
