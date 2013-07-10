@@ -50,6 +50,56 @@ struct
   enum bfd_endian endian;
 } nds32_remote_info;
 
+
+/* UI buffer for output redirection.  */
+
+struct ui_file_buffer
+{
+  unsigned char *buf;
+  long buf_size;
+};
+
+/* ui_file_put_method_ftype.
+
+   This is used with mem_file_put to get the content of
+   the internal stream buffer.  */
+
+static void
+do_ui_file_put_memcpy (void *object, const char *buffer, long length_buffer)
+{
+  struct ui_file_buffer *ui_buf;
+
+  ui_buf = (struct ui_file_buffer *) object;
+  if (ui_buf->buf_size < length_buffer)
+    {
+      /* Double the buffer when running out of space.
+	 If it is too large, expand 1KB a time.  */
+      if (length_buffer < 256 * 1024)
+	ui_buf->buf_size = length_buffer += 1024;
+      else
+	ui_buf->buf_size = length_buffer * 2;
+      ui_buf->buf = xrealloc (ui_buf->buf, ui_buf->buf_size);
+    }
+
+  memcpy (ui_buf->buf, buffer, length_buffer);
+}
+
+static void
+ui_file_buffer_init (struct ui_file_buffer *ub, int size)
+{
+  ub->buf_size = size;
+  ub->buf = xmalloc (size);
+}
+
+static void
+free_ui_file_buffer (void *ptr)
+{
+  struct ui_file_buffer *ui_buf = (struct ui_file_buffer *) ptr;
+
+  xfree (ui_buf->buf);
+}
+
+
 /* Wrapper for execute a GDB CLI command.  */
 
 static void
