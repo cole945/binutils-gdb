@@ -1,4 +1,4 @@
-/* Common target dependent code for GDB on nds32 systems.
+/* Commands for communication with NDS32 remote target.
 
    Copyright (C) 2006-2013 Free Software Foundation, Inc.
    Contributed by Andes Technology Corporation.
