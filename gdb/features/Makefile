@@ -60,8 +60,6 @@ WHICH = aarch64 \
 	mips-linux mips-dsp-linux \
 	microblaze-with-stack-protect \
 	mips64-linux mips64-dsp-linux \
-	nds32-linux nds32-freg0-linux nds32-freg1-linux nds32-freg2-linux \
-	nds32-freg3-linux \
 	nios2-linux \
 	rs6000/powerpc-32 \
 	rs6000/powerpc-32l rs6000/powerpc-altivec32l rs6000/powerpc-e500l \
@@ -105,11 +103,6 @@ mips-expedite = r29,pc
 mips-dsp-expedite = r29,pc
 mips64-expedite = r29,pc
 mips64-dsp-expedite = r29,pc
-nds32-linux-expedite = fp,sp,pc
-nds32-freg0-linux-expedite = fp,sp,pc
-nds32-freg1-linux-expedite = fp,sp,pc
-nds32-freg2-linux-expedite = fp,sp,pc
-nds32-freg3-linux-expedite = fp,sp,pc
 microblaze-expedite = r1,rpc
 nios2-linux-expedite = sp,pc
 powerpc-expedite = r1,pc

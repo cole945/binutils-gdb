@@ -86,24 +86,6 @@ struct gdbarch_tdep
 
   unsigned int eflags;
 
-  /* Detect sigtramp.  */
-  int (*sigtramp_p) (struct frame_info *);
-
-  /* Get address of sigcontext for sigtramp.  */
-    CORE_ADDR (*sigcontext_addr) (struct frame_info *);
-
-  /* Offset of saved PC in jmp_buf.  */
-  /* TODO: int jb_pc_offset; */
-
-  /* Offset of saved PC and SP in `struct sigcontext'. */
-  int sc_pc_offset;
-  int sc_lp_offset;
-  int sc_sp_offset;
-  int sc_fp_offset;
-
-  int *sc_reg_offset;
-  int sc_num_regs;
-
   /* Type table for registers.  */
   struct htab *type_tab;
 };
