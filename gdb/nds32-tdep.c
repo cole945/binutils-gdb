@@ -1325,8 +1325,7 @@ nds32_frame_unwind_cache (struct frame_info *this_frame,
 					      or Ra-4 (for d) */
 	      /* else base = base;	b use Ra */
 
-	      /* Cole 3th Nov. 2010
-		 We should consider both increasing and decreasing case.
+	      /* We should consider both increasing and decreasing case.
 
 		 Either case stores registers in the same order.
 		 To simplify the code (yes, the loops),
@@ -1582,7 +1581,6 @@ nds32_skip_permanent_breakpoint (struct regcache *regcache)
   /* On nds32, breakpoint may be BREAK or BREAK16.  */
   insn = read_memory_unsigned_integer (current_pc, 4, BFD_ENDIAN_BIG);
 
-  /* FIXME: Review this code.  */
   if (N32_OP6 (insn) == N32_OP6_MISC && N32_SUB5 (insn) == N32_MISC_BREAK)
     current_pc += 4;
   else if (__GF (insn, 9, 6) == 35 && N16_IMM9U (insn) < 32)
@@ -1725,30 +1723,15 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   int foff = 0;			/* Currnet gpr for argument.  */
   int soff = 0;			/* Current stack offset.  */
   int i;
-  struct type *type;
   enum type_code typecode;
   CORE_ADDR regval;
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-  int partial_bytes;
-  int use_fpr;
   int fs0_regnum = -1, fd0_regnum = -1;
 
-  switch (tdep->nds32_abi)
+  if (tdep->abi_use_fpr)
     {
-    case NDS32_ABI_V2:
-    case NDS32_ABI_V2FP:
-      partial_bytes = FALSE;
-      break;
-    default:
-      partial_bytes = TRUE;
-    break;
-  }
-
-  /* Use FP registers for calling iff when ABI==V2FP.  */
-  use_fpr = (tdep->nds32_abi == NDS32_ABI_V2FP);
-  if (use_fpr)
-    {
+      /* Use FP registers to pass arguments.  */
       fs0_regnum = user_reg_map_name_to_regnum (gdbarch, "fs0", -1);
       fd0_regnum = user_reg_map_name_to_regnum (gdbarch, "fd0", -1);
     }
@@ -1772,15 +1755,17 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
       struct type *type = value_type (args[i]);
       int align = nds32_type_align (type);
 
-      gdb_assert (align != 0);
+      /* If align is zero, it may be an empty struct.
+	 Just ignore the argument of empty struct.  */
+      if (align == 0)
+	continue;
+
       sp -= TYPE_LENGTH (type);
-      if (align)
-	{
-	  /* FIXME: Handle empty structure?  */
-	  sp = align_down (sp, align);
-	}
+      sp = align_down (sp, align);
     }
 
+  /* Allocate 24-byte for ABI V1.  */
+  sp -= 24;
   /* Stack must be 8-byte aligned.  */
   sp = align_down (sp, 8);
 
@@ -1789,6 +1774,7 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
     {
       const gdb_byte *val;
       int align, len;
+      struct type *type;
 
       type = value_type (args[i]);
       typecode = TYPE_CODE (type);
@@ -1799,16 +1785,16 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 	align = nds32_type_align (type);
       len = TYPE_LENGTH (type);
 
-      /* TODO: handle variables-size argument and variable-length arguments
-
-	 COLE, GDB cannot know whether a type is variable-sized,
-	       so we don't know whether push it as reference or value.  */
+      /* For current ABI, the caller pushes arguments in registers,
+	 callee stores unnamed arguments in stack,
+	 and then va_arg fetch arguments in stack.
+	 Therefore, we don't have to handle variadic function specially.  */
 
       val = value_contents (args[i]);
 
       /* Once we start using stack, all arguments should go to stack
 	 When use_fpr, all flt must go to fs/fd; otherwise go to stack.  */
-      if (use_fpr && typecode == TYPE_CODE_FLT)
+      if (tdep->abi_use_fpr && typecode == TYPE_CODE_FLT)
 	{
 	  /* Adjust alignment.  */
 	  if ((align >> 2) > 0)
@@ -1816,7 +1802,7 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 
 	  if (foff < REND && !soff)
 	    {
-	      if (use_fpr && fs0_regnum == -1)
+	      if (tdep->abi_use_fpr && fs0_regnum == -1)
 		goto error_no_fpr;
 
 	      switch (len)
@@ -1843,7 +1829,7 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 	  /* Adjust alignment, and only adjust one time for one argument.  */
 	  if ((align >> 2) > 0)
 	    goff = align_up (goff, align >> 2);
-	  if (!partial_bytes && len > (REND - goff) * 4)
+	  if (!tdep->abi_split && len > (REND - goff) * 4)
 	    goff = REND;
 	}
 
@@ -1894,7 +1880,7 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
       while (len > 0)
 	{
 	  if (soff
-	      || (typecode == TYPE_CODE_FLT && use_fpr && foff == REND)
+	      || (typecode == TYPE_CODE_FLT && tdep->abi_use_fpr && foff == REND)
 	      || goff == REND)
 	    {
 	      int rlen = (len > 4) ? 4 : len;
@@ -1943,9 +1929,6 @@ nds32_extract_return_value (struct type *type, struct regcache *regcache,
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int i;
   int fs0_regnum, fd0_regnum;
-  int use_fpr;
-
-  use_fpr = (tdep->nds32_abi == NDS32_ABI_V2FP);
 
   /* Although struct are returned in r0/r1 registers, but struct have
      only one single/double floating-point member are returned in FS/FD
@@ -1954,7 +1937,7 @@ nds32_extract_return_value (struct type *type, struct regcache *regcache,
   if (nds32_float_in_struct (type))
     typecode = TYPE_CODE_FLT;
 
-  if (typecode == TYPE_CODE_FLT && use_fpr)
+  if (typecode == TYPE_CODE_FLT && tdep->abi_use_fpr)
     {
       fs0_regnum = user_reg_map_name_to_regnum (gdbarch, "fs0", -1);
       fd0_regnum = user_reg_map_name_to_regnum (gdbarch, "fd0", -1);
@@ -2044,9 +2027,6 @@ nds32_store_return_value (struct type *type, struct regcache *regcache,
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int i;
   int fs0_regnum, fd0_regnum;
-  int use_fpr;
-
-  use_fpr = (tdep->nds32_abi == NDS32_ABI_V2FP);
 
   /* Although struct are returned in r0/r1 registers, but struct have
      only one single/double floating-point member are returned in FS/FD
@@ -2055,7 +2035,7 @@ nds32_store_return_value (struct type *type, struct regcache *regcache,
   if (nds32_float_in_struct (type))
     typecode = TYPE_CODE_FLT;
 
-  if (typecode == TYPE_CODE_FLT && use_fpr)
+  if (typecode == TYPE_CODE_FLT && tdep->abi_use_fpr)
     {
       fs0_regnum = user_reg_map_name_to_regnum (gdbarch, "fs0", -1);
       fd0_regnum = user_reg_map_name_to_regnum (gdbarch, "fd0", -1);
@@ -2363,17 +2343,8 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   struct gdbarch_tdep *tdep;
   struct gdbarch_list *best_arch;
   const struct target_desc *tdesc = NULL;
-  unsigned int nds32_abi = NDS32_ABI_AUTO;
   struct tdesc_arch_data *tdesc_data = NULL;
-  unsigned int eflags = 0;
   int i;
-
-  /* Extract the elf_flags, if available.  */
-  if (info.abfd && bfd_get_flavour (info.abfd) == bfd_target_elf_flavour)
-    {
-      eflags = elf_elfheader (info.abfd)->e_flags;
-      nds32_abi = (eflags >> 4) & 0xF;
-    }
 
   /* Allocate space for the new architecture.  */
   tdep = XCALLOC (1, struct gdbarch_tdep);
@@ -2475,8 +2446,25 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
       set_gdbarch_pseudo_register_write (gdbarch, nds32_pseudo_register_write);
     }
 
-  tdep->nds32_abi = nds32_abi;
-  tdep->eflags = eflags;
+  /* Extract the elf_flags, if available.  */
+  if (info.abfd && bfd_get_flavour (info.abfd) == bfd_target_elf_flavour)
+    {
+      int eflags = elf_elfheader (info.abfd)->e_flags;
+      int nds32_abi = eflags & EF_NDS_ABI;
+
+      /* Split large arguments by default.  */
+      tdep->abi_split = TRUE;
+      /* Do not use FPRs by default.  */
+      tdep->abi_use_fpr = FALSE;
+      switch (nds32_abi)
+	{
+	case E_NDS_ABI_V2FP:
+	  tdep->abi_use_fpr = TRUE;
+	  /* Fall-through.  */
+	case E_NDS_ABI_V2:
+	  tdep->abi_split = FALSE;
+	}
+    }
 
   /* If there is already a candidate, use it.  */
   for (best_arch = gdbarch_list_lookup_by_info (arches, &info);
@@ -2485,7 +2473,9 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
     {
       struct gdbarch_tdep *idep = gdbarch_tdep (best_arch->gdbarch);
 
-      if (nds32_abi != idep->nds32_abi)
+      if (tdep->abi_split != idep->abi_split)
+	continue;
+      if (tdep->abi_use_fpr != idep->abi_use_fpr)
 	continue;
 
       /* Check FPU registers.  */
