@@ -1093,9 +1093,7 @@ nds32_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
       sal = find_pc_line (func_addr, 0);
 
       if (sal.line != 0 && sal.end <= func_end)
-	{
-	  func_end = sal.end;
-	}
+	func_end = sal.end;
       else
 	{
 	  /* Either there's no line info, or the line after the prologue
@@ -1143,8 +1141,8 @@ static struct nds32_unwind_cache *
 nds32_alloc_frame_cache (struct frame_info *this_frame)
 {
   struct nds32_unwind_cache *cache;
-  cache = FRAME_OBSTACK_ZALLOC (struct nds32_unwind_cache);
 
+  cache = FRAME_OBSTACK_ZALLOC (struct nds32_unwind_cache);
   cache->saved_regs = trad_frame_alloc_saved_regs (this_frame);
   cache->size = 0;
   cache->sp_offset = 0;
