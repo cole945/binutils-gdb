@@ -36,61 +36,6 @@
 #include "nds32-remote.h"
 #include "nds32-tdep.h"
 
-char *nds32_qparts [] =
-{
-  "qPart:nds32:ask:de",
-  "qPart:nds32:ask:mach",
-  "qPart:nds32:ask:base16",
-  "qPart:nds32:ask:pex1",
-  "qPart:nds32:ask:pex2",
-  "qPart:nds32:ask:div",
-  "qPart:nds32:ask:abi",
-  "qPart:nds32:ask:mfusr_pc",
-  "qPart:nds32:ask:fpu",
-  "qPart:nds32:ask:audio",
-  "qPart:nds32:ask:string",
-  "qPart:nds32:ask:reduced_regs",
-  "qPart:nds32:ask:video",
-  "qPart:nds32:ask:ifc",
-  "qPart:nds32:ask:elf_ver",
-  "qPart:nds32:ask:l2c",
-  "qPart:nds32:ask:mac",
-  "qPart:nds32:ask:cpu", /* core0, cpu, etc */
-  "qPart:nds32:ask:target", /* SID, ICE */
-
-  "qPart:nds32:request:InvalidateCache",
-  "qPart:nds32:request:MemAccBus",
-  "qPart:nds32:request:MemAccCPU"
-};
-
-enum nds32_qparts_enum
-{
-  NDS32_Q_ENDIAN,
-  NDS32_Q_MACH,
-  NDS32_Q_BASE16,
-  NDS32_Q_PEX1,
-  NDS32_Q_PEX2,
-  NDS32_Q_DIV,
-  NDS32_Q_ABI,
-  NDS32_Q_MFUSR_PC,
-  NDS32_Q_FPU,
-  NDS32_Q_AUDIO,
-  NDS32_Q_STRING,
-  NDS32_Q_REDUCED_REGS,
-  NDS32_Q_VIDEO,
-  NDS32_Q_IFC,
-  NDS32_Q_ELF_VER,
-  NDS32_Q_L2C,
-  NDS32_Q_MAC,
-  NDS32_Q_CPU,
-  NDS32_Q_TARGET,
-
-  NDS32_Q_INVALIDATE_CACHE,
-  NDS32_Q_ACC_BUS,
-  NDS32_Q_ACC_CPU,
-  NDS32_Q_END
-};
-
 enum nds32_remote_type
 {
   nds32_rt_unknown = 0,
@@ -498,59 +443,6 @@ nds32_target_type_make_value (struct gdbarch *gdbarch, struct internalvar *var,
 }
 
 static int
-nds32_query_target_using_qpart (void)
-{
-  char *buf;
-  long size = 64;
-  struct cleanup *back_to;
-  int ret = FALSE;
-
-  /* The buffer passed to getpkt must be allocated using xmalloc,
-     because it might be xrealloc by read_frame.
-     See remote.c for details.  `buf' must be freed before return.  */
-  buf = xmalloc (size);
-
-  /* Let caller clean it up.  */
-  back_to = make_cleanup (free_current_contents, &buf);
-
-  /* qPart:nds32:ask:target - SID or ICE.  */
-  nds32_remote_info.type = nds32_rt_unknown;
-  putpkt (nds32_qparts[NDS32_Q_TARGET]);
-  getpkt (&buf, &size, 0);
-  if (strcmp (buf, "SID") == 0)
-    nds32_remote_info.type = nds32_rt_sid;
-  else if (strcmp (buf, "ICE") == 0)
-    nds32_remote_info.type = nds32_rt_ice;
-  else
-    goto out;
-
-  /* qPart:nds32:ask:cpu - prompt, e.g., "core0(gdb) ".  */
-  putpkt (nds32_qparts[NDS32_Q_CPU]);
-  getpkt (&buf, &size, 0);
-  if (strlen (buf) > 0 && buf[0] != 'E')
-    {
-      const int csize = sizeof (nds32_remote_info.cpu);
-      memset (nds32_remote_info.cpu, 0, csize);
-      strncpy (nds32_remote_info.cpu, buf, csize - 1);
-    }
-
-  /* qPart:nds32:ask:de - endian, e.g., LE or BE.  */
-  putpkt (nds32_qparts[NDS32_Q_ENDIAN]);
-  getpkt (&buf, &size, 0);
-  if (strcmp (buf, "LE") == 0)
-    nds32_remote_info.endian = BFD_ENDIAN_LITTLE;
-  else if (strcmp (buf, "BE") == 0)
-    nds32_remote_info.endian = BFD_ENDIAN_BIG;
-  else
-    nds32_remote_info.endian = BFD_ENDIAN_UNKNOWN;
-  ret = TRUE;
-
-out:
-  do_cleanups (back_to);
-  return ret;
-}
-
-static int
 nds32_query_target_using_qrcmd (void)
 {
   struct cleanup *back_to;
@@ -596,6 +488,8 @@ nds32_query_target_using_qrcmd (void)
 
   if (strcmp ((char *) ui_buf.buf, "OCD") == 0)
     nds32_remote_info.type = nds32_rt_ocd;
+  else if (strcmp ((char *) ui_buf.buf, "SID") == 0)
+    nds32_remote_info.type = nds32_rt_sid;
   else
     {
       printf_unfiltered (_("Unknown remote target %s\n"),
@@ -619,8 +513,7 @@ nds32_query_target_command (char *arg, int from_tty)
   /* FIXME if we don't know, use ELF. */
 
   /* Try to find out the type of target - SID, ICE or OCD.  */
-  if (!nds32_query_target_using_qpart ())
-    nds32_query_target_using_qrcmd ();
+  nds32_query_target_using_qrcmd ();
 
 end_query:
   /* Set cpu name if ICE and CPU!="cpu".  */
