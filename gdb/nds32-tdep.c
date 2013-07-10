@@ -829,7 +829,7 @@ nds32_pseudo_register_read (struct gdbarch *gdbarch,
       else
 	offset = (regnum & 1) ? 0 : 4;
 
-      sprintf (name_buf, "fd%d", regnum >> 1);
+      xsnprintf (name_buf, sizeof (name_buf), "fd%d", regnum >> 1);
       fd_regnum = user_reg_map_name_to_regnum (gdbarch, name_buf,
 					       strlen (name_buf));
       status = regcache_raw_read (regcache, fd_regnum, reg_buf);
@@ -867,7 +867,7 @@ nds32_pseudo_register_write (struct gdbarch *gdbarch,
       else
 	offset = (regnum & 1) ? 0 : 4;
 
-      sprintf (name_buf, "fd%d", regnum >> 1);
+      xsnprintf (name_buf, sizeof (name_buf), "fd%d", regnum >> 1);
       fd_regnum = user_reg_map_name_to_regnum (gdbarch, name_buf,
 					       strlen (name_buf));
       regcache_raw_read (regcache, fd_regnum, reg_buf);

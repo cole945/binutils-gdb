@@ -140,9 +140,9 @@ nds32_execute_command (char *cmd, char *arg, int from_tty)
   line = alloca (len);
   memset (line, 0, len);
   if (arg != NULL)
-    snprintf (line, len, "%s %s", cmd, arg);
+    xsnprintf (line, len, "%s %s", cmd, arg);
   else
-    snprintf (line, len, "%s", cmd);
+    xsnprintf (line, len, "%s", cmd);
   execute_command (line, from_tty);
 }
 
@@ -193,8 +193,8 @@ nds32_pipeline_on_command (char *args, int from_tty)
 {
   char cmd[256];
 
-  snprintf (cmd, sizeof (cmd), "monitor set %s pipeline-on 1",
-	    args == NULL ? "cpu" : args);
+  xsnprintf (cmd, sizeof (cmd), "monitor set %s pipeline-on 1",
+	     args == NULL ? "cpu" : args);
   nds32_execute_command (cmd, NULL, from_tty);
 }
 
@@ -205,8 +205,8 @@ nds32_pipeline_off_command (char *args, int from_tty)
 {
   char cmd[256];
 
-  snprintf (cmd, sizeof (cmd), "monitor set %s pipeline-on 0",
-	    args == NULL ? "cpu" : args);
+  xsnprintf (cmd, sizeof (cmd), "monitor set %s pipeline-on 0",
+	     args == NULL ? "cpu" : args);
   nds32_execute_command (cmd, NULL, from_tty);
 }
 
@@ -320,11 +320,11 @@ nds32_print_human_table (int col, int row, const char *scsv)
 
 	  offset = addr - SYMBOL_VALUE_ADDRESS (msymbol.minsym);
 	  if (offset)
-	    snprintf (symbol_text, sizeof (symbol_text), "%s + 0x%x\n",
-		      SYMBOL_PRINT_NAME (msymbol.minsym), offset);
+	    xsnprintf (symbol_text, sizeof (symbol_text), "%s + 0x%x\n",
+		       SYMBOL_PRINT_NAME (msymbol.minsym), offset);
 	  else
-	    snprintf (symbol_text, sizeof (symbol_text), "%s\n",
-		      SYMBOL_PRINT_NAME (msymbol.minsym));
+	    xsnprintf (symbol_text, sizeof (symbol_text), "%s\n",
+		       SYMBOL_PRINT_NAME (msymbol.minsym));
 	  break;
 	case 1: case 2: case 3: case 4: case 5: case 6:
 	  ui_out_field_string (current_uiout, col_fldname[i], buf);
@@ -401,8 +401,8 @@ nds32_query_profiling_command (char *args, int from_tty)
     }
 
   /* Fill BUF with monitor command. */
-  snprintf ((char *) ui_buf.buf, ui_buf.buf_size, "set %s profiling ide-query",
-	    args == NULL ? "cpu" : arg_cpu);
+  xsnprintf ((char *) ui_buf.buf, ui_buf.buf_size,
+	     "set %s profiling ide-query", args == NULL ? "cpu" : arg_cpu);
   target_rcmd ((char *) ui_buf.buf, res);
   memset (ui_buf.buf, 0, ui_buf.buf_size);
   ui_file_put (res, do_ui_file_put_memcpy, &ui_buf);
@@ -443,8 +443,8 @@ nds32_query_perfmeter_command (char *args, int from_tty)
   /* For perfmeter, there will be only one response.  */
   char cmd[128];
 
-  snprintf (cmd, sizeof (cmd), "set %s perf-meter query",
-	    args == NULL ? "cpu" : args);
+  xsnprintf (cmd, sizeof (cmd), "set %s perf-meter query",
+	     args == NULL ? "cpu" : args);
   target_rcmd (cmd, gdb_stdtarg);
 }
 
@@ -455,8 +455,8 @@ nds32_reset_profiling_command (char *args, int from_tty)
 {
   char cmd[256];
 
-  snprintf (cmd, sizeof (cmd), "set %s profiling reset",
-	    args == NULL ? "cpu" : args);
+  xsnprintf (cmd, sizeof (cmd), "set %s profiling reset",
+	     args == NULL ? "cpu" : args);
   target_rcmd (cmd, gdb_stdtarg);
 }
 
@@ -467,8 +467,8 @@ nds32_reset_perfmeter_command (char *args, int from_tty)
 {
   char cmd[256];
 
-  snprintf (cmd, sizeof (cmd), "set %s perf-meter reset",
-	    args == NULL ? "cpu" : args);
+  xsnprintf (cmd, sizeof (cmd), "set %s perf-meter reset",
+	     args == NULL ? "cpu" : args);
   target_rcmd (cmd, gdb_stdtarg);
 }
 
@@ -627,7 +627,8 @@ end_query:
   if (strcmp ("cpu", nds32_remote_info.cpu) != 0)
     {
       char buf[64];
-      snprintf (buf, sizeof (buf), "%s(gdb) ", nds32_remote_info.cpu);
+
+      xsnprintf (buf, sizeof (buf), "%s(gdb) ", nds32_remote_info.cpu);
       set_prompt (buf);
     }
   else
@@ -683,11 +684,11 @@ nds32_set_gloss_command (char *arg, int from_tty)
       size = bfd_section_size (exec_bfd, s);
 
       /* Set gloss (start|end)_XXX.  */
-      snprintf (cmdline, sizeof (cmdline), "set gloss start_%s %u",
-		sectnames[i + 1], (unsigned int) start);
+      xsnprintf (cmdline, sizeof (cmdline), "set gloss start_%s %u",
+		 sectnames[i + 1], (unsigned int) start);
       target_rcmd (cmdline, out);
-      snprintf (cmdline, sizeof (cmdline), "set gloss end_%s %u",
-		sectnames[i + 1], (unsigned int) (start + size));
+      xsnprintf (cmdline, sizeof (cmdline), "set gloss end_%s %u",
+		 sectnames[i + 1], (unsigned int) (start + size));
       target_rcmd (cmdline, out);
     }
 
@@ -704,8 +705,8 @@ nds32_set_gloss_command (char *arg, int from_tty)
   else
     f++; /* skip separator.  */
 
-  snprintf (cmdline, sizeof (cmdline),
-	    "set gloss command-line \"%s %s\"", f, args);
+  xsnprintf (cmdline, sizeof (cmdline),
+	     "set gloss command-line \"%s %s\"", f, args);
   target_rcmd (cmdline, out);
 
   do_cleanups (back_to);
