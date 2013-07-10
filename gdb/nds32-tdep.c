@@ -51,13 +51,13 @@
 
 #include "nds32-tdep.h"
 #include "nds32-utils.h"
-#include "nds32-remote.h"
 #include "elf/nds32.h"
 #include "opcode/nds32.h"
 
 /* Simple macro for chop LSB immediate bits from an instruction.  */
 #define CHOP_BITS(insn, n)	(insn & ~__MASK (n))
 
+extern void nds32_init_remote_cmds (void);
 extern void _initialize_nds32_tdep (void);
 
 /* The standard register names.  */
@@ -189,6 +189,22 @@ nds32_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr,
   /* Always insert 16-bit break instruction.  */
   *lenptr = 2;
   return NDS32_BREAK16;
+}
+
+/* Implement the gdbarch_remote_breakpoint_from_pc method.  */
+
+static void
+nds32_remote_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr,
+				 int *kindptr)
+{
+  if ((*pcptr) & 1)
+    error (_("bad address %p for inserting breakpoint"), (void *) *pcptr);
+
+  /* ICEman/AICE have trouble on reading memory when the pcptr is P/A,
+     but CPU is in V/A mode.  This code prevent GDB from reading memory.
+     ICEman will read memory itself if needed.  */
+
+  *kindptr = 2;
 }
 
 /* Implement the gdbarch_dwarf2_reg_to_regnum method.

@@ -33,7 +33,6 @@
 #include "exceptions.h"		/* TRY_CATCH */
 #include <ctype.h>
 
-#include "nds32-remote.h"
 #include "nds32-tdep.h"
 
 enum nds32_remote_type
@@ -50,20 +49,6 @@ struct
   char cpu[16];
   enum bfd_endian endian;
 } nds32_remote_info;
-
-void
-nds32_remote_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr,
-				 int *kindptr)
-{
-  if ((*pcptr) & 1)
-    error (_("bad address %p for inserting breakpoint"), (void *) *pcptr);
-
-  /* ICEman/AICE have trouble on reading memory when the pcptr is P/A,
-     but CPU is in V/A mode.  This code prevent GDB from reading memory.
-     ICEman will read memory itself if needed.  */
-
-  *kindptr = 2;
-}
 
 /* Wrapper for execute a GDB CLI command.  */
 
