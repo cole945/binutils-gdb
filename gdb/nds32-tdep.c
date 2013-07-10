@@ -2575,50 +2575,6 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   return gdbarch;
 }
 
-/* Callback for "nds32 dump" command.
-
-   Dump current register and stack for debug gdb.  */
-
-static void
-nds32_dump_command (char *arg, int from_tty)
-{
-  ULONGEST val;
-  ULONGEST sp;
-  FILE *f_script;
-  char cmdline[512];
-  int i;
-
-  if (arg == NULL)
-    {
-      printf_unfiltered (_("Missing filename argument.\n"));
-      return;
-    }
-
-  regcache_raw_read_unsigned (get_current_regcache (), NDS32_SP_REGNUM, &sp);
-
-  sprintf (cmdline, "dump binary memory %s.stack 0x%lx 0x%lx",
-	   arg, (long) sp, ((long) sp + 1024 - 1) & ~(1024 - 1));
-  execute_command (cmdline, from_tty);
-
-  sprintf (cmdline, "%s.gdbinit", arg);
-  f_script = fopen (cmdline, "w");
-  if (f_script == NULL)
-    {
-      printf_unfiltered (_("Fail to generate dump .gdbinit."));
-      return ;
-    }
-
-  /* Gather all user registers.  */
-  for (i = 0; i <= NDS32_D1HI_REGNUM; i++)
-    {
-      regcache_raw_read_unsigned (get_current_regcache (), i, &val);
-      fprintf (f_script, "set $%s = 0x%lx\n", nds32_regnames[i], (long) val);
-    }
-
-  fprintf (f_script, "restore %s.stack binary 0x%lx\n", arg, (long) sp);
-  fclose (f_script);
-}
-
 /* Callback for "nds32" command.  */
 
 static void
@@ -2635,9 +2591,6 @@ _initialize_nds32_tdep (void)
   add_prefix_cmd ("nds32", no_class, nds32_command,
 		  _("Various nds32-specific commands."), &nds32_cmdlist,
 		  "nds32 ", 0, &cmdlist);
-
-  add_cmd ("dump", class_files, nds32_dump_command,
-	   _("dump stack and GPRs for debugging"), &nds32_cmdlist);
 
   nds32_init_remote_cmds ();
 
