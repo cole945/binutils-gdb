@@ -18,8 +18,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "nds32-utils.h"
-
 #ifndef __NDS32_TDEP_H__
 #define __NDS32_TDEP_H__
 
