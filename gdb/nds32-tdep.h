@@ -90,18 +90,5 @@ struct gdbarch_tdep
   struct htab *type_tab;
 };
 
-/* Hidden options.  */
-struct nds32_gdb_config
-{
-  /* Use DWARF/CFI for stack frame unwinding.
-     This is much reliable than manual prologue analysis.
-     Default true.  */
-  int use_cfi;
-
-  /* ABI for Inferior Call Setup.
-     Default AUTO by reading ABI in ELF header.  */
-  int use_abi;
-};
-
 extern struct cmd_list_element *nds32_cmdlist;
 #endif
