@@ -2758,27 +2758,11 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   return gdbarch;
 }
 
-/* Callback for "nds32" command.  */
-
-static void
-nds32_command (char *arg, int from_tty)
-{
-  printf_unfiltered (_("\"nds32\" must be followed by arguments\n"));
-}
-
-struct cmd_list_element *nds32_cmdlist;
-
 void
 _initialize_nds32_tdep (void)
 {
-  add_prefix_cmd ("nds32", no_class, nds32_command,
-		  _("Various nds32-specific commands."), &nds32_cmdlist,
-		  "nds32 ", 0, &cmdlist);
-
   /* Initialize gdbarch.  */
   register_gdbarch_init (bfd_arch_nds32, nds32_gdbarch_init);
-
-  /* Following are NDS32 specific commands.  */
 
   nds32_init_reggroups ();
 
