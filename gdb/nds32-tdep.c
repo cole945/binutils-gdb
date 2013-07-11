@@ -175,7 +175,6 @@ nds32_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr,
 			  int *lenptr)
 {
   static const gdb_byte NDS32_BREAK16[] = { 0xEA, 0x00 };
-  const unsigned char *bp;
 
   gdb_assert (pcptr != NULL);
   gdb_assert (lenptr != NULL);
@@ -211,7 +210,6 @@ nds32_remote_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr,
 static int
 nds32_dwarf_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int num)
 {
-  const int GPR = 0;
   const int DXR = 34;
   const int FSR = 38;
   const int FDR = FSR + 32;
@@ -234,7 +232,6 @@ nds32_dwarf_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int num)
 static int
 nds32_register_sim_regno (struct gdbarch *gdbarch, int regnum)
 {
-  const char *reg_name;
   /* Use target-descriptions for register mapping. */
 
   /* Only makes sense to supply raw registers.  */
@@ -292,7 +289,7 @@ nds32_init_type (struct gdbarch *gdbarch, char *name, enum type_option opt)
 	   {[ #1 #3 #16 #17 #18 ], INTL = Lv1, POM = Superuser}
 	 We don't want users to see this, INTL and POM should not be
 	 displayed in the flags field.  */
-      for (i = 0; i < TYPE_LENGTH (type) * TARGET_CHAR_BIT; i++)
+      for (i = 0; i < (int) TYPE_LENGTH (type) * TARGET_CHAR_BIT; i++)
 	append_flags_type_flag (flags_type, i, NULL);
     }
 
@@ -304,7 +301,6 @@ nds32_init_type (struct gdbarch *gdbarch, char *name, enum type_option opt)
 static void
 nds32_append_flag (struct type *type, int bitpos, char *name)
 {
-  struct field *f;
   int nfields;
 
   gdb_assert (TYPE_CODE (type) == TYPE_CODE_STRUCT);
@@ -933,7 +929,7 @@ nds32_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
     return (regnum > NDS32_PC_REGNUM)
 	   && TYPE_CODE (register_type (gdbarch, regnum)) != TYPE_CODE_FLT;
 
-  for (i = 0; i < ARRAY_SIZE (groups); i++)
+  for (i = 0; i < (int) ARRAY_SIZE (groups); i++)
     {
       if (group == groups[i])
 	{
@@ -974,7 +970,6 @@ nds32_register_name (struct gdbarch *gdbarch, int regnum)
     "fd24", "fd25", "fd26", "fd27", "fd28", "fd29", "fd30", "fd31",
     "ifclp", "itb", "ir0"
   };
-  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int num_regs = gdbarch_num_regs (gdbarch);
 
   /* Currently, only pseudo FSR are supported.  */
@@ -982,7 +977,7 @@ nds32_register_name (struct gdbarch *gdbarch, int regnum)
     return fpu_pseudo_names[regnum - num_regs];
 
   /* GPRs.  */
-  if (regnum < ARRAY_SIZE (nds32_regnames))
+  if (regnum < (int) ARRAY_SIZE (nds32_regnames))
     return nds32_regnames[regnum];
 
   /* Registers between NUM_REGS and SMI_NUM_REGS are
@@ -1083,7 +1078,6 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 {
   uint32_t insn;
   CORE_ADDR cpc = -1;		/* Candidate PC if no suitable PC is found.  */
-  LONGEST return_value;
 
   /* If there is no buffer to store result, ignore this prologue decoding.  */
   if (pl_endptr == NULL)
@@ -1606,10 +1600,8 @@ nds32_frame_unwind_cache (struct frame_info *this_frame,
 	      /* fssi and fsdi have the same form.  */
 	      /* Only .bi form should be handled to adjust reg.  */
 	      unsigned int ra5 = 0;
-	      unsigned int fs5 = 0;
 	      int imm12s = 0;
 
-	      fs5 = N32_RT5 (insn);
 	      ra5 = N32_RA5 (insn);
 	      imm12s = N32_IMM12S (insn);
 
@@ -1668,9 +1660,7 @@ nds32_frame_unwind_cache (struct frame_info *this_frame,
 	      /* push25 */
 	      int imm8u = (insn & 0x1f) << 3;
 	      int re = ((insn & 0x60) >> 5) & 0x3;
-	      int res[] = {6, 8, 10, 14};
 	      int m[] = {4, 6, 8, 12};
-	      LONGEST base = info->sp_offset - 4;
 
 	      /* Operation 1 - smw.adm R6, [sp], Re, #0xe */
 	      info->saved_regs[NDS32_LP_REGNUM].addr = info->sp_offset - 0x4;
@@ -2123,7 +2113,6 @@ nds32_extract_return_value (struct type *type, struct regcache *regcache,
   int typecode = TYPE_CODE (type);
   struct gdbarch *gdbarch = get_regcache_arch (regcache);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-  int i;
   int fs0_regnum, fd0_regnum;
 
   /* Although struct are returned in r0/r1 registers, but struct have
@@ -2221,7 +2210,6 @@ nds32_store_return_value (struct type *type, struct regcache *regcache,
   int typecode = TYPE_CODE (type);
   struct gdbarch *gdbarch = get_regcache_arch (regcache);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-  int i;
   int fs0_regnum, fd0_regnum;
 
   /* Although struct are returned in r0/r1 registers, but struct have
@@ -2318,7 +2306,7 @@ nds32_dummy_id (struct gdbarch *gdbarch, struct frame_info *this_frame)
 
   sp = get_frame_register_unsigned (this_frame, NDS32_SP_REGNUM);
   pc = get_frame_pc (this_frame);
-  return frame_id_build (sp, get_frame_pc (this_frame));
+  return frame_id_build (sp, pc);
 }
 
 /* Given a GDB frame, determine the address of the calling function's
@@ -2331,9 +2319,7 @@ nds32_frame_this_id (struct frame_info *this_frame,
   struct nds32_unwind_cache *info;
   CORE_ADDR base;
   CORE_ADDR func;
-  struct minimal_symbol *msym_stack;
   struct frame_id id;
-  enum bfd_endian byte_order_for_code = BFD_ENDIAN_BIG;
 
   info = nds32_frame_unwind_cache (this_frame, this_prologue_cache);
 
@@ -2363,7 +2349,6 @@ nds32_frame_prev_register (struct frame_info *this_frame,
   if (regnum == NDS32_PC_REGNUM)
     {
       CORE_ADDR lr;
-      struct frame_info *next_frame;
 
       lr = frame_unwind_register_unsigned (this_frame, NDS32_LP_REGNUM);
       return frame_unwind_got_constant (this_frame, regnum, lr);
@@ -2379,7 +2364,6 @@ static struct value *
 nds32_dwarf2_prev_register (struct frame_info *this_frame,
 			    void **this_cache, int regnum)
 {
-  struct gdbarch *gdbarch = get_frame_arch (this_frame);
   CORE_ADDR lp;
 
   switch (regnum)
@@ -2422,7 +2406,6 @@ nds32_get_longjmp_target (struct frame_info *frame, CORE_ADDR *pc)
   gdb_byte buf[4];
   CORE_ADDR jmp_buf_p;
   struct gdbarch *gdbarch = get_frame_arch (frame);
-  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   jmp_buf_p = get_frame_register_unsigned (frame, 0);
 
@@ -2445,7 +2428,9 @@ static const struct frame_unwind nds32_frame_unwind =
   nds32_frame_this_id,
   nds32_frame_prev_register,
   NULL /* unwind_data */,
-  default_frame_sniffer
+  default_frame_sniffer,
+  NULL /* dealloc_cache */,
+  NULL /* prev_arch */
 };
 
 static CORE_ADDR
@@ -2493,9 +2478,7 @@ nds32_simple_overlay_update (struct obj_section *osect)
 static int
 gdb_print_insn_nds32 (bfd_vma memaddr, disassemble_info *info)
 {
-  struct gdbarch *gdbarch = info->application_data;
   struct obj_section * s = find_pc_section (memaddr);
-  struct cleanup *back_to;
 
   /* When disassembling ex9 instructions, they are annotated with
      the original instructions at the end of line.  For example,
@@ -2741,7 +2724,7 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 	    Without this, calling user_reg_map_name_to_regnum ()
 	    will crash.  */
   user_reg_add (gdbarch, "r0", nds32_value_of_reg, "r0");
-  for (i = 0; i < ARRAY_SIZE (nds32_register_aliases); i++)
+  for (i = 0; i < (int) ARRAY_SIZE (nds32_register_aliases); i++)
     {
       int regnum;
 
