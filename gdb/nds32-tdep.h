@@ -69,6 +69,4 @@ struct gdbarch_tdep
   /* Type table for registers.  */
   struct htab *type_tab;
 };
-
-extern struct cmd_list_element *nds32_cmdlist;
 #endif
