@@ -58,6 +58,10 @@
 
 extern void _initialize_nds32_tdep (void);
 
+/* "break16 0" for breakpoint_from_pc.
+   It is always supported now, so always insert break16.  */
+static const gdb_byte NDS32_BREAK16[] = { 0xEA, 0x00 };
+
 /* The standard register names.  */
 static const char *nds32_regnames[] =
 {
@@ -174,8 +178,6 @@ static const gdb_byte *
 nds32_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr,
 			  int *lenptr)
 {
-  static const gdb_byte NDS32_BREAK16[] = { 0xEA, 0x00 };
-
   gdb_assert (pcptr != NULL);
   gdb_assert (lenptr != NULL);
 
@@ -1766,19 +1768,15 @@ nds32_frame_unwind_cache (struct frame_info *this_frame,
 static void
 nds32_skip_permanent_breakpoint (struct regcache *regcache)
 {
-  int insn;
+  gdb_byte insn[2];
   CORE_ADDR current_pc = regcache_read_pc (regcache);
 
-  /* On nds32, breakpoint may be BREAK or BREAK16.  */
-  insn = read_memory_unsigned_integer (current_pc, 4, BFD_ENDIAN_BIG);
+  target_read_memory (current_pc, insn, sizeof (insn));
 
-  if (N32_OP6 (insn) == N32_OP6_MISC && N32_SUB5 (insn) == N32_MISC_BREAK)
-    current_pc += 4;
-  else if (__GF (insn, 9, 6) == 35 && N16_IMM9U (insn) < 32)
-    current_pc += 2;
-  else
+  if (memcmp (insn, NDS32_BREAK16, sizeof (insn)) != 0)
     return;
 
+  current_pc += 2;
   regcache_write_pc (regcache, current_pc);
 }
 
