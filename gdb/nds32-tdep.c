@@ -367,25 +367,29 @@ struct type_entry
   struct type *type;
 };
 
-/* Hash code function.  Simply a wrapper for htab_hash_string.  */
+/* Hash code function.  Simply a wrapper for htab_hash_string.
+   This function should only be called by htab_expand,
+   so PTR is the pointer to inserted entry.  */
 
 static hashval_t
-type_hash_string (const PTR p)
+type_hash_string (const PTR ptr)
 {
-  struct type_entry *e = (struct type_entry *) p;
+  struct type_entry *pe = (struct type_entry *) ptr;
 
-  return htab_hash_string (e->name);
+  return htab_hash_string (pe->name);
 }
 
-/* Equal function for hash.  Simply a wrapper for strcmp.  */
+/* Equal function for hash.  Simply a wrapper for strcmp.
+   This function should only be called by htab_find[_slot]_with_hash,
+   so P2 the ELEMENT argument to it.  */
 
 static int
 type_name_eq (const PTR p1, const PTR p2)
 {
-  struct type_entry *e1 = (struct type_entry *) p1;
-  struct type_entry *e2 = (struct type_entry *) p2;
+  struct type_entry *pe = (struct type_entry *) p1;
+  const char *name = (const char *) p2;
 
-  return strcmp (e1->name, e2->name) == 0;
+  return strcmp (pe->name, name) == 0;
 }
 
 /* Allocate a hash table for register/type pair.  */
@@ -403,15 +407,15 @@ nds32_alloc_type_tab (int size)
 static struct type *
 nds32_type_lookup (htab_t htab, const char *name)
 {
-  struct type_entry ent;
-  struct type_entry **pe;
+  struct type_entry *pe;
+  hashval_t hash;
 
-  ent.name = name;
-  pe = (struct type_entry **) htab_find_slot (htab, &ent, NO_INSERT);
-  if (pe)
-    return (*pe)->type;
-  else
+  hash = htab_hash_string (name);
+  pe = (struct type_entry *) htab_find_with_hash (htab, name, hash);
+
+  if (pe == NULL)
     return NULL;
+  return pe->type;
 }
 
 /* Insert a type for a specific register name.  */
@@ -421,13 +425,14 @@ nds32_type_insert (htab_t htab, const char *name, struct type *type)
 {
   struct type_entry ent;
   struct type_entry **pe;
+  hashval_t hash;
 
-  ent.name = name;
+  hash = htab_hash_string (name);
+  pe = (struct type_entry **)
+    htab_find_slot_with_hash (htab, name, hash, INSERT);
 
-  pe = (struct type_entry **) htab_find_slot (htab, &ent, INSERT);
-
-  if (*pe != NULL)
-    return;
+  /* If the entry already exists, there must be a bug in nds32_alloc_types.  */
+  gdb_assert (pe != NULL && *pe == NULL);
 
   *pe = xmalloc (sizeof (**pe));
   (*pe)->name = xstrdup (name);
