@@ -56,7 +56,6 @@
 /* Simple macro for chop LSB immediate bits from an instruction.  */
 #define CHOP_BITS(insn, n)	(insn & ~__MASK (n))
 
-extern void nds32_init_remote_cmds (void);
 extern void _initialize_nds32_tdep (void);
 
 /* The standard register names.  */
@@ -2775,8 +2774,6 @@ _initialize_nds32_tdep (void)
   add_prefix_cmd ("nds32", no_class, nds32_command,
 		  _("Various nds32-specific commands."), &nds32_cmdlist,
 		  "nds32 ", 0, &cmdlist);
-
-  nds32_init_remote_cmds ();
 
   /* Initialize gdbarch.  */
   register_gdbarch_init (bfd_arch_nds32, nds32_gdbarch_init);
