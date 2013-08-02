@@ -21,10 +21,11 @@
 #include "config.h"
 
 #include <errno.h>
-#if defined (__linux__) || defined (__CYGWIN__)
+#ifdef HAVE_SYS_MMAN_H
 #include <sys/mman.h>
-#elif defined (__WIN32__)
-#include "mingw32-hdep.h"
+#endif
+#ifdef HAVE_SYS_RESOURCE_H
+#include <sys/resource.h>
 #endif
 
 #include "bfd.h"
@@ -33,27 +34,17 @@
 #include "nds32-sim.h"
 #include "nds32-mm.h"
 
-/* Linux memory are emulated using `device',
-   so we can have handling more sophiscated maping operations then sim-core. */
-struct _device { char dummy; } nds32_mm_devices;
-
-void
-device_error (device *me ATTRIBUTE_UNUSED,
-		const char *message ATTRIBUTE_UNUSED,
-		...)
-{
-  abort ();
-}
+/* Linux memory are emulated using `device', so we can have handling
+   more sophiscated mapping operations then plain sim-core. */
+const struct _device { char dummy; } nds32_mm_devices;
 
 /* Read memory in Linux VMA.  */
 
 int
-device_io_read_buffer (device *me ATTRIBUTE_UNUSED,
-			void *source,
-			int space ATTRIBUTE_UNUSED,
-			address_word addr, unsigned nr_bytes,
-			SIM_DESC sd, SIM_CPU *cpu,
-			sim_cia cia ATTRIBUTE_UNUSED)
+nds32_mm_read (device *me ATTRIBUTE_UNUSED, void *source,
+	       int space ATTRIBUTE_UNUSED, address_word addr,
+	       unsigned nr_bytes, SIM_DESC sd, SIM_CPU *cpu,
+	       sim_cia cia ATTRIBUTE_UNUSED)
 {
   struct nds32_mm *mm = STATE_MM (sd);
   struct nds32_vm_area *vma;
@@ -64,14 +55,14 @@ device_io_read_buffer (device *me ATTRIBUTE_UNUSED,
   if (mm->icache && addr >= mm->icache->vm_start
       && (addr + nr_bytes) <= mm->icache->vm_end)
     {
-      /* mm->cache_ihit++; */
+      mm->cache_ihit++;
       vma = mm->icache;
       goto FOUND;
     }
   else if (mm->dcache && addr >= mm->dcache->vm_start
 	   && (addr + nr_bytes) <= mm->dcache->vm_end)
     {
-      /* mm->cache_dhit++; */
+      mm->cache_dhit++;
       vma = mm->dcache;
       goto FOUND;
     }
@@ -98,11 +89,10 @@ FOUND:
 /* Write memory in Linux VMA.  */
 
 int
-device_io_write_buffer (device *me ATTRIBUTE_UNUSED,
-			const void *source,
-			int space ATTRIBUTE_UNUSED,
-			address_word addr, unsigned nr_bytes,
-			SIM_DESC sd, SIM_CPU *cpu, sim_cia cia)
+nds32_mm_write (device *me ATTRIBUTE_UNUSED, const void *source,
+		int space ATTRIBUTE_UNUSED, address_word addr,
+		unsigned nr_bytes, SIM_DESC sd, SIM_CPU *cpu,
+		sim_cia cia)
 {
   struct nds32_mm *mm = STATE_MM (sd);
   struct nds32_vm_area *vma = NULL;
@@ -113,11 +103,11 @@ device_io_write_buffer (device *me ATTRIBUTE_UNUSED,
   if (mm->dcache && addr >= mm->dcache->vm_start
       && (addr + nr_bytes) <= mm->dcache->vm_end)
     {
-      /* mm->cache_dhit++; */
+      mm->cache_dhit++;
       vma = mm->dcache;
       goto FOUND;
     }
-  /* mm->cache_miss++; */
+  mm->cache_miss++;
   vma = nds32_find_vma (mm, addr);
   mm->dcache = vma;
 #else
@@ -276,14 +266,15 @@ nds32_freeall_vma (struct nds32_mm *mm)
   struct nds32_vm_area *vma;
   struct nds32_vm_area *next;
 
+  if (MM_HEAD (mm)->vm_next == NULL || MM_HEAD (mm)->vm_prev == NULL)
+    return;
+
   for (vma = MM_HEAD (mm)->vm_next; vma != MM_HEAD (mm); vma = next)
     {
       next = vma->vm_next;
       munmap (vma->vm_buf, vma->vm_end - vma->vm_start);
       nds32_free_vma (vma);
     }
-
-  nds32_mm_init (mm);
 }
 
 /* Dump VMA list for debugging.  */
@@ -335,8 +326,8 @@ nds32_mm_init (struct nds32_mm *mm)
   mm->free_cache = TASK_UNMAPPED_BASE;
 #if defined (USE_TLB)
   mm->icache = mm->dcache = NULL;
-  /* mm->cache_miss = 0;
-  mm->cache_ihit = mm->cache_dhit = 0; */
+  mm->cache_miss = 0;
+  mm->cache_ihit = mm->cache_dhit = 0;
 #endif
 }
 
@@ -431,4 +422,173 @@ nds32_sys_brk (sim_cpu *cpu, uint32_t addr)
 		-1, 0);
       return mm->brk = addr;
     }
+}
+
+/* Calculate the total size for mapping an ELF.  */
+
+static int
+total_mapping_size (Elf_Internal_Phdr *phdr, int n)
+{
+  int i;
+  int first = -1;
+  int last = - 1;
+
+  for (i = 0; i < n; i++)
+    {
+      if (phdr[i].p_type != PT_LOAD || phdr[i].p_memsz == 0)
+	continue;
+
+      if (first == -1)
+	first = i;
+      last = i;
+    }
+
+  return phdr[last].p_vaddr +  phdr[last].p_memsz - phdr[first].p_vaddr;
+}
+
+/* Map memory for loadable segments.  */
+
+void
+nds32_map_segments (SIM_DESC sd, struct bfd *abfd)
+{
+  int i;
+  char buf[1024];
+  Elf_Internal_Phdr *phdr;
+  Elf_Internal_Phdr *interp_phdr = NULL;
+  uint32_t off;
+  uint32_t len;
+  int sysroot_len;
+  uint32_t interp_base;
+  SIM_CPU *cpu = STATE_CPU (sd, 0);
+  struct rlimit limit;
+  struct nds32_mm *mm = STATE_MM (sd);
+
+  getrlimit (RLIMIT_STACK, &limit);
+  mm->limit_sp = limit.rlim_cur;
+  getrlimit (RLIMIT_DATA, &limit);
+  mm->limit_data = limit.rlim_cur;
+
+  if (mm->limit_sp & 1) /* Unlimited?  */
+    mm->limit_sp = 0x800000;
+  if (mm->limit_data & 1) /* Unlimited?  */
+    mm->limit_data = 0x800000;
+
+  /* See sim-config.h for detailed explanation.
+	--environment user|virtual|operating
+
+     By default, the setting is 'all' for un-selected.
+
+     In my current design, USER_ENVIRONMENT is used for Linux application,
+     so
+	1. Load ELF by segment instead of by section.
+	2. Load dynamic-link (INTERP) if needed
+	3. Prepare stack for arguments, environments and AUXV.
+	4. Use nds32-mm for memory mapping
+     If the ENVIRONMENT is not USER, the I treat it as normal ELF
+     application, so only a single 64MB memory block is allocated,
+     and default sim_load_file () is used.  */
+
+  /* For emulating Linux VMA */
+  sim_core_attach (sd, NULL, 0, access_read_write_exec, 0, 0x00004000,
+		   0xFFFF8000, 0, &nds32_mm_devices, NULL);
+
+  nds32_mm_init (mm);
+
+  /* Allocate stack.  */
+  /* TODO: Executable stack.  Currently, EXEC affects vma cache. */
+  nds32_mmap (cpu, mm->start_sp - mm->limit_sp, mm->limit_sp,
+	      PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED,
+	      -1, 0);
+
+  /* FIXME: Handle ET_DYN and ET_EXEC.  */
+  phdr = elf_tdata (abfd)->phdr;
+  sd->exec_base = -1;
+  for (i = 0; i < elf_elfheader (abfd)->e_phnum; i++)
+    {
+      uint32_t addr, len;
+      uint32_t prot = 0;
+
+      if (phdr[i].p_type == PT_INTERP)
+	interp_phdr = &phdr[i];
+
+      if (phdr[i].p_type != PT_LOAD || phdr[i].p_memsz == 0)
+	continue;
+
+      addr = phdr[i].p_vaddr;
+      len = addr + phdr[i].p_memsz - PAGE_ALIGN (addr);
+      len = PAGE_ROUNDUP (len);
+      addr = PAGE_ALIGN (addr);
+
+      if (phdr[i].p_flags & PF_X)
+	prot |= PROT_EXEC;
+      if (phdr[i].p_flags & PF_W)
+	prot |= PROT_WRITE;
+      if (phdr[i].p_flags & PF_R)
+	prot |= PROT_READ;
+
+      if (sd->exec_base == -1)
+	sd->exec_base = addr;
+
+      nds32_mmap (cpu, addr, len, prot,
+		  MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED,
+		  -1, 0);
+
+      if (addr + len > mm->brk)
+	mm->brk = addr + len;
+    }
+
+  /* TODO: Pre-map brk */
+
+  if (!interp_phdr)
+    return;
+
+  /* Read path of interp.  */
+  off = interp_phdr->p_offset;
+  len = interp_phdr->p_filesz;
+  sysroot_len = strlen (simulator_sysroot);
+
+  strcpy (buf, simulator_sysroot);
+  if (buf[sysroot_len - 1] == '/')
+    buf[--sysroot_len] = '\0';
+
+  if (bfd_seek (abfd, off, SEEK_SET) != 0
+      || bfd_bread (buf + sysroot_len, len, abfd) != len)
+    return;
+
+  sd->interp_bfd = bfd_openr (buf, 0);
+
+  if (sd->interp_bfd == NULL)
+    return;
+
+  bfd_check_format (sd->interp_bfd, bfd_object);
+
+  /* Add memory for interp.  */
+  phdr = elf_tdata (sd->interp_bfd)->phdr;
+  len = total_mapping_size (phdr, elf_elfheader (sd->interp_bfd)->e_phnum);
+  interp_base = nds32_get_unmapped_area (mm, 0, len);
+  for (i = 0; i < elf_elfheader (sd->interp_bfd)->e_phnum; i++)
+    {
+      uint32_t addr, len, prot = 0;
+
+      if (phdr[i].p_type != PT_LOAD || phdr[i].p_memsz == 0)
+	continue;
+
+      addr = interp_base + phdr[i].p_vaddr;
+      len = addr + phdr[i].p_memsz - PAGE_ALIGN (addr);
+      len = PAGE_ROUNDUP (len);
+      addr = PAGE_ALIGN (addr);
+
+      if (phdr[i].p_flags & PF_X)
+	prot |= PROT_EXEC;
+      if (phdr[i].p_flags & PF_W)
+	prot |= PROT_WRITE;
+      if (phdr[i].p_flags & PF_R)
+	prot |= PROT_READ;
+
+      nds32_mmap (cpu, addr, len, prot,
+		  MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED,
+		  -1, 0);
+    }
+
+  sd->interp_base = interp_base;
 }
