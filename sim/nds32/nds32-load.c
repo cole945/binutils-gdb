@@ -21,12 +21,6 @@
 #include "config.h"
 
 #include <stdlib.h>
-#if defined (__linux__) || defined (__CYGWIN__)
-#include <sys/mman.h>
-#include <sys/resource.h>
-#elif defined (__WIN32__)
-#include "mingw32-hdep.h"
-#endif
 
 #include "bfd.h"
 #include "elf-bfd.h"
@@ -47,193 +41,6 @@ nds32_simple_osabi_sniff_sections (bfd *abfd, asection *sect, void *obj)
   name = bfd_get_section_name (abfd, sect);
   if (strcmp (name, ".note.ABI-tag") == 0)
     *osabi = 1;
-}
-
-/* Calculate the total size for mapping an ELF.  */
-
-static int
-total_mapping_size (Elf_Internal_Phdr *phdr, int n)
-{
-  int i;
-  int first = -1;
-  int last = - 1;
-
-  for (i = 0; i < n; i++)
-    {
-      if (phdr[i].p_type != PT_LOAD || phdr[i].p_memsz == 0)
-	continue;
-
-      if (first == -1)
-	first = i;
-      last = i;
-    }
-
-  return phdr[last].p_vaddr +  phdr[last].p_memsz - phdr[first].p_vaddr;
-}
-
-
-static void
-nds32_alloc_memory (SIM_DESC sd, struct bfd *abfd)
-{
-  int osabi = 0;
-  int i;
-  char buf[1024];
-  Elf_Internal_Phdr *phdr;
-  Elf_Internal_Phdr *interp_phdr = NULL;
-  uint32_t off;
-  uint32_t len;
-  int sysroot_len;
-  uint32_t interp_base;
-  SIM_CPU *cpu = STATE_CPU (sd, 0);
-  struct rlimit limit;
-  struct nds32_mm *mm = STATE_MM (sd);
-
-  getrlimit (RLIMIT_STACK, &limit);
-  mm->limit_sp = limit.rlim_cur;
-  getrlimit (RLIMIT_DATA, &limit);
-  mm->limit_data = limit.rlim_cur;
-
-  if (mm->limit_sp & 1) /* Unlimited?  */
-    mm->limit_sp = 0x800000;
-  if (mm->limit_data & 1) /* Unlimited?  */
-    mm->limit_data = 0x800000;
-
-  if (STATE_ENVIRONMENT (sd) == ALL_ENVIRONMENT)
-    {
-      bfd_map_over_sections (abfd, nds32_simple_osabi_sniff_sections, &osabi);
-      if (osabi)
-	STATE_ENVIRONMENT (sd) = USER_ENVIRONMENT;
-      else
-	STATE_ENVIRONMENT (sd) = OPERATING_ENVIRONMENT;
-    }
-
-  if (STATE_ENVIRONMENT (sd) != USER_ENVIRONMENT)
-    {
-      /* FIXME: We should only do this if user doesn't allocate one.
-		But how can we know it? */
-      sim_do_command (sd, "memory region 0,0x4000000"); /* 64 MB */
-      return;
-    }
-
-    /*
-    See sim-config.h for detailed explanation.
-	--environment user|virtual|operating
-
-    By default, the setting is 'all' for un-selected.
-
-    In my current design, USER_ENVIRONMENT is used for Linux application,
-    so
-	1. Load ELF by segment instead of by section.
-	2. Load dynamic-link (INTERP) if needed
-	3. Prepare stack for arguments, environments and AUXV.
-	4. Use nds32-mm for memory mapping
-    If the ENVIRONMENT is not USER, the I treat it as normal ELF application,
-    so only a single 64MB memory block is allocated,
-    and default sim_load_file () is used.  */
-
-  /* For emulating Linux VMA */
-  sim_core_attach (sd, NULL, 0, access_read_write_exec, 0, 0x00004000,
-		   0xFFFF8000, 0, &nds32_mm_devices, NULL);
-
-  nds32_mm_init (mm);
-
-  /* Allocate stack.  */
-  /* TODO: Executable stack.  Currently, EXEC affects vma cache. */
-  nds32_mmap (cpu, mm->start_sp - mm->limit_sp, mm->limit_sp,
-	      PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED,
-	      -1, 0);
-
-  /* FIXME: Handle ET_DYN and ET_EXEC.  */
-  phdr = elf_tdata (abfd)->phdr;
-  sd->exec_base = -1;
-  for (i = 0; i < elf_elfheader (abfd)->e_phnum; i++)
-    {
-      uint32_t addr, len;
-      uint32_t prot = 0;
-
-      if (phdr[i].p_type == PT_INTERP)
-	interp_phdr = &phdr[i];
-
-      if (phdr[i].p_type != PT_LOAD || phdr[i].p_memsz == 0)
-	continue;
-
-      addr = phdr[i].p_vaddr;
-      len = addr + phdr[i].p_memsz - PAGE_ALIGN (addr);
-      len = PAGE_ROUNDUP (len);
-      addr = PAGE_ALIGN (addr);
-
-      if (phdr[i].p_flags & PF_X)
-	prot |= PROT_EXEC;
-      if (phdr[i].p_flags & PF_W)
-	prot |= PROT_WRITE;
-      if (phdr[i].p_flags & PF_R)
-	prot |= PROT_READ;
-
-      if (sd->exec_base == -1)
-	sd->exec_base = addr;
-
-      nds32_mmap (cpu, addr, len, prot,
-		  MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED,
-		  -1, 0);
-
-      if (addr + len > mm->brk)
-	mm->brk = addr + len;
-    }
-
-  /* TODO: Pre-map brk */
-
-  if (!interp_phdr)
-    return;
-
-  /* Read path of interp.  */
-  off = interp_phdr->p_offset;
-  len = interp_phdr->p_filesz;
-  sysroot_len = strlen (simulator_sysroot);
-
-  strcpy (buf, simulator_sysroot);
-  if (buf[sysroot_len - 1] == '/')
-    buf[--sysroot_len] = '\0';
-
-  if (bfd_seek (abfd, off, SEEK_SET) != 0
-      || bfd_bread (buf + sysroot_len, len, abfd) != len)
-    return;
-
-  sd->interp_bfd = bfd_openr (buf, 0);
-
-  if (sd->interp_bfd == NULL)
-    return;
-
-  bfd_check_format (sd->interp_bfd, bfd_object);
-
-  /* Add memory for interp.  */
-  phdr = elf_tdata (sd->interp_bfd)->phdr;
-  len = total_mapping_size (phdr, elf_elfheader (sd->interp_bfd)->e_phnum);
-  interp_base = nds32_get_unmapped_area (mm, 0, len);
-  for (i = 0; i < elf_elfheader (sd->interp_bfd)->e_phnum; i++)
-    {
-      uint32_t addr, len, prot = 0;
-
-      if (phdr[i].p_type != PT_LOAD || phdr[i].p_memsz == 0)
-	continue;
-
-      addr = interp_base + phdr[i].p_vaddr;
-      len = addr + phdr[i].p_memsz - PAGE_ALIGN (addr);
-      len = PAGE_ROUNDUP (len);
-      addr = PAGE_ALIGN (addr);
-
-      if (phdr[i].p_flags & PF_X)
-	prot |= PROT_EXEC;
-      if (phdr[i].p_flags & PF_W)
-	prot |= PROT_WRITE;
-      if (phdr[i].p_flags & PF_R)
-	prot |= PROT_READ;
-
-      nds32_mmap (cpu, addr, len, prot,
-		  MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED,
-		  -1, 0);
-    }
-
-  sd->interp_base = interp_base;
 }
 
 static void
@@ -297,13 +104,42 @@ sim_load (SIM_DESC sd, char *prog_name, struct bfd *prog_bfd, int from_tty)
     return SIM_RC_FAIL;
   SIM_ASSERT (STATE_PROG_BFD (sd) != NULL);
 
-  /* Free vma for previous program.  */
-  nds32_freeall_vma (mm);
-
   /* Allocate core memory if none is specified by user.  */
   if (STATE_MEMOPT (sd) == NULL && sd->mem_attached == FALSE
       && prog_bfd != NULL)
-    nds32_alloc_memory (sd, prog_bfd);
+    {
+      int osabi = 0;
+
+      if (STATE_ENVIRONMENT (sd) == ALL_ENVIRONMENT)
+	{
+	  bfd_map_over_sections (prog_bfd, nds32_simple_osabi_sniff_sections,
+				 &osabi);
+	  if (osabi)
+	    STATE_ENVIRONMENT (sd) = USER_ENVIRONMENT;
+	  else
+	    STATE_ENVIRONMENT (sd) = OPERATING_ENVIRONMENT;
+	}
+
+      if (STATE_ENVIRONMENT (sd) != USER_ENVIRONMENT)
+	{
+	  /* FIXME: We should only do this if user doesn't allocate one.
+	     But how can we know it? */
+	  sim_do_command (sd, "memory region 0,0x4000000");	/* 64 MB */
+	}
+     else
+	{
+#if HAVE_MMAP
+	  /* Free vma for previous program.  */
+	  nds32_freeall_vma (mm);
+	  nds32_mm_init (mm);
+
+	  /* For Linux programs, allocate memory regions by segments.  */
+	  nds32_map_segments (sd, prog_bfd);
+#else
+	  sim_io_eprintf (sd, "Linux programs is not supported on this host.");
+#endif
+	}
+    }
 
   if (STATE_ENVIRONMENT (sd) != USER_ENVIRONMENT)
     {

@@ -20,9 +20,7 @@
 
 #include "config.h"
 
-#ifdef HAVE_STRING_H
-#include <string.h>
-#endif
+#include <stdlib.h>
 #include "bfd.h"
 #include "elf-bfd.h"
 #include "gdb/callback.h"
@@ -45,12 +43,7 @@
 #include "nds32-gmon.h"
 #include "nds32-pfm.h"
 
-#if defined (__linux__) || defined (__CYGWIN__)
-/* FIXME */
 #include <sys/types.h>
-#elif defined (__WIN32__)
-#include "mingw32-hdep.h"
-#endif
 #include <unistd.h>
 #include <time.h>
 
@@ -921,7 +914,6 @@ nds32_decode32_alu2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	int val;
 	int d = n + m;
 	uint32_t ora = CCPU_GPR[ra].u;
-
 
 	/* Normal condition.  */
 	if (31 > d)
@@ -2392,17 +2384,6 @@ sim_open (SIM_OPEN_KIND kind, host_callback * callback,
       return 0;
     }
 
-#if 0
-  /* COLE: Not sure whether this is necessary. */
-
-  /* Establish any remaining configuration options.  */
-  if (sim_config (sd) != SIM_RC_OK)
-    {
-      nds32_free_state (sd);
-      return 0;
-    }
-#endif
-
   if (sim_post_argv_init (sd) != SIM_RC_OK)
     {
       nds32_free_state (sd);
@@ -2416,9 +2397,6 @@ sim_open (SIM_OPEN_KIND kind, host_callback * callback,
       nds32_initialize_cpu (sd, cpu, abfd);
     }
 
-  /* Always initial memory-management struct;
-     otherwise, we cannot know whether VMA are used or not.  */
-  nds32_mm_init (mm);
   sd->mem_attached = FALSE;
 
   callback->syscall_map = cb_nds32_libgloss_syscall_map;
@@ -2430,18 +2408,18 @@ void
 sim_close (SIM_DESC sd, int quitting)
 {
   struct nds32_mm *mm = STATE_MM (sd);
+
+#ifdef HAVE_MMAP
   nds32_freeall_vma (mm);
+#endif
 
   if (sd->gprof)
     nds32_gmon_cleanup (STATE_PROG_BFD (sd));
 
-#if 0 && defined (USE_TLB)
+#if defined (DEBUG) && defined (USE_TLB)
   /* Dump VMA usage for debugging.  */
-  char *SIM_DEBUG = getenv ("SIM_DEBUG");
-  if (!SIM_DEBUG || atoi (SIM_DEBUG) == 0)
-    return;
-
   uint64_t t = mm->cache_ihit + mm->cache_dhit + mm->cache_miss;
+
   nds32_dump_vma (mm);
 
   printf ("i-hit rate: %f (%llu/%llu)\n",
@@ -2504,4 +2482,63 @@ void
 sim_set_callbacks (host_callback * ptr)
 {
   /* callback = ptr; */
+}
+
+/* Implement device_error for sim-core devices.  */
+
+void
+device_error (device *me, const char *message, ...)
+{
+  va_list ap;
+
+  va_start (ap, message);
+  vfprintf (stderr, message, ap);
+  va_end (ap);
+
+  abort ();
+}
+
+/* Implement device_io_read_buffer for sim-core devices.  */
+
+int
+device_io_read_buffer (device *me, void *source, int space,
+		       address_word addr, unsigned nr_bytes, SIM_DESC sd,
+		       SIM_CPU *cpu, sim_cia cia)
+{
+#ifdef HAVE_MMAP
+  /* nds32-mm for Linux program are only supported if the host supports
+     mmap/munmap.  */
+  if (me == &nds32_mm_devices)
+    {
+      int r;
+
+      r = nds32_mm_read (me, source, space, addr, nr_bytes, sd, cpu, cia);
+      return r;
+    }
+#endif
+
+  abort ();
+}
+
+/* Implement device_io_write_buffer for sim-core devices.  */
+
+int
+device_io_write_buffer (device *me, const void *source, int space,
+			address_word addr, unsigned nr_bytes,
+			SIM_DESC sd, SIM_CPU *cpu, sim_cia cia)
+{
+#ifdef HAVE_MMAP
+  /* nds32-mm for Linux program are only supported if the host supports
+     mmap/munmap.  */
+
+  if (me == &nds32_mm_devices)
+    {
+      int r;
+
+      r = nds32_mm_write (me, source, space, addr, nr_bytes, sd, cpu, cia);
+      return r;
+    }
+#endif
+
+  abort ();
 }
