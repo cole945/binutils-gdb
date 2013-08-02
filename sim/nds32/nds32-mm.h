@@ -38,7 +38,7 @@
 #define TASK_UNMAPPED_BASE	PAGE_ALIGN (TASK_SIZE / 3)
 #define MM_HEAD(mm)     (&(mm)->mmap)
 
-extern struct _device nds32_mm_devices;
+extern const struct _device nds32_mm_devices;
 
 struct nds32_vm_area
 {
@@ -59,9 +59,9 @@ struct nds32_mm
   struct nds32_vm_area *dcache;
   struct nds32_vm_area *icache;
   /* Accounting hit rates.  */
-  /* uint64_t cache_miss;
+  uint64_t cache_miss;
   uint64_t cache_ihit;
-  uint64_t cache_dhit; */
+  uint64_t cache_dhit;
 #endif
 
   uint32_t start_brk;			/* Start address of brk */
@@ -78,9 +78,16 @@ void nds32_dump_vma (struct nds32_mm *mm);
 uint32_t nds32_sys_brk (sim_cpu *cpu, uint32_t addr);
 int nds32_munmap (sim_cpu *cpu, uint32_t addr, size_t len);
 void *nds32_mmap (sim_cpu *cpu, uint32_t addr, size_t len,
-	      int prot, int flags, int fd, off_t offset);
+		  int prot, int flags, int fd, off_t offset);
 uint32_t nds32_get_unmapped_area (struct nds32_mm *mm, uint32_t addr,
 				  uint32_t len);
 void nds32_freeall_vma (struct nds32_mm *mm);
+void nds32_map_segments (SIM_DESC sd, struct bfd *abfd);
+int nds32_mm_read (device *me, void *source, int space, address_word addr,
+		   unsigned nr_bytes, SIM_DESC sd, SIM_CPU *cpu,
+		   sim_cia cia);
+int nds32_mm_write (device *me, const void *source, int space,
+		    address_word addr, unsigned nr_bytes, SIM_DESC sd,
+		    SIM_CPU *cpu, sim_cia cia);
 
 #endif

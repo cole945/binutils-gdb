@@ -25,11 +25,10 @@ SIM_OBJS = \
 	$(SIM_NEW_COMMON_OBJS) \
 	interp.o \
 	nds32-cop0.o \
-	nds32-load.o \
-	nds32-mm.o \
 	nds32-syscall.o \
 	nds32-gmon.o \
 	nds32-pfm.o \
+	nds32-load.o \
 	sim-cpu.o \
 	sim-engine.o \
 	sim-hrw.o \
@@ -44,4 +43,4 @@ SIM_OBJS = \
 	$(SIM_EXTRA_OBJS)
 ## COMMON_POST_CONFIG_FRAG
 
-nds32-syscall.o: nds32-syscall.c targ-vals.h mingw32-hdep.h nds32-sim.h nds32-mm.h nds32-syscall.h
+nds32-syscall.o: nds32-syscall.c targ-vals.h nds32-sim.h nds32-mm.h nds32-syscall.h

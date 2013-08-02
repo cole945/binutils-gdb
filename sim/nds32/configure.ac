@@ -11,12 +11,22 @@ SIM_AC_OPTION_ENVIRONMENT
 
 NDS32_SIM_EXTRA_OBJS=
 
-case ${host} in
-  *mingw32*)
-    NDS32_SIM_EXTRA_OBJS="${NDS32_SIM_EXTRA_OBJS} mingw32-hdep.o"
-    ;;
-  *) ;;
-esac
+AC_CHECK_FUNCS([ \
+	getuid getgid geteuid getegid setuid setgid \
+	access fcntl link \
+	gettimeofday times \
+	getrlimit setrlimit \
+])
+
+AC_CHECK_FUNCS([mmap munmap], \
+	NDS32_SIM_EXTRA_OBJS="${NDS32_SIM_EXTRA_OBJS} nds32-mm.o")
+
+AC_CHECK_HEADERS([ \
+	sys/ioctl.h \
+	sys/mman.h \
+	sys/resource.h \
+	sys/times.h \
+])
 
 AC_SUBST([NDS32_SIM_EXTRA_OBJS], ${NDS32_SIM_EXTRA_OBJS})
 

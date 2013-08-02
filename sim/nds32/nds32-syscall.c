@@ -25,15 +25,17 @@
 #include "gdb/callback.h"
 #include "targ-vals.h"
 
-#if defined (__linux__) || defined (__CYGWIN__)
+#ifdef HAVE_SYS_TIME_H
 #include <sys/time.h>
+#endif
+#ifdef HAVE_SYS_TIMES_H
 #include <sys/times.h>
-#include <sys/utsname.h>
-#include <sys/mman.h>
+#endif
+#ifdef HAVE_SYS_RESOURCE_H
 #include <sys/resource.h>
+#endif
+#ifdef HAVE_SYS_IOCTL_H
 #include <sys/ioctl.h>
-#elif defined (__WIN32__)
-#include "mingw32-hdep.h"
 #endif
 #include <unistd.h>
 #include <fcntl.h>
@@ -41,14 +43,6 @@
 #include "nds32-sim.h"
 #include "nds32-mm.h"
 #include "nds32-syscall.h"
-
-#if 0
-  /* More standard syscalls.  */
-  {CB_SYS_lstat,	19},
-  {CB_SYS_truncate,	21},
-  {CB_SYS_ftruncate,	22},
-  {CB_SYS_pipe,		23},
-#endif
 
 CB_TARGET_DEFS_MAP cb_nds32_libgloss_syscall_map[] =
 {
@@ -278,7 +272,7 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 	unsigned long offhi = CCPU_GPR[1].u;
 	unsigned long offlo = CCPU_GPR[2].u;
 	unsigned int whence = CCPU_GPR[4].u;
-	loff_t roff;
+	uint64_t roff;
 
 	sc.func = swid;
 	sc.arg1 = fd;
@@ -294,7 +288,7 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 	/* Copy the result only if user really passes other then NULL.  */
 	if (sc.result != -1 && CCPU_GPR[3].u)
 	  sim_write (sd, CCPU_GPR[3].u, (const unsigned char *) &roff,
-		     sizeof (loff_t));
+		     sizeof (roff));
       }
 
     case CB_SYS_getpid:
@@ -327,6 +321,7 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
       cb_syscall (cb, &sc);
       break;
 
+#ifdef HAVE_GETTIMEOFDAY
     case CB_SYS_gettimeofday:
       {
 	struct timeval tv;
@@ -355,30 +350,32 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 		     sizeof (target_tz));
       }
       break;
-
-    /* glibc will try to use this, but we should reject it,
-       so getrlimit will be used instread.  */
-    case CB_SYS_ugetrlimit:
-      sc.result = -1;
-      sc.errcode = TARGET_ENOSYS;
-      break;
+#endif
 
     /*
      * System calls used by Linux only.
      */
 
+#ifdef HAVE_MMAP
+    /* nds32-mm is only supported if host supports mmap.  */
     case CB_SYS_brk:
       sc.result = nds32_sys_brk (cpu, CCPU_GPR[0].u);
       break;
+#endif
 
+#ifdef HAVE_IOCTL
     case CB_SYS_ioctl:
       sc.result = ioctl (CCPU_GPR[0].s, CCPU_GPR[1].s, CCPU_GPR[2].s);
       break;
+#endif
 
+#ifdef HAVE_FCNTL
     case CB_SYS_fcntl64:
       sc.result = fcntl (CCPU_GPR[0].s, CCPU_GPR[1].s, CCPU_GPR[2].s);
       break;
+#endif
 
+#ifdef HAVE_TIMES
     case CB_SYS_times:
       {
 	struct tms tms;
@@ -402,7 +399,9 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 		     sizeof (target_tms));
       }
       break;
+#endif
 
+#ifdef HAVE_ACCESS
     case CB_SYS_access:
       {
 	char *path;
@@ -412,7 +411,9 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 	free (path);
       }
       break;
+#endif
 
+#ifdef HAVE_LINK
     case CB_SYS_link:
       {
 	char *oldpath;
@@ -427,14 +428,22 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 	free (newpath);
       }
       break;
+#endif
 
     case CB_SYS_uname:
       {
-	struct utsname buf;
+	static char sim_utsname[6][65] =
+	{
+	  "Linux",	/* sysname */
+	  "sim-target",	/* nodename */
+	  "2.6.27",	/* release */
+	  "#1",		/* version */
+	  "nds32",	/* machine */
+	  "localdomain"	/* domainname */
+	};
 
-	if ((sc.result = uname (&buf)) == 0 && CCPU_GPR[0].u)
-	  sim_write (sd, CCPU_GPR[0].u, (const unsigned char *) &buf,
-		     sizeof (buf));
+	sim_write (sd, CCPU_GPR[0].u, (const unsigned char *) &sim_utsname,
+		   sizeof (sim_utsname));
       }
       break;
 
@@ -442,29 +451,41 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
       sc.result = PAGE_SIZE;
       break;
 
+#ifdef HAVE_GETUID
     case CB_SYS_getuid32:
       sc.result = getuid ();
       break;
+#endif
 
+#ifdef HAVE_GETGID
     case CB_SYS_getgid32:
       sc.result = getgid ();
       break;
+#endif
 
+#ifdef HAVE_GETEUID
     case CB_SYS_geteuid32:
       sc.result = geteuid ();
       break;
+#endif
 
+#ifdef HAVE_GETEGID
     case CB_SYS_getegid32:
       sc.result = getegid ();
       break;
+#endif
 
+#ifdef HAVE_SETUID
     case CB_SYS_setuid32:
       sc.result = setuid (CCPU_GPR[0].u);
       break;
+#endif
 
+#ifdef HAVE_SETGID
     case CB_SYS_setgid32:
       sc.result = setgid (CCPU_GPR[0].u);
       break;
+#endif
 
     /* case CB_SYS_readv: */
     case CB_SYS_writev:
@@ -511,6 +532,7 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
       }
       break;
 
+#if defined (HAVE_MMAP) && defined (HAVE_MUNMAP)
     case CB_SYS_mmap2:
       {
 	uint32_t addr = CCPU_GPR[0].u;
@@ -526,6 +548,7 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 				       pgoffset * PAGE_SIZE);
       }
       break;
+
     case CB_SYS_munmap:
       {
 	uint32_t addr = CCPU_GPR[0].u;
@@ -534,7 +557,9 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 	sc.result = nds32_munmap (cpu, addr, len);
       }
       break;
+#endif
 
+#ifdef HAVE_SETRLIMIT
     case CB_SYS_setrlimit:
       {
 	struct rlimit rlim;
@@ -544,7 +569,9 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 	sc.result = setrlimit (CCPU_GPR[0].s, &rlim);
       }
       break;
+#endif
 
+#ifdef HAVE_GETRLIMIT
     case CB_SYS_getrlimit:
       {
 	struct rlimit rlim;
@@ -556,10 +583,20 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 		     sizeof (rlim));
       }
       break;
+#endif
+
+    /* glibc will try to use this, but we should reject it,
+       so getrlimit will be used instread.  */
+    case CB_SYS_ugetrlimit:
+      sc.result = -1;
+      sc.errcode = TARGET_ENOSYS;
+      break;
 
     case CB_SYS_mprotect:
       sc.result = 0; /* Just do nothing now. */
       break;
+
+    /* This a nds32 libgloss only system calls.  */
 
     case CB_SYS_NDS32_isatty:
       sc.result = sim_io_isatty (sd, CCPU_GPR[0].s);
