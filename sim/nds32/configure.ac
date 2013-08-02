@@ -16,6 +16,7 @@ AC_CHECK_FUNCS([ \
 	access fcntl link \
 	gettimeofday times \
 	getrlimit setrlimit \
+	nanosleep \
 ])
 
 AC_CHECK_FUNCS([mmap munmap], \
