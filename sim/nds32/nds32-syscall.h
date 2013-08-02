@@ -45,6 +45,7 @@
 #define CB_SYS_llseek		(CB_SYS_BASE + 140)
 #define CB_SYS_readv		(CB_SYS_BASE + 145)
 #define CB_SYS_writev		(CB_SYS_BASE + 146)
+#define CB_SYS_nanosleep	(CB_SYS_BASE + 162)
 #define CB_SYS_getpagesize	(CB_SYS_BASE + 166)
 #define CB_SYS_sigaction	(CB_SYS_BASE + 174)
 #define CB_SYS_ugetrlimit	(CB_SYS_BASE + 191)

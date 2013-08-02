@@ -107,6 +107,8 @@ CB_TARGET_DEFS_MAP cb_nds32_linux_syscall_map[] =
   {CB_SYS_times,	LINUX_SYS_BASE + 43},
   {CB_SYS_brk,		LINUX_SYS_BASE + 45},
   {CB_SYS_ioctl,	LINUX_SYS_BASE + 54},
+  {CB_SYS_setrlimit,	LINUX_SYS_BASE + 75},
+  {CB_SYS_getrlimit,	LINUX_SYS_BASE + 76},
   {CB_SYS_gettimeofday,	LINUX_SYS_BASE + 78},
   /* {CB_SYS_settimeofday,	LINUX_SYS_BASE + 79}, */
   {CB_SYS_mmap,		LINUX_SYS_BASE + 90},
@@ -119,6 +121,7 @@ CB_TARGET_DEFS_MAP cb_nds32_linux_syscall_map[] =
   {CB_SYS_llseek,	LINUX_SYS_BASE + 140},
   {CB_SYS_readv,	LINUX_SYS_BASE + 145},
   {CB_SYS_writev,	LINUX_SYS_BASE + 146},
+  {CB_SYS_nanosleep,	LINUX_SYS_BASE + 162},
   {CB_SYS_getpagesize,	LINUX_SYS_BASE + 166},
   {CB_SYS_ugetrlimit,	LINUX_SYS_BASE + 191},
   {CB_SYS_mmap2,	LINUX_SYS_BASE + 192},
@@ -249,7 +252,7 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
     {
     default:
       cb_syscall (cb, &sc);
-      if (sc.result == -1 && sc.errcode == TARGET_ENOSYS)
+      if (sc.result == -1 && sc.errcode == ENOSYS)
 	{
 	  nds32_bad_op (cpu, cia, swid, "syscall");
 	  return;
@@ -401,6 +404,20 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
       break;
 #endif
 
+#ifdef HAVE_NANOSLEEP
+    case CB_SYS_nanosleep:
+      {
+	struct timespec req;
+	struct timespec rem;
+
+	sim_read (sd, CCPU_GPR[0].u, (unsigned char *) &req, sizeof (req));
+	sc.result = nanosleep (&req, &rem);
+	if (CCPU_GPR[1].u != 0)
+	  sim_write (sd, CCPU_GPR[1].u, (unsigned char *) &rem, sizeof (rem));
+      }
+      break;
+#endif
+
 #ifdef HAVE_ACCESS
     case CB_SYS_access:
       {
@@ -501,7 +518,7 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 	if (fd < 0 || fd > MAX_CALLBACK_FDS || cb->fd_buddy[fd] < 0)
 	  {
 	    sc.result = -1;
-	    sc.errcode = TARGET_EBADF;
+	    sc.errcode = EBADF;
 	    break;
 	  }
 	fd = cb->fdmap[fd];
@@ -578,7 +595,7 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 
 	/* int getrlimit(int resource, struct rlimit *rlim); */
 	sc.result = getrlimit (CCPU_GPR[0].s, &rlim);
-	if (sc.result >= 0)
+	if (sc.result == 0)
 	  sim_write (sd, CCPU_GPR[1].u, (const unsigned char *) &rlim,
 		     sizeof (rlim));
       }
@@ -586,10 +603,10 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 #endif
 
     /* glibc will try to use this, but we should reject it,
-       so getrlimit will be used instread.  */
+       so getrlimit will be used instead.  */
     case CB_SYS_ugetrlimit:
       sc.result = -1;
-      sc.errcode = TARGET_ENOSYS;
+      sc.errcode = ENOSYS;
       break;
 
     case CB_SYS_mprotect:

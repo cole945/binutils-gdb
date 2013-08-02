@@ -13051,6 +13051,7 @@ for ac_func in  \
 	access fcntl link \
 	gettimeofday times \
 	getrlimit setrlimit \
+	nanosleep \
 
 do :
   as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`
