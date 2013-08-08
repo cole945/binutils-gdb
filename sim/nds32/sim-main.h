@@ -66,6 +66,10 @@ struct _sim_cpu {
   /* Floating-point registers. 32 single union 32 double. FIXME */
   reg_t reg_fpr[64];
 #define CCPU_FPR	(cpu->reg_fpr)
+  reg_t reg_fpcfg;
+#define CCPU_FPCFG	(cpu->reg_fpcfg)
+  reg_t reg_fpcsr;
+#define CCPU_FPCSR	(cpu->reg_fpcsr)
 
   enum nds32_internal_flags iflags;
   /* If NIF_BRANCH, this is the destination address.  */
