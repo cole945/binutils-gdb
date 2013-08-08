@@ -37,12 +37,18 @@
 #include "opcode/nds32.h"
 #include "nds32-sim.h"
 
+/* Concatenate the pair of FPRs specified by FD into a 64-bit value,
+   so they can be written to memory.  */
+
 static inline uint64_t
 nds32_fd_to_64 (sim_cpu *cpu, int fd)
 {
   fd <<= 1;
   return ((uint64_t) CCPU_FPR[fd].u << 32) | (uint64_t) CCPU_FPR[fd + 1].u;
 }
+
+/* Split the 64-bit value of a double-precision floating-point into
+   high-part and low-part and write them into corresponding FPRs slots.  */
 
 static inline void
 nds32_fd_from_64 (sim_cpu *cpu, int fd, uint64_t u64)
@@ -154,11 +160,8 @@ nds32_decode32_sdc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
   return cia + 4;
 }
 
-/* Returns 0 for false
-	   1 for equal
-	   2 for less
-	   3 for qnan
-	   4 for snan */
+/* Compare two floating-point value and return the result.
+   0 for false, 1 for equal, 2 for less, 3 for QNAN, and  4 for SNAN. */
 
 static int
 nds32_decode32_fcmp (sim_fpu *sfa, sim_fpu *sfb)
@@ -167,7 +170,31 @@ nds32_decode32_fcmp (sim_fpu *sfa, sim_fpu *sfb)
   int op1is = sim_fpu_is (sfb);
   int fcmp; /* lazy init. sim_fpu_cmp (&sfa, &sfb); */
   int r;
-  static int s2i[12] = {
+  enum {GT, EQ, LT, UN, };
+  /* The comparison result of differerent number classes
+     for fast lookup.
+       0 - GT
+       1 - EQ
+       2 - LT
+       3 - UN (quiet)
+       4 - UN (signaling)
+       9 - Calc
+
+   -i -n -dn -0 +0 +dn +n +i qn sn*/
+  static const char ctab[100] = {
+    1, 0, 0, 0, 0, 0, 0, 0, 3, 4,  /* -infinity */
+    2, 9, 0, 0, 0, 0, 0, 0, 3, 4,  /* -number */
+    2, 2, 9, 0, 0, 0, 0, 0, 3, 4,  /* -denorm */
+    2, 2, 2, 1, 1, 0, 0, 0, 3, 4,  /* -0 */
+    2, 2, 2, 1, 1, 0, 0, 0, 3, 4,  /* +0 */
+    2, 2, 2, 2, 2, 9, 0, 0, 3, 4,  /* +denorm */
+    2, 2, 2, 2, 2, 2, 9, 0, 3, 4,  /* +number */
+    2, 2, 2, 2, 2, 2, 2, 1, 3, 4,  /* +infinity */
+    3, 3, 3, 3, 3, 3, 3, 3, 3, 4,  /* Quiet not-a-number */
+    4, 4, 4, 4, 4, 4, 4, 4, 4, 4,  /* Noisy not-a-number */
+  };
+  /* Map sim-fpu number class to index to CTAB table above.  */
+  static const int s2i[12] = {
     [SIM_FPU_IS_NINF] = 0,
     [SIM_FPU_IS_PINF] = 7,
     [SIM_FPU_IS_NNUMBER] = 1,
@@ -179,28 +206,6 @@ nds32_decode32_fcmp (sim_fpu *sfa, sim_fpu *sfb)
     [SIM_FPU_IS_QNAN] = 8,
     [SIM_FPU_IS_SNAN] = 9,
   };
-  /* -i -n -dn -0 +0 +dn +n +i qn sn*/
-  static char ctab[100] = {
-    1, 0, 0, 0, 0, 0, 0, 0, 3, 4,
-    2, 9, 0, 0, 0, 0, 0, 0, 3, 4,
-    2, 2, 9, 0, 0, 0, 0, 0, 3, 4,
-    2, 2, 2, 1, 1, 0, 0, 0, 3, 4,
-    2, 2, 2, 1, 1, 0, 0, 0, 3, 4,
-    2, 2, 2, 2, 2, 9, 0, 0, 3, 4,
-    2, 2, 2, 2, 2, 2, 9, 0, 3, 4,
-    2, 2, 2, 2, 2, 2, 2, 1, 3, 4,
-    3, 3, 3, 3, 3, 3, 3, 3, 3, 4,
-    4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
-  };
-
-  /*
-    0 - GT
-    1 - EQ
-    2 - LT
-    3 - UN (quiet)
-    4 - UN (signaling)
-    9 - Calc
-   */
 
   r = ctab [s2i[op0is] + s2i[op1is] * 10];
   if (r != 9)
@@ -222,6 +227,11 @@ sim_cia
 nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
   SIM_DESC sd = CPU_STATE (cpu);
+  static const int round_modes[] =
+  {
+      sim_fpu_round_near, sim_fpu_round_up,
+      sim_fpu_round_down, sim_fpu_round_zero
+  };
   const int cop = __GF (insn, 4, 2);
   const int sv = __GF (insn, 8, 2);
   const int fst = N32_RT5 (insn);
@@ -240,6 +250,13 @@ nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
   sim_fpu sft, sft2;
   sim_fpu sfa;
   sim_fpu sfb;
+  int denorm, rounding;
+
+  /* Rounding and Denormalized flush-to-Zero modes in FPCSR.  */
+  denorm = CCPU_FPCSR_TEST (DNZ) ? sim_fpu_denorm_zero
+				 : sim_fpu_denorm_default;
+  rounding = round_modes[CCPU_FPCSR_GET (RM)];
+
 
   SIM_ASSERT (cop == 0);
 
@@ -281,14 +298,10 @@ nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       int dp = (insn & 0x8) > 0;
       int sft_to_dp = dp;
 
-      /* To simplify the operations,
-	 all the single-precision operations are
-	 promoted and double-precision.
-
-	 sft_to_dp determines whether the final destination
-	 is single or double.
-	 dp determines whether the source operands are
-	 single or double.  */
+      /* To simplify the operations, all the single-precision operations
+	 are promoted to double-precision.  SFT_TO_DP determines whether
+	 the final destination is single or double.  DP determines whether
+	 the source operands are single or double.  */
 
       switch (__GF (insn, 6, 4))
 	{
@@ -402,20 +415,18 @@ nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 		}
 	      goto done; /* Just return.  */
 	    case 0xc:		/* fsi2s, fsi2d */
-	      sim_fpu_i32to (&sft, CCPU_FPR[fsa].u, sim_fpu_round_near);
+	      sim_fpu_i32to (&sft, CCPU_FPR[fsa].u, rounding);
 	      break;
 	    case 0x10:		/* fs2ui, fd2ui */
 	    case 0x14:		/* fs2ui.z, fd2ui.z */
 	      sim_fpu_to32u (&u32, &sfa, (insn & (1 << 12))
-					 ? sim_fpu_round_zero
-					 : sim_fpu_round_near);
+					 ? sim_fpu_round_zero : rounding);
 	      CCPU_FPR[fst].u = u32;
 	      goto done;	/* just return */
 	    case 0x18:		/* fs2si, fd2si */
 	    case 0x1c:		/* fs2si.z, fd2si.z */
 	      sim_fpu_to32i (&i32, &sfa, (insn & (1 << 12))
-					 ? sim_fpu_round_zero
-					 : sim_fpu_round_near);
+					 ? sim_fpu_round_zero : rounding);
 	      CCPU_FPR[fst].s = i32;
 	      goto done; /* Just return.  */
 	    default:
@@ -429,6 +440,7 @@ nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       if (!sft_to_dp)
 	{
 	  /* General epilogue for saving result to fst.  */
+	  sim_fpu_round_32 (&sft, rounding, denorm);
 	  sim_fpu_to32 ((unsigned32 *) (CCPU_FPR + fst), &sft);
 	}
       else
@@ -440,9 +452,9 @@ nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       goto done;
     }
 
-  /* fcmpxxd and fcmpxxs share this function. */
-  if ((insn & 0x7) == 4)
+  if ((insn & 0x7) == 4)	/* FS2 or FD2 */
     {
+      /* fcmpxxd and fcmpxxs share this function. */
       fcmp = nds32_decode32_fcmp (&sfa, &sfb);
       switch (__GF (insn, 7, 3))
 	{
@@ -458,51 +470,74 @@ nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	case 0x3:
 	  CCPU_FPR[fst].u = fcmp == 3 || fcmp == 4;
 	  goto done;
+	default:
+	  goto bad_op;
 	}
       goto done;
     }
 
-  switch (insn & 0x3ff)
+  if ((insn & 0x7) == 1)	/* MFCP or MTCP */
     {
-    case 0x1:			/* fmfsr */
-      CCPU_GPR[rt].u = CCPU_FPR[fsa].u;
-      goto done;
-    case 0x9:			/* fmtsr */
-      CCPU_FPR[fsa].u = CCPU_GPR[rt].u;
-      goto done;
-    case 0x41:			/* fmfdr */
-      {
-	int rt_ = rt & ~1;
-	if (CCPU_SR_TEST (PSW, PSW_BE))
-	  {
-	    CCPU_GPR[rt_] = CCPU_FPR[fda_];
-	    CCPU_GPR[rt_ + 1] = CCPU_FPR[fda_ + 1];
-	  }
-	else
-	  {
-	    CCPU_GPR[rt_] = CCPU_FPR[fda_ + 1];
-	    CCPU_GPR[rt_ + 1] = CCPU_FPR[fda_];
-	  }
-      }
-      goto done;
-    case 0x49:			/* fmtdr */
-      {
-	int rt_ = rt & ~1;
-	if (CCPU_SR_TEST (PSW, PSW_BE))
-	  {
-	    CCPU_FPR[fda_ + 1] = CCPU_GPR[rt_ + 1];
-	    CCPU_FPR[fda_] = CCPU_GPR[rt_];
-	  }
-	else
-	  {
-	    CCPU_FPR[fda_ + 1] = CCPU_GPR[rt_];
-	    CCPU_FPR[fda_] = CCPU_GPR[rt_ + 1];
-	  }
-      }
-      goto done;
+      switch (insn & 0x3ff)
+	{
+	case 0x1:		/* fmfsr */
+	  CCPU_GPR[rt].u = CCPU_FPR[fsa].u;
+	  goto done;
+	case 0x9:		/* fmtsr */
+	  CCPU_FPR[fsa].u = CCPU_GPR[rt].u;
+	  goto done;
+	case 0x41:		/* fmfdr */
+	    {
+	      int rt_ = rt & ~1;
+
+	      if (CCPU_SR_TEST (PSW, PSW_BE))
+		{
+		  CCPU_GPR[rt_] = CCPU_FPR[fda_];
+		  CCPU_GPR[rt_ + 1] = CCPU_FPR[fda_ + 1];
+		}
+	      else
+		{
+		  CCPU_GPR[rt_] = CCPU_FPR[fda_ + 1];
+		  CCPU_GPR[rt_ + 1] = CCPU_FPR[fda_];
+		}
+	    }
+	  goto done;
+	case 0x49:		/* fmtdr */
+	    {
+	      int rt_ = rt & ~1;
+
+	      if (CCPU_SR_TEST (PSW, PSW_BE))
+		{
+		  CCPU_FPR[fda_ + 1] = CCPU_GPR[rt_ + 1];
+		  CCPU_FPR[fda_] = CCPU_GPR[rt_];
+		}
+	      else
+		{
+		  CCPU_FPR[fda_ + 1] = CCPU_GPR[rt_];
+		  CCPU_FPR[fda_] = CCPU_GPR[rt_ + 1];
+		}
+	    }
+	  goto done;
+	case 0x301:		/* FMFXR */
+	  if (rb == 0)		/* fmfcfg */
+	    CCPU_GPR[rt] = CCPU_FPCFG;
+	  else if (rb == 1)	/* fmfcsr */
+	    CCPU_GPR[rt] = CCPU_FPCSR;
+	  else
+	    goto bad_op;
+	  goto done;
+	case 0x309:		/* FMTXR */
+	  if (rb == 1)		/* fmtcsr */
+	    CCPU_FPCSR = CCPU_GPR[rt];
+	  else
+	    goto bad_op;
+	  goto done;
+	default:
+	  goto bad_op;
+	}
     }
 
-  switch (insn & 0xFF)
+  switch (insn & 0xff)
     {
     case 0x2:			/* fls */
       u32 = nds32_ld_aligned (cpu, CCPU_GPR[ra].u + (CCPU_GPR[rb].s << sv), 4);
@@ -538,6 +573,8 @@ nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       nds32_st_aligned (cpu, CCPU_GPR[ra].u, 8, u64);
       CCPU_GPR[ra].u += (CCPU_GPR[rb].s << sv);
       goto done;
+    default:
+      goto bad_op;
     }
 
 

@@ -186,6 +186,37 @@ enum
   PFM_CTL_SEL1_N= 6,
   PFM_CTL_SEL2	= 22,
   PFM_CTL_SEL2_N= 6,
+
+  FPCFG_SP	= 0,
+  FPCFG_DP	= 1,
+  FPCFG_FREG	= 2,
+  FPCFG_FREG_N	= 2,
+  FPCFG_FMA	= 4,
+  FPCFG_IMVER	= 22,
+  FPCFG_IMVER_N	= 5,
+  FPCFG_AVER	= 27,
+  FPCFG_AVER_N	= 5,
+
+  FPCSR_RM	= 0,
+  FPCSR_RM_N	= 2,
+  FPCSR_IVO	= 2,
+  FPCSR_DBZ	= 3,
+  FPCSR_OVF	= 4,
+  FPCSR_UDF	= 5,
+  FPCSR_IEX	= 6,
+  FPCSR_IVOE	= 7,
+  FPCSR_DBZE	= 8,
+  FPCSR_OVFE	= 9,
+  FPCSR_UDEF	= 10,
+  FPCSR_IEXE	= 11,
+  FPCSR_DNZ	= 12,
+  FPCSR_IVOT	= 13,
+  FPCSR_DBZT	= 14,
+  FPCSR_OVFT	= 15,
+  FPCSR_UDFT	= 16,
+  FPCSR_IEXT	= 17,
+  FPCSR_DNIT	= 18,
+  FPCSR_RIT	= 19,
 };
 
 ATTRIBUTE_UNUSED static void
@@ -197,10 +228,28 @@ __put_field (uint32_t *src, int shift, int bs, uint32_t val)
   *src = (*src & ~(mask << shift)) | (val << shift);
 }
 
-#define CCPU_SR_TEST(SREG,BIT)	(cpu->reg_sr[SRIDX_##SREG].u & (1 << BIT))
-#define CCPU_SR_SET(SREG,BIT)	do { cpu->reg_sr[SRIDX_##SREG].u |= (1 << BIT); } while (0)
-#define CCPU_SR_CLEAR(SREG,BIT)	do { cpu->reg_sr[SRIDX_##SREG].u &= ~(1 << BIT); } while (0)
-#define CCPU_SR_GET(SREG,BIT)	((cpu->reg_sr[SRIDX_##SREG].u >> BIT) & ((1 << BIT##_N) - 1))
-#define CCPU_SR_PUT(SREG,BIT,V)	do { __put_field (&cpu->reg_sr[SRIDX_##SREG].u, BIT, BIT##_N, V); } while (0)
+#define __TEST(VALUE,BIT)	((VALUE) & (1 << (BIT)))
+#define __SET(VALUE,BIT)	do { (VALUE) |= (1 << (BIT)); } while (0)
+#define __CLEAR(VALUE,BIT)	do { (VALUE) &= ~(1 << (BIT)); } while (0)
+#define __GET(VALUE,BIT)	(((VALUE) >> (BIT)) & ((1 << (BIT##_N)) - 1))
+#define __PUT(VALUE,BIT,V)	do { __put_field (&(VALUE), (BIT), (BIT##_N), (V)); } while (0)
+
+#define CCPU_SR_TEST(SREG,BIT)	__TEST (cpu->reg_sr[SRIDX_##SREG].u, BIT)
+#define CCPU_SR_SET(SREG,BIT)	__SET (cpu->reg_sr[SRIDX_##SREG].u, BIT)
+#define CCPU_SR_CLEAR(SREG,BIT)	__CLEAR (cpu->reg_sr[SRIDX_##SREG].u, BIT)
+#define CCPU_SR_GET(SREG,BIT)	__GET (cpu->reg_sr[SRIDX_##SREG].u, BIT)
+#define CCPU_SR_PUT(SREG,BIT,V)	__PUT (cpu->reg_sr[SRIDX_##SREG].u, BIT, V)
+
+#define CCPU_FPCFG_TEST(BIT)	__TEST (cpu->reg_fpcfg.u, FPCFG_##BIT)
+#define CCPU_FPCFG_SET(BIT)	__SET (cpu->reg_fpcfg.u, FPCFG_##BIT)
+#define CCPU_FPCFG_CLEAR(BIT)	__CLEAR (cpu->reg_fpcfg.u, FPCFG_##BIT)
+#define CCPU_FPCFG_GET(BIT)	__GET (cpu->reg_fpcfg.u, FPCFG_##BIT)
+#define CCPU_FPCFG_PUT(BIT,V)	__PUT (cpu->reg_fpcfg.u, FPCFG_##BIT, V)
+
+#define CCPU_FPCSR_TEST(BIT)	__TEST (cpu->reg_fpcsr.u, FPCSR_##BIT)
+#define CCPU_FPCSR_SET(BIT)	__SET (cpu->reg_fpcsr.u, FPCSR_##BIT)
+#define CCPU_FPCSR_CLEAR(BIT)	__CLEAR (cpu->reg_fpcsr.u, FPCSR_##BIT)
+#define CCPU_FPCSR_GET(BIT)	__GET (cpu->reg_fpcsr.u, FPCSR_##BIT)
+#define CCPU_FPCSR_PUT(BIT,V)	__PUT (cpu->reg_fpcsr.u, FPCSR_##BIT, V)
 
 #endif
