@@ -2319,6 +2319,14 @@ nds32_initialize_cpu (SIM_DESC sd, sim_cpu *cpu, struct bfd *abfd)
   CCPU_SR_CLEAR (IVB, IVB_EVIC);	/* (IM) */
   CCPU_SR_PUT (IVB, IVB_ESZ, 1);	/* 16-byte */
   CCPU_SR_PUT (IVB, IVB_IVBASE, 0);	/* (IM) */
+
+  /* Floating-Point Configuration Register.  */
+  CCPU_FPCFG_SET (SP);
+  CCPU_FPCFG_SET (DP);
+  CCPU_FPCFG_SET (FMA);
+  CCPU_FPCFG_PUT (FREG, 3);
+  /* Floating-Point Control Status Register.  */
+  CCPU_FPCSR.u = 0;
 }
 
 static SIM_RC
