@@ -293,6 +293,16 @@ nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	}
     }
 
+  if (denorm == sim_fpu_denorm_zero)
+    {
+      if (sim_fpu_is_denorm (&sfa))
+	sfa = sim_fpu_zero;
+      if (sim_fpu_is_denorm (&sfb))
+	sfb = sim_fpu_zero;
+      if (sim_fpu_is_denorm (&sft))
+	sft = sim_fpu_zero;
+    }
+
   if ((insn & 0x7) == 0)	/* FS1 or FD1 */
     {
       int dp = (insn & 0x8) > 0;
