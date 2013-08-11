@@ -160,69 +160,6 @@ nds32_decode32_sdc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
   return cia + 4;
 }
 
-/* Compare two floating-point value and return the result.
-   0 for false, 1 for equal, 2 for less, 3 for QNAN, and  4 for SNAN. */
-
-static int
-nds32_decode32_fcmp (sim_fpu *sfa, sim_fpu *sfb)
-{
-  int op0is = sim_fpu_is (sfa);
-  int op1is = sim_fpu_is (sfb);
-  int fcmp; /* lazy init. sim_fpu_cmp (&sfa, &sfb); */
-  int r;
-  enum {GT, EQ, LT, UN, };
-  /* The comparison result of differerent number classes
-     for fast lookup.
-       0 - GT
-       1 - EQ
-       2 - LT
-       3 - UN (quiet)
-       4 - UN (signaling)
-       9 - Calc
-
-   -i -n -dn -0 +0 +dn +n +i qn sn*/
-  static const char ctab[100] = {
-    1, 0, 0, 0, 0, 0, 0, 0, 3, 4,  /* -infinity */
-    2, 9, 0, 0, 0, 0, 0, 0, 3, 4,  /* -number */
-    2, 2, 9, 0, 0, 0, 0, 0, 3, 4,  /* -denorm */
-    2, 2, 2, 1, 1, 0, 0, 0, 3, 4,  /* -0 */
-    2, 2, 2, 1, 1, 0, 0, 0, 3, 4,  /* +0 */
-    2, 2, 2, 2, 2, 9, 0, 0, 3, 4,  /* +denorm */
-    2, 2, 2, 2, 2, 2, 9, 0, 3, 4,  /* +number */
-    2, 2, 2, 2, 2, 2, 2, 1, 3, 4,  /* +infinity */
-    3, 3, 3, 3, 3, 3, 3, 3, 3, 4,  /* Quiet not-a-number */
-    4, 4, 4, 4, 4, 4, 4, 4, 4, 4,  /* Noisy not-a-number */
-  };
-  /* Map sim-fpu number class to index to CTAB table above.  */
-  static const int s2i[12] = {
-    [SIM_FPU_IS_NINF] = 0,
-    [SIM_FPU_IS_PINF] = 7,
-    [SIM_FPU_IS_NNUMBER] = 1,
-    [SIM_FPU_IS_PNUMBER] = 6,
-    [SIM_FPU_IS_NDENORM] = 2,
-    [SIM_FPU_IS_PDENORM] = 5,
-    [SIM_FPU_IS_NZERO] = 3,
-    [SIM_FPU_IS_PZERO] = 4,
-    [SIM_FPU_IS_QNAN] = 8,
-    [SIM_FPU_IS_SNAN] = 9,
-  };
-
-  r = ctab [s2i[op0is] + s2i[op1is] * 10];
-  if (r != 9)
-    return r;
-
-  fcmp = sim_fpu_cmp (sfa, sfb);
-
-  if (LSBIT32 (fcmp)
-      & (LSBIT32 (SIM_FPU_IS_NZERO) | LSBIT32 (SIM_FPU_IS_PZERO)))
-    return 1;
-  else if (LSBIT32 (fcmp)
-	   & (LSBIT32 (SIM_FPU_IS_NINF) | LSBIT32 (SIM_FPU_IS_NNUMBER)
-	      | LSBIT32 (SIM_FPU_IS_NDENORM) | LSBIT32 (SIM_FPU_IS_NZERO)))
-    return 2;
-  return 0;
-}
-
 sim_cia
 nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
@@ -465,20 +402,20 @@ nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
   if ((insn & 0x7) == 4)	/* FS2 or FD2 */
     {
       /* fcmpxxd and fcmpxxs share this function. */
-      fcmp = nds32_decode32_fcmp (&sfa, &sfb);
       switch (__GF (insn, 7, 3))
 	{
 	case 0x0:		/* fcmpeq[sd] */
-	  CCPU_FPR[fst].u = fcmp == 1;
+	  CCPU_FPR[fst].u = sim_fpu_is_eq (&sfa, &sfb);
 	  goto done;
 	case 0x1:		/* fcmplt[sd] */
-	  CCPU_FPR[fst].u = fcmp == 2;
+	  CCPU_FPR[fst].u = sim_fpu_is_lt (&sfa, &sfb);
 	  goto done;
 	case 0x2:		/* fcmple[sd] */
-	  CCPU_FPR[fst].u = fcmp == 1 || fcmp == 2;
+	  CCPU_FPR[fst].u = sim_fpu_is_le (&sfa, &sfb);
 	  goto done;
-	case 0x3:
-	  CCPU_FPR[fst].u = fcmp == 3 || fcmp == 4;
+	case 0x3:		/* fcmpun[sd] */
+	  CCPU_FPR[fst].u = (sim_fpu_is_nan (&sfa) || sim_fpu_is_nan (&sfb))
+			    ? 1 : 0;
 	  goto done;
 	default:
 	  goto bad_op;
