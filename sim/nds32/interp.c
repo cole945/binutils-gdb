@@ -1319,7 +1319,7 @@ nds32_decode32_br2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	  nds32_set_nia (cpu, cia + imm16s1);
 	}
       break;
-    case 0x1c:			/* bgezal */
+    case 0xc:			/* bgezal */
       /* Always clob $lp.  */
       if (cpu->iflags & NIF_EX9)
 	CCPU_GPR[GPR_LP].u = cia + 2;
@@ -1337,7 +1337,7 @@ nds32_decode32_br2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       CCPU_SR_CLEAR (PSW, PSW_IFCON);
       nds32_set_nia (cpu, cia + imm16s1);
       return;
-    case 0x1d:			/* bltzal */
+    case 0xd:			/* bltzal */
       /* Always clob $lp.  */
       if (cpu->iflags & NIF_EX9)
 	CCPU_GPR[GPR_LP].u = cia + 2;
