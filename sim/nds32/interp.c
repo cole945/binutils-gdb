@@ -454,6 +454,23 @@ nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       reg_cnt += (re - rb) + 1;
     }
 
+  if (rb > re)
+    {
+      nds32_raise_exception (
+	cpu, EXP_GENERAL, SIM_SIGILL,
+	"Illegal encoding for smw/lmw (Rb > Re) instruction (%08x)\n",
+	insn);
+    }
+
+  if (rb >= GPR_FP && (rb != GPR_SP || re != GPR_SP))
+    {
+      nds32_raise_exception (
+	cpu, EXP_GENERAL, SIM_SIGILL,
+	"Illegal encoding for smw/lmw (Rb > $fp, only"
+	" exception is Rb = Re = $sp) instruction (%08x)\n",
+	insn);
+    }
+
   /* Generate the first memory address.  */
   if (__TEST (insn, 4))
     base += 4 * di;
