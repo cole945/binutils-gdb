@@ -221,11 +221,19 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 	target_tz.tz_dsttime = tz.tz_dsttime;
 
 	if (CCPU_GPR[0].u)
-	  sim_write (sd, CCPU_GPR[0].u, (const unsigned char *) &target_tv,
-		     sizeof (target_tv));
+	  {
+	    __nds32_st (cpu, CCPU_GPR[0].u, sizeof (target_tv.tv_sec),
+			(ulongest_t) target_tv.tv_sec, 0);
+	    __nds32_st (cpu, CCPU_GPR[0].u + 4, sizeof (target_tv.tv_usec),
+			(ulongest_t) target_tv.tv_usec, 0);
+	  }
 	if (CCPU_GPR[1].u)
-	  sim_write (sd, CCPU_GPR[1].u, (const unsigned char *) &target_tz,
-		     sizeof (target_tz));
+	  {
+	    __nds32_st (cpu, CCPU_GPR[1].u, sizeof (target_tz.tz_minuteswest),
+			(ulongest_t) target_tz.tz_minuteswest, 0);
+	    __nds32_st (cpu, CCPU_GPR[1].u, sizeof (target_tz.tz_dsttime),
+			(ulongest_t) target_tz.tz_dsttime, 0);
+	  }
       }
       break;
 #endif
