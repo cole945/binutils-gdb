@@ -27,11 +27,11 @@ enum nds32_regnum
   /* General purpose registers.  */
   NDS32_R0_REGNUM = 0,
   NDS32_R5_REGNUM = 5,
-  NDS32_TA_REGNUM = 15,		/* Temp for assembler.  */
-  NDS32_FP_REGNUM = 28,		/* Frame register.  */
-  NDS32_GP_REGNUM = 29,		/* Global register.  */
+  NDS32_TA_REGNUM = 15,		/* Temporary register for assembler.  */
+  NDS32_FP_REGNUM = 28,		/* Frame pointer / Saved by callee.  */
+  NDS32_GP_REGNUM = 29,		/* Global pointer.  */
   NDS32_LP_REGNUM = 30,		/* Link pointer.  */
-  NDS32_SP_REGNUM = 31,		/* Address of stack top.  */
+  NDS32_SP_REGNUM = 31,		/* Stack pointer -- Address of stack top.  */
 
   /* Pseudo PC.  */
   NDS32_PC_REGNUM = 32,
@@ -48,6 +48,10 @@ enum nds32_regnum
 
   /* These are only used by simulator.  */
   NDS32_SIM_FD0_REGNUM = NDS32_NUM_REGS,
+  /* There are General purpose floating-point registers.
+     The number of registers depends on configuration
+     Check FPCFG (Floating-Point Unit Configuration).
+     Anyway, the maximum usage is thirty-two.  */
   NDS32_SIM_IFCLP_REGNUM = NDS32_SIM_FD0_REGNUM + 32,
   NDS32_SIM_ITB_REGNUM,
   NDS32_SIM_PSW_REGNUM,
