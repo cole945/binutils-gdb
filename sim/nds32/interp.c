@@ -700,9 +700,15 @@ nds32_decode32_alu1 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       break;
     case 0x18:			/* sva */
       {
-	uint64_t s = (uint64_t) CCPU_GPR[ra].u + (uint64_t) CCPU_GPR[rb].u;
-	/* Get the results of the overflow condition.  */
-	CCPU_GPR[rt].u = ((s >> 31) > 0);
+	uint64_t ra_msb = (CCPU_GPR[ra].u >> 31) & 0x1;
+	uint64_t rb_msb = (CCPU_GPR[rb].u >> 31) & 0x1;
+	uint64_t result = (uint64_t) CCPU_GPR[ra].u + (uint64_t) CCPU_GPR[rb].u;
+
+	/* Get the result of the overflow condition.  */
+	if (ra_msb == rb_msb)
+	  CCPU_GPR[rt].u = (((result >> 31) & 0x1) != ra_msb);
+	else
+	  CCPU_GPR[rt].u = 0;
       }
       break;
     case 0x19:			/* svs */
