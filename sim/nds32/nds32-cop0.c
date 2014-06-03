@@ -344,7 +344,9 @@ nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	      sft_to_dp = !dp;
 	      break;
 	    case 0x1:		/* sqrts, sqrtd */
-	      sim_fpu_sqrt (&sft, &sfa);
+	      /* Set IVO for EDOM.  */
+	      if (sim_fpu_sqrt (&sft, &sfa) != 0)
+		CCPU_FPCSR_SET(IVO);
 	      break;
 	    case 0x5:
 	      if (!dp)
