@@ -361,6 +361,9 @@ nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 		  CCPU_FPR[fdt_ + 1].u = CCPU_FPR[fda_ + 1].u;
 		}
 	      goto done; /* Just return.  */
+	    case 0x8:		/* fui2s, fui2d */
+	      sim_fpu_u32to (&sft, CCPU_FPR[fsa].u, rounding);
+	      break;
 	    case 0xc:		/* fsi2s, fsi2d */
 	      sim_fpu_i32to (&sft, CCPU_FPR[fsa].u, rounding);
 	      break;
