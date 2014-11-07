@@ -91,7 +91,7 @@ nds32_load_segments (SIM_DESC sd, bfd *abfd, uint32_t load_base)
 }
 
 SIM_RC
-sim_load (SIM_DESC sd, char *prog_name, struct bfd *prog_bfd, int from_tty)
+sim_load (SIM_DESC sd, const char *prog_name, struct bfd *prog_bfd, int from_tty)
 {
   bfd *result_bfd;
   struct nds32_mm *mm = STATE_MM (sd);
