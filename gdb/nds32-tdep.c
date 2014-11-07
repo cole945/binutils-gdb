@@ -27,7 +27,6 @@
 #include "gdbtypes.h"
 #include "gdbcmd.h"
 #include "gdbcore.h"
-#include "gdb_string.h"
 #include "value.h"
 #include "reggroups.h"
 #include "inferior.h"
@@ -2459,14 +2458,14 @@ static const struct frame_base nds32_frame_base =
 static void
 nds32_simple_overlay_update (struct obj_section *osect)
 {
-  struct minimal_symbol *minsym = NULL;
+  struct bound_minimal_symbol minsym;
 
   minsym = lookup_minimal_symbol (".nds32.fixed.size", NULL, NULL);
-  if (minsym != NULL && osect != NULL)
+  if (minsym.minsym != NULL && osect != NULL)
     {
       bfd *obfd = osect->objfile->obfd;
       asection *bsect = osect->the_bfd_section;
-      if (bfd_section_vma (obfd, bsect) < SYMBOL_VALUE_ADDRESS (minsym))
+      if (bfd_section_vma (obfd, bsect) < BMSYMBOL_VALUE_ADDRESS (minsym))
 	{
 	  osect->ovly_mapped = 1;
 	  return;
@@ -2529,7 +2528,7 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   int i;
 
   /* Allocate space for the new architecture.  */
-  tdep = XCALLOC (1, struct gdbarch_tdep);
+  tdep = xcalloc (1, sizeof (struct gdbarch_tdep));
   gdbarch = gdbarch_alloc (&info, tdep);
 
   if (tdesc_has_registers (info.target_desc))
