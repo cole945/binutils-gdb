@@ -1135,7 +1135,7 @@ case "${target}" in
     noconfigdirs="$noconfigdirs gprof"
     ;;
   nds32*-*-*)
-    noconfigdirs="$noconfigdirs gdb"
+    noconfigdirs="$noconfigdirs"
     ;;
   or1k*-*-*)
     noconfigdirs="$noconfigdirs gdb"
