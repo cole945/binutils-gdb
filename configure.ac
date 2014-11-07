@@ -1274,7 +1274,7 @@ case "${target}" in
     noconfigdirs="$noconfigdirs gprof"
     ;;
   nds32*-*-*)
-    noconfigdirs="$noconfigdirs gdb"
+    noconfigdirs="$noconfigdirs"
     ;;
   nvptx*-*-*)
     noconfigdirs="$noconfigdirs target-libssp target-libstdc++-v3 target-libobjc"
