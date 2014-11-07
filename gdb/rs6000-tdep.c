@@ -3704,6 +3704,9 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int ext = PPC_EXTOP (insn);
 
+  if ((ext & 0x1f) == 15)
+    ext = 15;		/* Integer Select. bit[16:20] is used for BC.  */
+
   switch (ext)
     {
     case 792:		/* Shift Right Algebraic Word */
@@ -3774,6 +3777,7 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
       ppc_record_vsr (regcache, tdep, PPC_TX ((insn) << 5) | PPC_T (insn), 16);
       break;
 
+    case 15:		/* Integer Select */
     case 19:		/* Move from condition register */
       record_full_arch_list_add_reg (regcache,
 				     tdep->ppc_gp0_regnum + PPC_RT (insn));
@@ -3836,6 +3840,10 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 235 | 0x200:	/* Multiply low word (OE) */
     case 266:		/* Add */
     case 266 | 0x200:	/* Add (OE) */
+    case 393:		/* Divide Doubleword Extended Unsigned */
+    case 393 | 0x200:	/* Divide Doubleword Extended Unsigned (OE) */
+    case 425:		/* Divide Doubleword Extended */
+    case 425 | 0x200:	/* Divide Doubleword Extended (OE) */
     case 457:		/* Divide doubleword unsigned */
     case 457 | 0x200:	/* Divide doubleword unsigned (OE) */
     case 489:		/* Divide doubleword */
@@ -3843,10 +3851,23 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
       if (PPC_OE (insn))
 	record_full_arch_list_add_reg (regcache, tdep->ppc_xer_regnum);
       /* FALL-THROUGH */
-    case 9:		/* Multiply high doubleword unsigned */
-    case 9 | 0x200:	/* Multiply high doubleword unsigned (OE-DONTCARE) */
+    case 9:		/* Multiply High Doubleword Unsigned */
+    case 9 | 0x200:	/* Multiply High Doubleword Unsigned (OE-DONTCARE) */
+    case 11:		/* Multiply High Word Unsigned */
+    case 11 | 0x200:	/* Multiply High Word Unsigned (OE-DONTCARE) */
+    case 73:		/* Multiply High Doubleword */
+    case 73 | 0x200:	/* Multiply High Doubleword (OE-DONTCARE) */
+    case 75:		/* Multiply High Word */
+    case 75 | 0x200:	/* Multiply High Word (OE-DONTCARE) */
       if (PPC_RC (insn))
 	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_gp0_regnum + PPC_RT (insn));
+      break;
+
+    case 74:		/* Add and Generate Sixes */
+    case 74 | 0x200:	/* Add and Generate Sixes (OE-DONTCARE) */
+      /* RC-DONTCARE */
       record_full_arch_list_add_reg (regcache,
 				     tdep->ppc_gp0_regnum + PPC_RT (insn));
       break;
@@ -3935,6 +3956,16 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
 				     tdep->ppc_gp0_regnum + PPC_RT (insn));
       break;
 
+    case 6:		/* Load Vector for Shift Left Indexed */
+    case 38:		/* Load Vector for Shift Right Indexed */
+    case 7:		/* Load Vector Element Byte Indexed */
+    case 39:		/* Load Vector Element Halfword Indexed */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_vr0_regnum + PPC_RT (insn));
+      break;
+
+    case 4:		/* Trap Word */
+    case 18:		/* TLB Invalidate Local Indexed */
     case 598:		/* Synchronize */
       /* Do nothing */
       break;
@@ -4010,6 +4041,7 @@ ppc64_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   uint32_t insn;
   int op6;
+  int tmp;
 
   insn = read_memory_unsigned_integer (addr, 4, byte_order);
   op6 = PPC_OP6 (insn);
@@ -4109,6 +4141,19 @@ ppc64_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
     case 42:		/* Load Halfword Algebraic */
       record_full_arch_list_add_reg (regcache,
 				     tdep->ppc_gp0_regnum + PPC_RT (insn));
+      break;
+
+    case 56:		/* Load Quadword */
+      tmp = tdep->ppc_gp0_regnum + PPC_RT (insn);
+      tmp = tmp & ~1;
+      record_full_arch_list_add_reg (regcache, tmp);
+      record_full_arch_list_add_reg (regcache, tmp | 1);
+      break;
+    case 57:		/* Load Floating-Point Double Pair */
+      tmp = tdep->ppc_fp0_regnum + PPC_RT (insn);
+      tmp = tmp & ~1;
+      record_full_arch_list_add_reg (regcache, tmp);
+      record_full_arch_list_add_reg (regcache, tmp | 1);
       break;
 
     case 49:		/* Load Floating-Point Single with Update */
