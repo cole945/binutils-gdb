@@ -3701,6 +3701,52 @@ ppc_record_vsr (struct regcache *regcache, struct gdbarch_tdep *tdep, int vsr,
   return 0;
 }
 
+/* Parse instructions of primary opcode-19.  */
+
+static int
+ppc64_process_record_op19 (struct gdbarch *gdbarch, struct regcache *regcache,
+			   CORE_ADDR addr, uint32_t insn)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  int ext = PPC_EXTOP (insn);
+
+  switch (ext)
+    {
+    case 0:		/* Move Condition Register Field */
+    case 33:		/* Condition Register NOR */
+    case 129:		/* Condition Register AND with Complement */
+    case 193:		/* Condition Register XOR */
+    case 225:		/* Condition Register NAND */
+    case 257:		/* Condition Register AND */
+    case 289:		/* Condition Register Equivalent */
+    case 417:		/* Condition Register OR with Complement */
+    case 449:		/* Condition Register OR */
+      record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
+      break;
+
+    case 16:		/* Branch Conditional */
+    case 560:		/* Branch Conditional to Branch Target Address Register */
+      if (PPC_BO (insn) & 0x2)
+	record_full_arch_list_add_reg (regcache, tdep->ppc_ctr_regnum);
+      /* FALL-THROUGH */
+    case 528:		/* Branch Conditional to Count Register */
+      if (PPC_LK (insn))
+	record_full_arch_list_add_reg (regcache, tdep->ppc_lr_regnum);
+      break;
+
+    case 150:		/* Instruction Synchronize */
+      /* Do nothing.  */
+      break;
+
+    default:
+      fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to reverse "
+			  "%08x at %08lx, 19-%d.\n", insn, addr, ext);
+      return -1;
+    }
+
+  return 0;
+}
+
 /* Parse instructions of primary opcode-31.  */
 
 static int
@@ -4281,12 +4327,17 @@ ppc64_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
       break;
 
     case 16:		/* Branch Conditional */
-    case 19:		/* Branch Conditional */
       if (PPC_BO (insn) & 0x2)
 	record_full_arch_list_add_reg (regcache, tdep->ppc_ctr_regnum);
+      /* FALL-THROUGH */
     case 18:		/* Branch */
       if (PPC_LK (insn))
 	record_full_arch_list_add_reg (regcache, tdep->ppc_lr_regnum);
+      break;
+
+    case 19:
+      if (ppc64_process_record_op19 (gdbarch, regcache, addr, insn) != 0)
+	return -1;
       break;
 
     case 20:		/* Rotate */
@@ -4398,6 +4449,11 @@ ppc64_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
       if (PPC_BIT (insn, 31))
 	record_full_arch_list_add_reg (regcache,
 				       tdep->ppc_gp0_regnum + PPC_RA (insn));
+      break;
+
+    case 59:
+      if (ppc64_process_record_op59 (gdbarch, regcache, addr, insn) != 0)
+	return -1;
       break;
 
     case 60:
