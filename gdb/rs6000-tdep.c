@@ -3647,6 +3647,7 @@ bfd_uses_spe_extensions (bfd *abfd)
 #define PPC_RT(insn)	PPC_FIELD (insn, 6, 5)
 #define PPC_RA(insn)	PPC_FIELD (insn, 11, 5)
 #define PPC_RB(insn)	PPC_FIELD (insn, 16, 5)
+#define PPC_VRT(insn)	PPC_FIELD (insn, 6, 5)
 #define PPC_FRT(insn)	PPC_FIELD (insn, 6, 5)
 #define PPC_SPR(insn)	(PPC_FIELD (insn, 11, 5) \
 			| (PPC_FIELD (insn, 16, 5) << 5))
@@ -3709,6 +3710,28 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
 
   switch (ext)
     {
+    /* These only write RT.  */
+    case 15:		/* Integer Select */
+    case 19:		/* Move from condition register */
+    case 74:		/* Add and Generate Sixes */
+    case 74 | 0x200:	/* Add and Generate Sixes (OE-DONTCARE) */
+    case 339:		/* mfspr */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_gp0_regnum + PPC_RT (insn));
+      break;
+
+    /* These only write to RA.  */
+    case 51:		/* Move From VSR Doubleword */
+    case 115:		/* Move From VSR Word and Zero */
+    case 122:		/* Population count bytes */
+    case 378:		/* Population count words */
+    case 506:		/* Population count doublewords */
+    case 508:		/* Compare bytes */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_gp0_regnum + PPC_RA (insn));
+      break;
+
+    /* These write CR and optional RA.  */
     case 792:		/* Shift Right Algebraic Word */
     case 794:		/* Shift Right Algebraic Doubleword */
     case 824:		/* Shift Right Algebraic Word Immediate */
@@ -3723,14 +3746,7 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
       record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
       break;
 
-    case 122:		/* Population count bytes */
-    case 378:		/* Population count words */
-    case 506:		/* Population count doublewords */
-    case 508:		/* Compare bytes */
-      record_full_arch_list_add_reg (regcache,
-				     tdep->ppc_gp0_regnum + PPC_RA (insn));
-      break;
-
+    /* These write to RT.  Update RA if 'update indexed.'  */
     case 53:		/* Load Doubleword with Update Indexed */
     case 55:		/* Load Word and Zero with Update Indexed */
     case 119:		/* Load Byte and Zero with Update Indexed */
@@ -3739,9 +3755,12 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 373:		/* Load Word Algebraic with Update Indexed */
       record_full_arch_list_add_reg (regcache,
 				     tdep->ppc_gp0_regnum + PPC_RA (insn));
+      /* FALL-THROUGH */
     case 20:		/* Load Word And Reserve Indexed */
     case 21:		/* Load Doubleword Indexed */
     case 23:		/* Load Word and Zero Indexed */
+    case 29:		/* Load Doubleword by External Process ID Indexed */
+    case 31:		/* Load Word by External Process ID Indexed */
     case 84:		/* Load Doubleword And Reserve Indexed */
     case 87:		/* Load Byte and Zero Indexed */
     case 279:		/* Load Halfword and Zero Indexed */
@@ -3753,10 +3772,24 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
 				     tdep->ppc_gp0_regnum + PPC_RT (insn));
       break;
 
+    /* These write VRT.  */
+    case 6:		/* Load Vector for Shift Left Indexed */
+    case 38:		/* Load Vector for Shift Right Indexed */
+    case 7:		/* Load Vector Element Byte Indexed */
+    case 39:		/* Load Vector Element Halfword Indexed */
+    case 71:		/* Load Vector Element Word Indexed */
+    case 103:		/* Load Vector Indexed */
+    case 359:		/* Load Vector Indexed LRU */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_vr0_regnum + PPC_VRT (insn));
+      break;
+
+    /* These write FRT.  Update RA if 'update indexed.'  */
     case 567:		/* Load Floating-Point Single with Update Indexed */
     case 631:		/* Load Floating-Point Double with Update Indexed */
       record_full_arch_list_add_reg (regcache,
 				     tdep->ppc_gp0_regnum + PPC_RA (insn));
+      /* FALL-THROUGH */
     case 535:		/* Load Floating-Point Single Indexed */
     case 599:		/* Load Floating-Point Double Indexed */
     case 855:		/* Load Floating-Point as Integer Word Algebraic Indexed */
@@ -3765,9 +3798,12 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
 				     tdep->ppc_fp0_regnum + PPC_FRT (insn));
       break;
 
+    /* These write VSR of size 8.  */
     case 588:		/* Load VSX Scalar Doubleword Indexed */
       ppc_record_vsr (regcache, tdep, PPC_TX ((insn) << 5) | PPC_T (insn), 8);
       break;
+
+    /* These write VSR of size 16.  */
     case 524:		/* Load VSX Scalar Single-Precision Indexed */
     case 76:		/* Load VSX Scalar as Integer Word Algebraic Indexed */
     case 12:		/* Load VSX Scalar as Integer Word and Zero Indexed */
@@ -3777,12 +3813,7 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
       ppc_record_vsr (regcache, tdep, PPC_TX ((insn) << 5) | PPC_T (insn), 16);
       break;
 
-    case 15:		/* Integer Select */
-    case 19:		/* Move from condition register */
-      record_full_arch_list_add_reg (regcache,
-				     tdep->ppc_gp0_regnum + PPC_RT (insn));
-      break;
-
+    /* These write RA.  Update CR if RC is set.  */
     case 24:		/* Shift Left Word */
     case 26:		/* Count Leading Zeros Word */
     case 27:		/* Shift Left Doubleword */
@@ -3805,6 +3836,7 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
 				     tdep->ppc_gp0_regnum + PPC_RA (insn));
       break;
 
+    /* These write RT and XER.  Update CR if RC is set.  */
     case 8:		/* Subtract from carrying */
     case 8 | 0x200:	/* Subtract from carrying (OE) */
     case 10:		/* Add carrying */
@@ -3830,6 +3862,7 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
 				     tdep->ppc_gp0_regnum + PPC_RT (insn));
       break;
 
+    /* These write RT.  Update CR if RC is set and update XER if OE is set.  */
     case 40:		/* Subtract from */
     case 40 | 0x200:	/* Subtract from (OE) */
     case 104:		/* Negate */
@@ -3865,13 +3898,7 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
 				     tdep->ppc_gp0_regnum + PPC_RT (insn));
       break;
 
-    case 74:		/* Add and Generate Sixes */
-    case 74 | 0x200:	/* Add and Generate Sixes (OE-DONTCARE) */
-      /* RC-DONTCARE */
-      record_full_arch_list_add_reg (regcache,
-				     tdep->ppc_gp0_regnum + PPC_RT (insn));
-      break;
-
+    /* Store memory.  */
     case 181:		/* Store Doubleword with Update Indexed */
     case 183:		/* Store Word with Update Indexed */
     case 247:		/* Store Byte with Update Indexed */
@@ -3951,21 +3978,9 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
 	}
       break;
 
-    case 339:		/* mfspr */
-      record_full_arch_list_add_reg (regcache,
-				     tdep->ppc_gp0_regnum + PPC_RT (insn));
-      break;
-
-    case 6:		/* Load Vector for Shift Left Indexed */
-    case 38:		/* Load Vector for Shift Right Indexed */
-    case 7:		/* Load Vector Element Byte Indexed */
-    case 39:		/* Load Vector Element Halfword Indexed */
-      record_full_arch_list_add_reg (regcache,
-				     tdep->ppc_vr0_regnum + PPC_RT (insn));
-      break;
-
     case 4:		/* Trap Word */
     case 18:		/* TLB Invalidate Local Indexed */
+    case 22:		/* Instruction Cache Block Touch */
     case 598:		/* Synchronize */
       /* Do nothing */
       break;
