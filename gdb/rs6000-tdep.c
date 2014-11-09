@@ -4269,6 +4269,27 @@ ppc64_process_record_op59 (struct gdbarch *gdbarch, struct regcache *regcache,
 	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
       break;
 
+    case 18:		/* Floating Divide */
+    case 20:		/* Floating Subtract */
+    case 21:		/* Floating Add */
+    case 22:		/* Floating Square Root */
+    case 24:		/* Floating Reciprocal Estimate */
+    case 25:		/* Floating Multiply */
+    case 26:		/* Floating Reciprocal Square Root Estimate */
+    case 28:		/* Floating Multiply-Subtract */
+    case 29:		/* Floating Multiply-Add */
+    case 30:		/* Floating Negative Multiply-Subtract */
+    case 31:		/* Floating Negative Multiply-Add */
+    case 846:		/* Floating Convert From Integer Doubleword Single */
+    case 974:		/* Floating Convert From Integer Doubleword Unsigned
+			   Single */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_fp0_regnum + PPC_FRT (insn));
+      if (PPC_RC (insn))
+	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
+      record_full_arch_list_add_reg (regcache, tdep->ppc_fpscr_regnum);
+      break;
+
     default:
       fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to reverse "
 			  "%08x at %08lx, 59-%d.\n", insn, addr, ext);
@@ -4348,14 +4369,74 @@ ppc64_process_record_op63 (struct gdbarch *gdbarch, struct regcache *regcache,
 	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
       break;
 
+    case 12:		/* Floating Round to Single-Precision */
+    case 14:		/* Floating Convert To Integer Word */
+    case 15:		/* Floating Convert To Integer Word
+			   with round toward Zero */
+    case 18:		/* Floating Divide */
+    case 20:		/* Floating Subtract */
+    case 21:		/* Floating Add */
+    case 22:		/* Floating Square Root */
+    case 24:		/* Floating Reciprocal Estimate */
+    case 25:		/* Floating Multiply */
+    case 26:		/* Floating Reciprocal Square Root Estimate */
+    case 28:		/* Floating Multiply-Subtract */
+    case 29:		/* Floating Multiply-Add */
+    case 30:		/* Floating Negative Multiply-Subtract */
+    case 31:		/* Floating Negative Multiply-Add */
+    case 142:		/* Floating Convert To Integer Word Unsigned */
+    case 143:		/* Floating Convert To Integer Word Unsigned
+			   with round toward Zero */
+    case 392:		/* Floating Round to Integer Nearest */
+    case 424:		/* Floating Round to Integer Toward Zero */
+    case 456:		/* Floating Round to Integer Plus */
+    case 488:		/* Floating Round to Integer Minus */
+    case 814:		/* Floating Convert To Integer Doubleword */
+    case 815:		/* Floating Convert To Integer Doubleword
+			   with round toward Zero */
+    case 846:		/* Floating Convert From Integer Doubleword */
+    case 942:		/* Floating Convert To Integer Doubleword Unsigned */
+    case 943:		/* Floating Convert To Integer Doubleword Unsigned
+			   with round toward Zero */
+    case 974:		/* Floating Convert From Integer Doubleword Unsigned */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_fp0_regnum + PPC_FRT (insn));
+      if (PPC_RC (insn))
+	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
+      record_full_arch_list_add_reg (regcache, tdep->ppc_fpscr_regnum);
+      break;
+
     case 8:		/* Floating Copy Sign */
     case 40:		/* Floating Negate */
     case 72:		/* Floating Move Register */
+    case 136:		/* Floating Negative Absolute Value */
     case 264:		/* Floating Absolute Value */
       record_full_arch_list_add_reg (regcache,
 				     tdep->ppc_fp0_regnum + PPC_FRT (insn));
       if (PPC_RC (insn))
 	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
+      break;
+
+    case 838:		/* Floating Merge Odd Word */
+    case 966:		/* Floating Merge Even Word */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_fp0_regnum + PPC_FRT (insn));
+      break;
+
+    case 0:		/* Floating Compare Unordered */
+    case 32:		/* Floating Compare Ordered */
+    case 38:		/* Move To FPSCR Bit 1 */
+    case 64:		/* Move to Condition Register from FPSCR */
+    case 70:		/* Move To FPSCR Bit 0 */
+    case 134:		/* Move To FPSCR Field Immediate */
+    case 711:		/* Move To FPSCR Fields */
+      record_full_arch_list_add_reg (regcache, tdep->ppc_fpscr_regnum);
+      /* FALL-THROUGH */
+    case 23:		/* Floating Select */
+    case 128:		/* Floating Test for software Divide */
+    case 160:		/* Floating Test for software Square Root */
+    case 583:		/* Move From FPSCR */
+      record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
       break;
 
     default:
