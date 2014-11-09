@@ -3863,8 +3863,7 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
       break;
 
     case 276:		/* Load Quadword And Reserve Indexed */
-      tmp = tdep->ppc_gp0_regnum + PPC_RT (insn);
-      tmp = tmp & ~1;
+      tmp = (tdep->ppc_gp0_regnum + PPC_RT (insn)) & ~1;
       record_full_arch_list_add_reg (regcache, tmp);
       record_full_arch_list_add_reg (regcache, tmp | 1);
       break;
@@ -4214,6 +4213,65 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
 UNKNOWN_OP:
       fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to reverse "
 			  "%08x at %08lx, 31-%d.\n", insn, addr, ext);
+      return -1;
+    }
+
+  return 0;
+}
+
+/* Parse instructions of primary opcode-59.  */
+
+static int
+ppc64_process_record_op59 (struct gdbarch *gdbarch, struct regcache *regcache,
+			   CORE_ADDR addr, uint32_t insn)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  int ext = PPC_EXTOP (insn);
+
+  switch (ext)
+    {
+    case 2:		/* DFP Add */
+    case 3:		/* DFP Quantize */
+    case 34:		/* DFP Multiply */
+    case 35:		/* DFP Reround */
+    case 67:		/* DFP Quantize Immediate */
+    case 99:		/* DFP Round To FP Integer With Inexact */
+    case 227:		/* DFP Round To FP Integer Without Inexact */
+    case 258:		/* DFP Convert To DFP Long! */
+    case 290:		/* DFP Convert To Fixed */
+    case 514:		/* DFP Subtract */
+    case 546:		/* DFP Divide */
+    case 770:		/* DFP Round To DFP Short! */
+    case 802:		/* DFP Convert From Fixed */
+    case 834:		/* DFP Encode BCD To DPD */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_fp0_regnum + PPC_FRT (insn));
+      /* FALL-THROUGH */
+    case 130:		/* DFP Compare Ordered */
+    case 162:		/* DFP Test Exponent */
+    case 194:		/* DFP Test Data Class */
+    case 226:		/* DFP Test Data Group */
+    case 642:		/* DFP Compare Unordered */
+    case 674:		/* DFP Test Significance */
+      if (PPC_RC (insn))
+	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
+      record_full_arch_list_add_reg (regcache, tdep->ppc_fpscr_regnum);
+      break;
+
+    case 66:		/* DFP Shift Significand Left Immediate */
+    case 98:		/* DFP Shift Significand Right Immediate */
+    case 322:		/* DFP Decode DPD To BCD */
+    case 354:		/* DFP Extract Biased Exponent */
+    case 866:		/* DFP Insert Biased Exponent */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_fp0_regnum + PPC_FRT (insn));
+      if (PPC_RC (insn))
+	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
+      break;
+
+    default:
+      fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to reverse "
+			  "%08x at %08lx, 59-%d.\n", insn, addr, ext);
     }
 
   return 0;
@@ -4246,16 +4304,64 @@ ppc64_process_record_op63 (struct gdbarch *gdbarch, struct regcache *regcache,
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int ext = PPC_EXTOP (insn);
+  int tmp;
 
   switch (ext)
     {
-    case 72:		/* Floating Move Register */
+    case 2:		/* DFP Add */
+    case 3:		/* DFP Quantize */
+    case 34:		/* DFP Multiply */
+    case 35:		/* DFP Reround */
+    case 67:		/* DFP Quantize Immediate */
+    case 99:		/* DFP Round To FP Integer With Inexact */
+    case 227:		/* DFP Round To FP Integer Without Inexact */
+    case 258:		/* DFP Convert To DFP Extended */
+    case 290:		/* DFP Convert To Fixed */
+    case 514:		/* DFP Subtract */
+    case 546:		/* DFP Divide */
+    case 770:		/* DFP Round To DFP Long */
+    case 802:		/* DFP Convert From Fixed */
+    case 834:		/* DFP Encode BCD To DPD */
+      tmp = (tdep->ppc_fp0_regnum + PPC_FRT (insn)) & ~1;
+      record_full_arch_list_add_reg (regcache, tmp);
+      record_full_arch_list_add_reg (regcache, tmp | 1);
+      /* FALL-THROUGH */
+    case 130:		/* DFP Compare Ordered */
+    case 162:		/* DFP Test Exponent */
+    case 194:		/* DFP Test Data Class */
+    case 226:		/* DFP Test Data Group */
+    case 642:		/* DFP Compare Unordered */
+    case 674:		/* DFP Test Significance */
+      if (PPC_RC (insn))
+	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
+      record_full_arch_list_add_reg (regcache, tdep->ppc_fpscr_regnum);
+      break;
+
+    case 66:		/* DFP Shift Significand Left Immediate */
+    case 98:		/* DFP Shift Significand Right Immediate */
+    case 322:		/* DFP Decode DPD To BCD */
+    case 354:		/* DFP Extract Biased Exponent */
+    case 866:		/* DFP Insert Biased Exponent */
       record_full_arch_list_add_reg (regcache,
 				     tdep->ppc_fp0_regnum + PPC_FRT (insn));
+      if (PPC_RC (insn))
+	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
       break;
+
+    case 8:		/* Floating Copy Sign */
+    case 40:		/* Floating Negate */
+    case 72:		/* Floating Move Register */
+    case 264:		/* Floating Absolute Value */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_fp0_regnum + PPC_FRT (insn));
+      if (PPC_RC (insn))
+	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
+      break;
+
     default:
       fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to reverse "
-			  "%08x at %08lx, 63-%d.\n", insn, addr, ext);
+			  "%08x at %08lx, 59-%d.\n", insn, addr, ext);
+      return -1;
     }
 
   return 0;
@@ -4381,14 +4487,13 @@ ppc64_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
       break;
 
     case 56:		/* Load Quadword */
-      tmp = tdep->ppc_gp0_regnum + PPC_RT (insn);
-      tmp = tmp & ~1;
+      tmp = (tdep->ppc_gp0_regnum + PPC_RT (insn)) & ~1;
       record_full_arch_list_add_reg (regcache, tmp);
       record_full_arch_list_add_reg (regcache, tmp | 1);
       break;
+
     case 57:		/* Load Floating-Point Double Pair */
-      tmp = tdep->ppc_fp0_regnum + PPC_RT (insn);
-      tmp = tmp & ~1;
+      tmp = (tdep->ppc_fp0_regnum + PPC_RT (insn)) & ~1;
       record_full_arch_list_add_reg (regcache, tmp);
       record_full_arch_list_add_reg (regcache, tmp | 1);
       break;
@@ -4486,9 +4591,9 @@ ppc64_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
       break;
 
     default:
-UNKNOWN_OP:
       fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to reverse "
 			  "%08x at %08lx, %d.\n", insn, addr, op6);
+      return -1;
     }
 
   if (record_full_arch_list_add_reg (regcache, PPC_PC_REGNUM))
