@@ -3701,6 +3701,106 @@ ppc_record_vsr (struct regcache *regcache, struct gdbarch_tdep *tdep, int vsr,
   return 0;
 }
 
+/* Parse instructions of primary opcode-4.  */
+
+static int
+ppc64_process_record_op4 (struct gdbarch *gdbarch, struct regcache *regcache,
+			   CORE_ADDR addr, uint32_t insn)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  int ext = (PPC_EXTOP (insn) << 1) | (insn & 1);
+
+  switch (ext)
+    {
+    /* 5.8 Vector Permute and Formatting Instructions */
+    case 142:		/* Vector Pack Unsigned Halfword Unsigned Saturate */
+    case 206:		/* Vector Pack Unsigned Word Unsigned Saturate */
+    case 270:		/* Vector Pack Signed Halfword Unsigned Saturate */
+    case 334:		/* Vector Pack Signed Word Unsigned Saturate */
+    case 398:		/* Vector Pack Signed Halfword Signed Saturate */
+    case 462:		/* Vector Pack Signed Word Signed Saturate */
+    case 1230:		/* Vector Pack Unsigned Doubleword Unsigned Saturate */
+    case 1358:		/* Vector Pack Signed Doubleword Unsigned Saturate */
+    case 1486:		/* Vector Pack Signed Doubleword Signed Saturate */
+			/* 5.9 Vector Integer Instructions */
+    case 512:		/* Vector Add Unsigned Byte Saturate */
+    case 576:		/* Vector Add Unsigned Halfword Saturate */
+    case 640:		/* Vector Add Unsigned Word Saturate */
+    case 786:		/* Vector Add Signed Byte Saturate */
+    case 832:		/* Vector Add Signed Halfword Saturate */
+    case 896:		/* Vector Add Signed Word Saturate */
+    case 1536:		/* Vector Subtract Unsigned Byte Saturate */
+    case 1600:		/* Vector Subtract Unsigned Halfword Saturate */
+    case 1664:		/* Vector Subtract Unsigned Word Saturate */
+    case 1792:		/* Vector Subtract Signed Byte Saturate */
+    case 1856:		/* Vector Subtract Signed Halfword Saturate */
+    case 1920:		/* Vector Subtract Signed Word Saturate */
+      record_full_arch_list_add_reg (regcache, PPC_VSCR_REGNUM);
+      /* FALL-THROUGH */
+			/* 5.8 Vector Permute and Formatting Instructions */
+    case 12:		/* Vector Merge High Byte */
+    case 14:		/* Vector Pack Unsigned Halfword Unsigned Modulo */
+    case 42:		/* Vector Select */
+    case 43:		/* Vector Permute */
+    case 76:		/* Vector Merge High Halfword */
+    case 78:		/* Vector Pack Unsigned Word Unsigned Modulo */
+    case 140:		/* Vector Merge High Word */
+    case 268:		/* Vector Merge Low Byte */
+    case 332:		/* Vector Merge Low Halfword */
+    case 396:		/* Vector Merge Low Word */
+    case 526:		/* Vector Unpack High Signed Byte */
+    case 590:		/* Vector Unpack High Signed Halfword */
+    case 654:		/* Vector Unpack Low Signed Byte */
+    case 718:		/* Vector Unpack Low Signed Halfword */
+    case 782:		/* Vector Pack Pixel */
+    case 846:		/* Vector Unpack High Pixel */
+    case 974:		/* Vector Unpack Low Pixel */
+    case 1102:		/* Vector Pack Unsigned Doubleword Unsigned Modulo */
+    case 1614:		/* Vector Unpack High Signed Word */
+    case 1676:		/* Vector Merge Odd Word */
+    case 1742:		/* Vector Unpack Low Signed Word */
+    case 1932:		/* Vector Merge Even Word */
+    case 524:		/* Vector Splat Byte */
+    case 588:		/* Vector Splat Halfword */
+    case 652:		/* Vector Splat Word */
+    case 780:		/* Vector Splat Immediate Signed Byte */
+    case 844:		/* Vector Splat Immediate Signed Halfword */
+    case 908:		/* Vector Splat Immediate Signed Word */
+    case 44:		/* Vector Shift Left Double by Octet Immediate */
+    case 452:		/* Vector Shift Left */
+    case 708:		/* Vector Shift Right */
+    case 1036:		/* Vector Shift Left by Octet */
+    case 1100:		/* Vector Shift Right by Octet */
+			/* 5.9 Vector Integer Instructions */
+    case 0:		/* Vector Add Unsigned Byte Modulo */
+    case 60:		/* Vector Add Extended Unsigned Quadword Modulo */
+    case 61:		/* Vector Add Extended & write Carry Unsigned Quadword */
+    case 62:		/* Vector Subtract Extended Unsigned Quadword Modulo */
+    case 63:		/* Vector Subtract Extended & write Carry Unsigned Quadword */
+    case 64:		/* Vector Add Unsigned Halfword Modulo */
+    case 128:		/* Vector Add Unsigned Word Modulo */
+    case 192:		/* Vector Add Unsigned Doubleword Modulo */
+    case 256:		/* Vector Add Unsigned Quadword Modulo */
+    case 320:		/* Vector Add & write Carry Unsigned Quadword */
+    case 384:		/* Vector Add and Write Carry-Out Unsigned Word */
+    case 1024:		/* Vector Subtract Unsigned Byte Modulo */
+    case 1088:		/* Vector Subtract Unsigned Halfword Modulo */
+    case 1152:		/* Vector Subtract Unsigned Word Modulo */
+    case 1216:		/* Vector Subtract Unsigned Doubleword Modulo */
+    case 1280:		/* Vector Subtract Unsigned Quadword Modulo */
+    case 1344:		/* Vector Subtract & write Carry Unsigned Quadword */
+    case 1408:		/* Vector Subtract and Write Carry-Out Unsigned Word */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_vr0_regnum + PPC_VRT (insn));
+      break;
+
+    default:
+      fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to reverse "
+			  "%08x at %08lx, 4-%d.\n", insn, addr, ext);
+      return -1;
+    }
+}
+
 /* Parse instructions of primary opcode-19.  */
 
 static int
@@ -4470,6 +4570,11 @@ ppc64_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
     case 2:		/* Trap-if instructions.  */
     case 3:		/* Trap-if instructions.  */
       /* Do nothing.  */
+      break;
+
+    case 4:
+      if (ppc64_process_record_op4 (gdbarch, regcache, addr, insn) != 0)
+	return -1;
       break;
 
     case 17:		/* System call instructions.  */
