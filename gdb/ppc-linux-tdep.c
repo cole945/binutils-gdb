@@ -785,6 +785,8 @@ struct linux_record_tdep ppc_linux_record_tdep;
 static enum gdb_syscall
 ppc_canonicalize_syscall (int syscall)
 {
+  /* See arch/powerpc/include/uapi/asm/unistd.h */
+
   if (syscall <= 165)
     return syscall;
   else if (syscall >= 167 && syscall <= 190)	/* Skip query_module 166 */
@@ -840,11 +842,13 @@ ppc_all_but_pc_registers_record (struct regcache *regcache)
 static int
 ppc_linux_syscall_record (struct regcache *regcache)
 {
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   ULONGEST scnum;
   enum gdb_syscall syscall_gdb;
   int ret;
 
-  regcache_raw_read_unsigned (regcache, PPC_R0_REGNUM, &scnum);
+  regcache_raw_read_unsigned (regcache, tdep->ppc_gp0_regnum, &scnum);
   syscall_gdb = ppc_canonicalize_syscall (scnum);
 
   if (syscall_gdb < 0)
@@ -869,10 +873,45 @@ ppc_linux_syscall_record (struct regcache *regcache)
     return ret;
 
   /* Record the return value of the system call.  */
-  if (record_full_arch_list_add_reg (regcache, PPC_R0_REGNUM + 3))
+  if (record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + 3))
     return -1;
+
   /* Record LR.  */
-  if (record_full_arch_list_add_reg (regcache, PPC_LR_REGNUM))
+  if (record_full_arch_list_add_reg (regcache, tdep->ppc_lr_regnum))
+    return -1;
+
+  return 0;
+}
+
+static int
+ppc64_linux_record_signal (struct gdbarch *gdbarch,
+                           struct regcache *regcache,
+                           enum gdb_signal signal)
+{
+  /* See arch/powerpc/kernel/signal_64.c
+	 arch/powerpc/include/asm/ptrace.h
+     for details.  */
+  const int SIGNAL_FRAMESIZE = 128;
+  const int sizeof_rt_sigframe = 1440 * 2 + 8 * 2 + 4 * 6 + 8 + 8 + 128 + 512;
+  ULONGEST sp;
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+
+  if (ppc_all_but_pc_registers_record (regcache))
+    return -1;
+
+  if (record_full_arch_list_add_reg (regcache, gdbarch_pc_regnum (gdbarch)))
+    return -1;
+
+  /* Record the change in the stack.
+     frame-size = sizeof (struct rt_sigframe) + SIGNAL_FRAMESIZE  */
+  regcache_raw_read_unsigned (regcache, gdbarch_sp_regnum (gdbarch), &sp);
+  sp -= SIGNAL_FRAMESIZE;
+  sp -= sizeof_rt_sigframe;
+
+  if (record_full_arch_list_add_mem (sp, SIGNAL_FRAMESIZE + sizeof_rt_sigframe))
+    return -1;
+
+  if (record_full_arch_list_add_end ())
     return -1;
 
   return 0;
@@ -1540,11 +1579,14 @@ ppc_linux_init_abi (struct gdbarch_info info,
 
   /* Support reverse debugging.  */
   set_gdbarch_process_record (gdbarch, ppc64_process_record);
+  set_gdbarch_process_record_signal (gdbarch, ppc64_linux_record_signal);
   tdep->syscall_record = ppc_linux_syscall_record;
 
   /* Initialize the ppc_linux_record_tdep.  */
   /* These values are the size of the type that will be used in a system
-     call.  They are obtained from Linux Kernel source.  */
+     call.  They are obtained from Linux Kernel source.
+
+     See arch/powerpc/include/uapi/asm/ioctls.h.  */
   ppc_linux_record_tdep.size_pointer
     = gdbarch_ptr_bit (gdbarch) / TARGET_CHAR_BIT;
   ppc_linux_record_tdep.size__old_kernel_stat = 32;
