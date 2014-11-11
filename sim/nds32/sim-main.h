@@ -104,8 +104,6 @@ struct sim_state {
   struct nds32_mm mm;
 #define STATE_MM(sd) (&(sd)->mm)
 
-  int gprof;
-
   sim_state_base base;
 };
 

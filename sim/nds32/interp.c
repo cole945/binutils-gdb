@@ -40,7 +40,6 @@
 #include "nds32-sim.h"
 #include "nds32-mm.h"
 #include "nds32-syscall.h"
-#include "nds32-gmon.h"
 #include "nds32-pfm.h"
 
 #include <sys/types.h>
@@ -50,10 +49,6 @@
 struct disassemble_info dis_info; /* For print insn.  */
 
 static void nds32_set_nia (sim_cpu *cpu, sim_cia nia);
-
-enum {
-  OPTION_GPROF = OPTION_START,
-};
 
 /* Recent $pc, for debugging.  */
 #define RECENT_CIA_MASK	0xf
@@ -1198,8 +1193,6 @@ nds32_decode32_jreg (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       return;
 
     case 1:			/* jral */
-      if (sd->gprof)
-	nds32_gmon_mcount (cia, CCPU_GPR[rb].u);
       if (cpu->iflags & NIF_EX9)
 	CCPU_GPR[rt].u = cia + 2;
       else
@@ -1355,8 +1348,6 @@ nds32_decode32_br2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       if (!(CCPU_GPR[rt].s >= 0))
 	return;
 
-      if (sd->gprof)
-	nds32_gmon_mcount (cia, cia + imm16s1);
       CCPU_SR_CLEAR (PSW, PSW_IFCON);
       nds32_set_nia (cpu, cia + imm16s1);
       return;
@@ -1375,8 +1366,6 @@ nds32_decode32_br2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       if (!(CCPU_GPR[rt].s < 0))
 	return;
 
-      if (sd->gprof)
-	nds32_gmon_mcount (cia, cia + imm16s1);
       CCPU_SR_CLEAR (PSW, PSW_IFCON);
       nds32_set_nia (cpu, cia + imm16s1);
       break;
@@ -1644,10 +1633,6 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	  if (insn & __BIT (24))	/* jal */
 	    CCPU_GPR[GPR_LP] = CCPU_USR[USR0_IFCLP];
 	}
-
-      if (insn & __BIT (24))	/* jump-and-link */
-	if (sd->gprof)
-	  nds32_gmon_mcount (cia, next_cia);
 
       CCPU_SR_CLEAR (PSW, PSW_IFCON);
       nds32_set_nia (cpu, next_cia);
@@ -2019,8 +2004,6 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
 	      nds32_set_nia (cpu, CCPU_GPR[ra5].u);
 	      return;
 	    case 1:		/* jral5 */
-	      if (sd->gprof)
-		nds32_gmon_mcount (cia, CCPU_GPR[ra5].u);
 	      CCPU_GPR[GPR_LP].u = cia + 2;
 	      if (CCPU_SR_TEST (PSW, PSW_IFCON))
 		CCPU_GPR[GPR_LP] = CCPU_USR[USR0_IFCLP];
@@ -2088,9 +2071,6 @@ sim_engine_run (SIM_DESC sd, int next_cpu_nr, int nr_cpus, int siggnal)
 
       recent_cia[recent_cia_idx] = cia;
       recent_cia_idx = (recent_cia_idx + 1) & RECENT_CIA_MASK;
-
-      if (sd->gprof)
-	nds32_gmon_sample (cia);
 
       nds32_pfm_event (cpu, PFM_CYCLE);
       nds32_pfm_event (cpu, PFM_INST);
@@ -2329,29 +2309,6 @@ nds32_initialize_cpu (SIM_DESC sd, sim_cpu *cpu, struct bfd *abfd)
   CCPU_FPCSR.u = 0;
 }
 
-static SIM_RC
-nds32_option_handler (SIM_DESC sd, sim_cpu *cpu, int opt, char *arg,
-		      int is_command)
-{
-  switch (opt)
-    {
-    case OPTION_GPROF:
-      if (arg == NULL || strcmp (arg, "on") == 0)
-	sd->gprof = 1;
-      break;
-
-    default:
-      return SIM_RC_FAIL;
-    }
-  return SIM_RC_OK;
-}
-
-static const OPTION nds32_options[] = {
-  {{"gprof", optional_argument, NULL, OPTION_GPROF},
-    '\0', "on|off", "Enable gprof", nds32_option_handler},
-  {{NULL, no_argument, NULL, 0}, '\0', NULL, NULL, NULL}
-};
-
 SIM_DESC
 sim_open (SIM_OPEN_KIND kind, host_callback * callback,
 	  struct bfd *abfd, char **argv)
@@ -2372,8 +2329,6 @@ sim_open (SIM_OPEN_KIND kind, host_callback * callback,
       nds32_free_state (sd);
       return 0;
     }
-
-  sim_add_option_table (sd, NULL, nds32_options);
 
   /* Handle target sim arguments. */
   if (sim_parse_args (sd, argv) != SIM_RC_OK)
@@ -2421,9 +2376,6 @@ sim_close (SIM_DESC sd, int quitting)
   nds32_freeall_vma (mm);
 #endif
 
-  if (sd->gprof)
-    nds32_gmon_cleanup (STATE_PROG_BFD (sd));
-
 #if defined (DEBUG) && defined (USE_TLB)
   /* Dump VMA usage for debugging.  */
   uint64_t t = mm->cache_ihit + mm->cache_dhit + mm->cache_miss;
@@ -2435,6 +2387,8 @@ sim_close (SIM_DESC sd, int quitting)
   printf ("d-hit rate: %f (%llu/%llu)\n",
 	  (double) mm->cache_dhit / t * 100, mm->cache_dhit, t);
 #endif
+
+  sim_module_uninstall (sd);
 }
 
 static int
@@ -2456,9 +2410,6 @@ sim_create_inferior (SIM_DESC sd, struct bfd *prog_bfd, char **argv,
   /* Set the initial register set.  */
   if (prog_bfd == NULL)
     return SIM_RC_OK;
-
-  if (sd->gprof)
-    nds32_gmon_start (prog_bfd);
 
   memset (&dis_info, 0, sizeof (dis_info));
   /* See opcode/dis-init.c and dis-asm.h for details.  */
