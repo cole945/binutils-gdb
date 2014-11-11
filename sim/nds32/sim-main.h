@@ -34,8 +34,6 @@ typedef unsigned32 sim_cia;
 
 #include "sim-base.h"
 
-#include "nds32-mm.h"
-
 typedef union {
   uint32_t u;
   int32_t s;
@@ -100,9 +98,6 @@ struct sim_state {
      but if sim_core_attach is used in order to attach device_io, then
      there is no way to detach all. */
   int mem_attached;
-
-  struct nds32_mm mm;
-#define STATE_MM(sd) (&(sd)->mm)
 
   sim_state_base base;
 };
