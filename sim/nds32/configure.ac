@@ -19,13 +19,8 @@ AC_CHECK_FUNCS([ \
 	nanosleep \
 ])
 
-AC_CHECK_FUNCS([mmap munmap], \
-	NDS32_SIM_EXTRA_OBJS="${NDS32_SIM_EXTRA_OBJS} nds32-mm.o")
-
 AC_CHECK_HEADERS([ \
 	sys/ioctl.h \
-	sys/mman.h \
-	sys/resource.h \
 	sys/times.h \
 ])
 

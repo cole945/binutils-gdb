@@ -38,7 +38,6 @@
 
 #include "opcode/nds32.h"
 #include "nds32-sim.h"
-#include "nds32-mm.h"
 #include "nds32-syscall.h"
 #include "nds32-pfm.h"
 
@@ -2315,7 +2314,6 @@ sim_open (SIM_OPEN_KIND kind, host_callback * callback,
 {
   int i;
   SIM_DESC sd = sim_state_alloc (kind, callback);
-  struct nds32_mm *mm = STATE_MM (sd);
 
   /* The cpu data is kept in a separately allocated chunk of memory.  */
   if (sim_cpu_alloc_all (sd, 1, 0) != SIM_RC_OK)
@@ -2370,24 +2368,6 @@ sim_open (SIM_OPEN_KIND kind, host_callback * callback,
 void
 sim_close (SIM_DESC sd, int quitting)
 {
-  struct nds32_mm *mm = STATE_MM (sd);
-
-#ifdef HAVE_MMAP
-  nds32_freeall_vma (mm);
-#endif
-
-#if defined (DEBUG) && defined (USE_TLB)
-  /* Dump VMA usage for debugging.  */
-  uint64_t t = mm->cache_ihit + mm->cache_dhit + mm->cache_miss;
-
-  nds32_dump_vma (mm);
-
-  printf ("i-hit rate: %f (%llu/%llu)\n",
-	  (double) mm->cache_ihit / t * 100, mm->cache_ihit, t);
-  printf ("d-hit rate: %f (%llu/%llu)\n",
-	  (double) mm->cache_dhit / t * 100, mm->cache_dhit, t);
-#endif
-
   sim_module_uninstall (sd);
 }
 
@@ -2429,10 +2409,7 @@ sim_create_inferior (SIM_DESC sd, struct bfd *prog_bfd, char **argv,
   else
     CCPU_SR_CLEAR (PSW, PSW_BE);
 
-  if (STATE_ENVIRONMENT (sd) == USER_ENVIRONMENT)
-    nds32_init_linux (sd, prog_bfd, argv, env);
-  else
-    nds32_init_libgloss (sd, prog_bfd, argv, env);
+  nds32_init_libgloss (sd, prog_bfd, argv, env);
 
   return SIM_RC_OK;
 }
@@ -2441,63 +2418,4 @@ void
 sim_set_callbacks (host_callback * ptr)
 {
   /* callback = ptr; */
-}
-
-/* Implement device_error for sim-core devices.  */
-
-void
-device_error (device *me, const char *message, ...)
-{
-  va_list ap;
-
-  va_start (ap, message);
-  vfprintf (stderr, message, ap);
-  va_end (ap);
-
-  abort ();
-}
-
-/* Implement device_io_read_buffer for sim-core devices.  */
-
-int
-device_io_read_buffer (device *me, void *source, int space,
-		       address_word addr, unsigned nr_bytes, SIM_DESC sd,
-		       SIM_CPU *cpu, sim_cia cia)
-{
-#ifdef HAVE_MMAP
-  /* nds32-mm for Linux program are only supported if the host supports
-     mmap/munmap.  */
-  if (me == &nds32_mm_devices)
-    {
-      int r;
-
-      r = nds32_mm_read (me, source, space, addr, nr_bytes, sd, cpu, cia);
-      return r;
-    }
-#endif
-
-  abort ();
-}
-
-/* Implement device_io_write_buffer for sim-core devices.  */
-
-int
-device_io_write_buffer (device *me, const void *source, int space,
-			address_word addr, unsigned nr_bytes,
-			SIM_DESC sd, SIM_CPU *cpu, sim_cia cia)
-{
-#ifdef HAVE_MMAP
-  /* nds32-mm for Linux program are only supported if the host supports
-     mmap/munmap.  */
-
-  if (me == &nds32_mm_devices)
-    {
-      int r;
-
-      r = nds32_mm_write (me, source, space, addr, nr_bytes, sd, cpu, cia);
-      return r;
-    }
-#endif
-
-  abort ();
 }
