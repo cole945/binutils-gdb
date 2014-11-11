@@ -588,9 +588,9 @@ zero_byte_exist:
 static void
 nds32_decode32_alu1 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
-  int rt = N32_RT5 (insn);
-  int ra = N32_RA5 (insn);
-  int rb = N32_RB5 (insn);
+  const int rt = N32_RT5 (insn);
+  const int ra = N32_RA5 (insn);
+  const int rb = N32_RB5 (insn);
   const int rd = N32_RD5 (insn);
   const int imm5u = rb;
   const int sh5 = N32_SH5 (insn);
@@ -735,9 +735,9 @@ nds32_decode32_alu1 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 static void
 nds32_decode32_alu2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
-  int rt = N32_RT5 (insn);
-  int ra = N32_RA5 (insn);
-  int rb = N32_RB5 (insn);
+  const int rt = N32_RT5 (insn);
+  const int ra = N32_RA5 (insn);
+  const int rb = N32_RB5 (insn);
   const int imm5u = rb;
   const int dt = (insn & __BIT (21)) ? USR0_D1LO : USR0_D0LO;
 
@@ -1158,10 +1158,10 @@ nds32_decode32_alu2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 static void
 nds32_decode32_jreg (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
-  SIM_DESC sd = CPU_STATE (cpu);
-  int rt = N32_RT5 (insn);
-  int ra = N32_RA5 (insn);
-  int rb = N32_RB5 (insn);
+  const SIM_DESC sd = CPU_STATE (cpu);
+  const int rt = N32_RT5 (insn);
+  const int ra = N32_RA5 (insn);
+  const int rb = N32_RB5 (insn);
   sim_cia nia;
 
   if (ra != 0)
@@ -1246,9 +1246,9 @@ nds32_decode32_jreg (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 static void
 nds32_decode32_br1 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
-  int rt = N32_RT5 (insn);
-  int ra = N32_RA5 (insn);
-  int imm14s = N32_IMM14S (insn);
+  const int rt = N32_RT5 (insn);
+  const int ra = N32_RA5 (insn);
+  const int imm14s = N32_IMM14S (insn);
 
   switch ((insn >> 14) & 1)
     {
@@ -1272,9 +1272,9 @@ nds32_decode32_br1 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 static void
 nds32_decode32_br2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
-  SIM_DESC sd = CPU_STATE (cpu);
-  int rt = N32_RT5 (insn);
-  int imm16s1 = N32_IMM16S (insn) << 1;
+  const SIM_DESC sd = CPU_STATE (cpu);
+  const int rt = N32_RT5 (insn);
+  const int imm16s1 = N32_IMM16S (insn) << 1;
 
   switch (__GF (insn, 16, 4))
     {
@@ -1377,7 +1377,7 @@ nds32_decode32_br2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 static void
 nds32_decode32_misc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
-  int rt = N32_RT5 (insn);
+  const int rt = N32_RT5 (insn);
 
   switch (insn & 0x1F)
     {
@@ -1459,12 +1459,12 @@ nds32_decode32_misc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 static void
 nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
-  SIM_DESC sd = CPU_STATE (cpu);
-  int op = N32_OP6 (insn);
-  int rt = N32_RT5 (insn);
-  int ra = N32_RA5 (insn);
-  int imm15s = N32_IMM15S (insn);
-  int imm15u = N32_IMM15U (insn);
+  const SIM_DESC sd = CPU_STATE (cpu);
+  const int op = N32_OP6 (insn);
+  const int rt = N32_RT5 (insn);
+  const int ra = N32_RA5 (insn);
+  const int imm15s = N32_IMM15S (insn);
+  const int imm15u = N32_IMM15U (insn);
   uint32_t shift;
   uint32_t addr;
   sim_cia next_cia;
@@ -1705,7 +1705,7 @@ nds32_decode16_ex9 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
 static void
 nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
 {
-  SIM_DESC sd = CPU_STATE (cpu);
+  const SIM_DESC sd = CPU_STATE (cpu);
   const int rt5 = N16_RT5 (insn);
   const int ra5 = N16_RA5 (insn);
   const int rt4 = N16_RT4 (insn);

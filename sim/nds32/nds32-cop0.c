@@ -183,7 +183,7 @@ nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
   int fcmp = SIM_FPU_IS_SNAN;
   uint64_t u64;
   uint32_t u32;
-  uint32_t i32;
+  int32_t s32;
   sim_fpu sft, sft2;
   sim_fpu sfa;
   sim_fpu sfb;
@@ -372,9 +372,9 @@ nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	      goto done;	/* just return */
 	    case 0x18:		/* fs2si, fd2si */
 	    case 0x1c:		/* fs2si.z, fd2si.z */
-	      sim_fpu_to32i (&i32, &sfa, (insn & (1 << 12))
+	      sim_fpu_to32i (&s32, &sfa, (insn & (1 << 12))
 					 ? sim_fpu_round_zero : rounding);
-	      CCPU_FPR[fst].s = i32;
+	      CCPU_FPR[fst].s = s32;
 	      goto done; /* Just return.  */
 	    default:
 	      goto bad_op;
