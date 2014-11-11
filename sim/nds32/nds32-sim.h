@@ -98,32 +98,6 @@ void nds32_bad_op (sim_cpu *cpu, uint32_t cia, uint32_t insn, char *tag);
 #define SIM_IO_DPRINTF(...)	do { } while (0)
 #endif
 
-static inline int
-nds32_psw_be ()
-{
-  /* return nds32_sr[SRIDX (1, 0, 0)].u & (1 << 5); */
-  return 0;
-}
-
-static inline int
-nds32_psw_ifc ()
-{
-  return 0;
-  /* return nds32_sr[SRIDX (1, 0, 0)].u & (1 << 15); */
-}
-
-static inline void
-nds32_psw_ifc_on ()
-{
-  /* nds32_sr[SRIDX (1, 0, 0)].u |= (1 << 15); */
-}
-
-static inline void
-nds32_psw_ifc_off ()
-{
-  /* nds32_sr[SRIDX (1, 0, 0)].u &= ~(1 << 15); */
-}
-
 enum
 {
   SRIDX_PSW	= SRIDX (1, 0, 0),
