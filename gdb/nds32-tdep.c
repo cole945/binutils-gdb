@@ -46,6 +46,8 @@
 #include "remote.h"
 #include "target-descriptions.h"
 #include "sim-regno.h"
+#include "record.h"
+#include "record-full.h"
 #include "gdb/sim-nds32.h"
 
 #include "nds32-tdep.h"
@@ -211,6 +213,7 @@ nds32_remote_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr,
 static int
 nds32_dwarf_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int num)
 {
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   const int DXR = 34;
   const int FSR = 38;
   const int FDR = FSR + 32;
@@ -220,9 +223,9 @@ nds32_dwarf_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int num)
   else if (num >= DXR && num < DXR + 4)		/* D0/D1 */
     return num - DXR + NDS32_D0LO_REGNUM;
   else if (num >= FSR && num < FSR + 32)	/* FS */
-    return num - FSR + user_reg_map_name_to_regnum (gdbarch, "fs0", -1);
+    return num - FSR + tdep->fs0_regnum;
   else if (num >= FDR && num < FDR + 32)	/* FD */
-    return num - FDR + user_reg_map_name_to_regnum (gdbarch, "fd0", -1);
+    return num - FDR + tdep->fd0_regnum;
 
   /* No match, return a inaccessible register number.  */
   return gdbarch_num_regs (gdbarch) + gdbarch_num_pseudo_regs (gdbarch);
@@ -1044,6 +1047,7 @@ nds32_pseudo_register_write (struct gdbarch *gdbarch,
 			     struct regcache *regcache, int regnum,
 			     const gdb_byte *buf)
 {
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   char name_buf[8];
   gdb_byte reg_buf[8];
   int offset;
@@ -1064,9 +1068,7 @@ nds32_pseudo_register_write (struct gdbarch *gdbarch,
       else
 	offset = (regnum & 1) ? 0 : 4;
 
-      xsnprintf (name_buf, sizeof (name_buf), "fd%d", regnum >> 1);
-      fd_regnum = user_reg_map_name_to_regnum (gdbarch, name_buf,
-					       strlen (name_buf));
+      fd_regnum = tdep->fd0_regnum + (regnum >> 1);
       regcache_raw_read (regcache, fd_regnum, reg_buf);
       memcpy (reg_buf + offset, buf, 4);
       regcache_raw_write (regcache, fd_regnum, reg_buf);
@@ -1332,6 +1334,7 @@ nds32_alloc_frame_cache (struct frame_info *this_frame)
   cache->fp_offset = 0;
   cache->use_frame = 0;
   cache->base = 0;
+  cache->prev_sp = -1;
 
   return cache;
 }
@@ -1347,8 +1350,6 @@ nds32_in_function_epilogue_p (struct gdbarch *gdbarch, CORE_ADDR addr)
   insn = read_memory_unsigned_integer (addr, 4, BFD_ENDIAN_BIG);
   if ((insn & 0x80000000) == 0)
     {
-      /* 32-bit instruction */
-
       /* ret */
       if (insn == N32_JREG (JR, 0, REG_LP, 0, 1))
 	r = 1;
@@ -1356,11 +1357,9 @@ nds32_in_function_epilogue_p (struct gdbarch *gdbarch, CORE_ADDR addr)
       else if (insn == N32_TYPE0 (MISC, N32_MISC_IRET))
 	r = 2;
     }
-  else
-    {
-      if (insn == N16_TYPE5 (RET5, REG_LP))
-	r = 3;
-    }
+  else if (insn == N16_TYPE5 (RET5, REG_LP))
+    r = 3;
+
   return r > 0;
 }
 
@@ -1920,8 +1919,8 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   if (tdep->abi_use_fpr)
     {
       /* Use FP registers to pass arguments.  */
-      fs0_regnum = user_reg_map_name_to_regnum (gdbarch, "fs0", -1);
-      fd0_regnum = user_reg_map_name_to_regnum (gdbarch, "fd0", -1);
+      fs0_regnum = tdep->fs0_regnum;
+      fd0_regnum = tdep->fd0_regnum;
     }
 
   /* Set the return address.  For the nds32, the return breakpoint is
@@ -2115,7 +2114,6 @@ nds32_extract_return_value (struct type *type, struct regcache *regcache,
   int typecode = TYPE_CODE (type);
   struct gdbarch *gdbarch = get_regcache_arch (regcache);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-  int fs0_regnum, fd0_regnum;
 
   /* Although struct are returned in r0/r1 registers, but struct have
      only one single/double floating-point member are returned in FS/FD
@@ -2126,13 +2124,10 @@ nds32_extract_return_value (struct type *type, struct regcache *regcache,
 
   if (typecode == TYPE_CODE_FLT && tdep->abi_use_fpr)
     {
-      fs0_regnum = user_reg_map_name_to_regnum (gdbarch, "fs0", -1);
-      fd0_regnum = user_reg_map_name_to_regnum (gdbarch, "fd0", -1);
-
       if (len == 4)
-	regcache_cooked_read (regcache, fs0_regnum, readbuf);
+	regcache_cooked_read (regcache, tdep->fs0_regnum, readbuf);
       else if (len == 8)
-	regcache_cooked_read (regcache, fd0_regnum, readbuf);
+	regcache_cooked_read (regcache, tdep->fd0_regnum, readbuf);
       else
 	internal_error (__FILE__, __LINE__,
 			_("Cannot extract return value of %d bytes "
@@ -2212,7 +2207,6 @@ nds32_store_return_value (struct type *type, struct regcache *regcache,
   int typecode = TYPE_CODE (type);
   struct gdbarch *gdbarch = get_regcache_arch (regcache);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-  int fs0_regnum, fd0_regnum;
 
   /* Although struct are returned in r0/r1 registers, but struct have
      only one single/double floating-point member are returned in FS/FD
@@ -2223,13 +2217,10 @@ nds32_store_return_value (struct type *type, struct regcache *regcache,
 
   if (typecode == TYPE_CODE_FLT && tdep->abi_use_fpr)
     {
-      fs0_regnum = user_reg_map_name_to_regnum (gdbarch, "fs0", -1);
-      fd0_regnum = user_reg_map_name_to_regnum (gdbarch, "fd0", -1);
-
       if (len == 4)
-	regcache_cooked_write (regcache, fs0_regnum, writebuf);
+	regcache_cooked_write (regcache, tdep->fs0_regnum, writebuf);
       else if (len == 8)
-	regcache_cooked_write (regcache, fd0_regnum, writebuf);
+	regcache_cooked_write (regcache, tdep->fd0_regnum, writebuf);
       else
 	internal_error (__FILE__, __LINE__,
 			_("Cannot store return value of %d bytes long "
@@ -2453,6 +2444,94 @@ static const struct frame_base nds32_frame_base =
   nds32_frame_base_address
 };
 
+static int
+nds32_epilogue_frame_sniffer (const struct frame_unwind *self,
+			      struct frame_info *this_frame,
+			      void **this_prologue_cache)
+{
+  if (frame_relative_level (this_frame) == 0)
+    return nds32_in_function_epilogue_p (get_frame_arch (this_frame),
+					 get_frame_pc (this_frame));
+  else
+    return 0;
+}
+
+static struct nds32_unwind_cache *
+nds32_epilogue_frame_cache (struct frame_info *this_frame, void **this_cache)
+{
+  volatile struct gdb_exception ex;
+  struct nds32_unwind_cache *cache;
+  CORE_ADDR sp;
+
+  if (*this_cache)
+    return *this_cache;
+
+  cache = nds32_alloc_frame_cache (this_frame);
+  *this_cache = cache;
+
+  TRY_CATCH (ex, RETURN_MASK_ERROR)
+    {
+      /* At this point the stack looks as if we just entered the
+	 function, with the return address at the top of the
+	 stack.  */
+      sp = get_frame_register_unsigned (this_frame, NDS32_SP_REGNUM);
+      cache->prev_sp = sp;
+    }
+  if (ex.reason < 0 && ex.error != NOT_AVAILABLE_ERROR)
+    throw_exception (ex);
+
+  return cache;
+}
+
+static enum unwind_stop_reason
+nds32_epilogue_frame_unwind_stop_reason (struct frame_info *this_frame,
+					 void **this_cache)
+{
+  struct nds32_unwind_cache *cache =
+    nds32_epilogue_frame_cache (this_frame, this_cache);
+
+  if (!cache->prev_sp)
+    return UNWIND_UNAVAILABLE;
+
+  return UNWIND_NO_REASON;
+}
+
+static void
+nds32_epilogue_frame_this_id (struct frame_info *this_frame,
+			      void **this_cache, struct frame_id *this_id)
+{
+  CORE_ADDR func, base;
+  struct nds32_unwind_cache *cache =
+    nds32_epilogue_frame_cache (this_frame, this_cache);
+
+  base = cache->prev_sp;
+  func = get_frame_func (this_frame);
+
+  if (base == -1)
+    (*this_id) = frame_id_build_unavailable_stack (func);
+  else
+    (*this_id) = frame_id_build (base + 8, func);
+}
+
+static struct value *
+nds32_epilogue_frame_prev_register (struct frame_info *this_frame,
+				    void **this_cache, int regnum)
+{
+  /* Make sure we've initialized the cache.  */
+  nds32_epilogue_frame_cache (this_frame, this_cache);
+
+  return nds32_frame_prev_register (this_frame, this_cache, regnum);
+}
+
+static const struct frame_unwind nds32_epilogue_frame_unwind = {
+    NORMAL_FRAME,
+    nds32_epilogue_frame_unwind_stop_reason,
+    nds32_epilogue_frame_this_id,
+    nds32_epilogue_frame_prev_register,
+    NULL,
+    nds32_epilogue_frame_sniffer
+};
+
 /* Implement the gdbarch_overlay_update method.  */
 
 static void
@@ -2474,7 +2553,822 @@ nds32_simple_overlay_update (struct obj_section *osect)
 
   simple_overlay_update (osect);
 }
+
+#define __TEST(VALUE,BIT)	(((VALUE) & (1 << (BIT))) ? 1 : 0)
+#define __GET(VALUE,BIT)	(((VALUE) >> (BIT)) & ((1 << (BIT##_N)) - 1))
 
+static int
+nds32_record32_lsmw (struct gdbarch *gdbarch,
+		    struct regcache *regcache, uint32_t insn)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  int rb, re, ra, enable4, i, ret;
+  char buf[4];
+  int wac;			/* With alignment-check?  */
+  int reg_cnt = 0;		/* Total number of registers count.  */
+  int di;			/* dec=-1 or inc=1  */
+  int size = 4;			/* The load/store bytes.  */
+  int len = 4;			/* The length of a fixed-size string.  */
+  char enb4map[2][4] = { {3, 2, 1, 0}, {0, 1, 2, 3} };
+  uint32_t val = 0;
+  ULONGEST base;
+
+
+  /* Decode instruction.  */
+  rb = N32_RT5 (insn);
+  ra = N32_RA5 (insn);
+  re = N32_RB5 (insn);
+  enable4 = (insn >> 6) & 0x0F;
+  wac = (insn & 1) ? 1 : 0;
+  di = __TEST (insn, 3) ? -1 : 1;
+
+  /* Get the first memory address  */
+  regcache_cooked_read_unsigned (regcache, NDS32_R0_REGNUM + ra, &base);
+
+  /* Sum up the registers count.  */
+  reg_cnt += (enable4 & 0x1) ? 1 : 0;
+  reg_cnt += (enable4 & 0x2) ? 1 : 0;
+  reg_cnt += (enable4 & 0x4) ? 1 : 0;
+  reg_cnt += (enable4 & 0x8) ? 1 : 0;
+  if (rb < NDS32_FP_REGNUM && re < NDS32_FP_REGNUM)
+    reg_cnt += (re - rb) + 1;
+
+  /* Generate the first memory address.  */
+  if (__TEST (insn, 4))
+    base += 4 * di;
+  /* Set base to the lowest memory address we are going to access.
+     Because we may load/store in increasing or decreasing order,
+     always access the memory from the lowest address simplify the
+     opertions.  */
+  if (__TEST (insn, 3))
+    base -= (reg_cnt - 1) * 4;
+
+  for (i = rb; i <= re && rb < NDS32_FP_REGNUM; i++)
+    {
+      if (insn & 0x20)
+	{
+	  /* SMW */
+	  record_full_arch_list_add_mem (base, 4);
+	}
+      else
+	{
+	  /* LMW */
+	  record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + i);
+	}
+      base += 4;
+    }
+
+  /* Load/store the 4 individual registers from low address memory
+     to high address memory. */
+  for (i = 0; i < 4; i++)
+    {
+      if (__TEST (enable4, enb4map[wac][i]))
+	{
+	  if (insn & 0x20)
+	    {
+	      /* SMW */
+	      record_full_arch_list_add_mem (base, 4);
+	    }
+	  else
+	    {
+	      /* LMW */
+	      record_full_arch_list_add_reg (regcache,
+					     NDS32_R0_REGNUM + NDS32_SP_REGNUM
+					     - (enb4map[wac][i]));
+	    }
+	  base += 4;
+	}
+    }
+
+  /* Update the base address register.  */
+  if (__TEST (insn, 2))
+    record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + ra);
+
+  return 0;
+}
+
+static int
+nds32_record32_mem (struct gdbarch *gdbarch,
+		    struct regcache *regcache, uint32_t insn)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  const int rt = N32_RT5 (insn);
+  const int ra = N32_RA5 (insn);
+  const int rb = N32_RB5 (insn);
+  const int sv = __GF (insn, 8, 2);
+  const int op = insn & 0xFF;
+  uint32_t addr;
+  ULONGEST tmp0, tmp1;
+
+  switch (op)
+    {
+    case 0x4:			/* lb.bi */
+    case 0x5:			/* lh.bi */
+    case 0x6:			/* lw.bi */
+    case 0x7:			/* ld.bi */
+    case 0x14:			/* lbs.bi */
+    case 0x15:			/* lhs.bi */
+    case 0x16:			/* lws.bi */
+      record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + ra);
+      /* FALL-THROUGH */
+    case 0x0:			/* lb */
+    case 0x1:			/* lh */
+    case 0x2:			/* lw */
+    case 0x3:			/* ld */
+    case 0x10:			/* lbs */
+    case 0x11:			/* lhs */
+    case 0x12:			/* lws */
+    case 0x18:			/* llw */
+    case 0x20:			/* lbup */
+    case 0x22:			/* lwup */
+    case 0x28:			/* sbup */
+    case 0x2a:			/* swup */
+      record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + rt);
+      break;
+
+    case 0x8:			/* sb */
+    case 0x9:			/* sh */
+    case 0xa:			/* sw */
+    case 0xb:			/* sd */
+      regcache_cooked_read_unsigned (regcache, NDS32_R0_REGNUM + ra, &tmp0);
+      regcache_cooked_read_unsigned (regcache, NDS32_R0_REGNUM + rb, &tmp1);
+      addr = tmp0 + (tmp1 << sv);
+      record_full_arch_list_add_mem (addr, (1 << (op & 0x3)));
+      break;
+
+    case 0xc:			/* sb.bi */
+    case 0xd:			/* sh.bi */
+    case 0xe:			/* sw.bi */
+    case 0xf:			/* sd.bi */
+      regcache_cooked_read_unsigned (regcache, NDS32_R0_REGNUM + ra, &tmp0);
+      addr = tmp0;
+      record_full_arch_list_add_mem (addr, (1 << (op & 0x3)));
+      record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + rt);
+      break;
+
+    case 0x13:			/* dpref */
+      /* do nothing */
+      break;
+
+    case 0x19:			/* scw */
+      record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + rt);
+      break;
+
+    default:
+      return -1;
+    }
+
+  return 0;
+}
+
+static int
+nds32_record32_alu1 (struct gdbarch *gdbarch,
+		     struct regcache *regcache, uint32_t insn)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  const int rt = N32_RT5 (insn);
+  const int ra = N32_RA5 (insn);
+  const int rb = N32_RB5 (insn);
+  const int rd = N32_RD5 (insn);
+
+  switch (N32_SUB5 (insn))
+    {
+    case 0x16:			/* divsr */
+    case 0x17:			/* divr */
+      if (rt != rd)
+	record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + rd);
+      /* FALL-THROUGH */
+    case 0x0:			/* add, add_slli */
+    case 0x1:			/* sub, sub_slli */
+    case 0x2:			/* and, add_slli */
+    case 0x3:			/* xor, xor_slli */
+    case 0x4:			/* or, or_slli */
+    case 0x5:			/* nor */
+    case 0x6:			/* slt */
+    case 0x7:			/* slts */
+    case 0x8:			/* slli */
+    case 0x9:			/* srli */
+    case 0xa:			/* srai */
+    case 0xc:			/* sll */
+    case 0xd:			/* srl */
+    case 0xe:			/* sra */
+    case 0xb:			/* rotri */
+    case 0xf:			/* rotr */
+    case 0x10:			/* seb */
+    case 0x11:			/* seh */
+    case 0x12:			/* bitc */
+    case 0x13:			/* zeh */
+    case 0x14:			/* wsbh */
+    case 0x15:			/* or_srli */
+    case 0x18:			/* sva */
+    case 0x19:			/* svs */
+    case 0x1a:			/* cmovz */
+    case 0x1b:			/* cmovn */
+    case 0x1c:			/* add_srli */
+    case 0x1d:			/* sub_srli */
+    case 0x1e:			/* and_srli */
+    case 0x1f:			/* xor_srli */
+      record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + rt);
+      break;
+
+    default:
+      return -1;
+    }
+
+  return 0;
+}
+
+static int
+nds32_record32_alu2 (struct gdbarch *gdbarch,
+		     struct regcache *regcache, uint32_t insn)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  const int rt = N32_RT5 (insn);
+  const int ra = N32_RA5 (insn);
+  const int rb = N32_RB5 (insn);
+  const int imm5u = rb;
+  const int dt = __TEST (insn, 21) ? 1 : 0;
+
+  if ((insn & 0x7f) == 0x4e)	/* ffbi */
+    {
+      record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + rt);
+      return 0;
+    }
+
+  switch (insn & 0x3ff)
+    {
+    case 0xc:			/* bse */
+    case 0xd:			/* bsp */
+      record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + rb);
+      /* FALL-THROUGH */
+    case 0x0:			/* max */
+    case 0x1:			/* min */
+    case 0x2:			/* ave */
+    case 0x3:			/* abs */
+    case 0x4:			/* clips */
+    case 0x5:			/* clip */
+    case 0x6:			/* clo */
+    case 0x7:			/* clz */
+    case 0x8:			/* bset */
+    case 0x9:			/* bclr */
+    case 0xa:			/* btgl */
+    case 0xb:			/* btst */
+    case 0xe:			/* ffb */
+    case 0xf:			/* ffmism */
+    case 0x17:			/* ffzmism */
+    case 0x24:			/* mul */
+    case 0x20:			/* mfusr */
+    case 0x4f:			/* flmism */
+    case 0x73:			/* maddr32 */
+    case 0x75:			/* msubr32 */
+      record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + rt);
+      break;
+
+    case 0x21:			/* mtusr */
+      /* TODO: Record USR.  */
+      break;
+
+    case 0x28:			/* mults64 */
+    case 0x29:			/* mult64 */
+    case 0x2a:			/* madds64 */
+    case 0x2b:			/* madd64 */
+    case 0x2c:			/* msubs64 */
+    case 0x2d:			/* msub64 */
+    case 0x2e:			/* divs */
+    case 0x2f:			/* div */
+    case 0x68:			/* mulsr64 */
+    case 0x69:			/* mulr64 */
+      record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + dt);
+      record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + dt + 1);
+      break;
+
+    case 0x31:			/* mult32 */
+    case 0x33:			/* madd32 */
+    case 0x35:			/* msub32 */
+      record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + dt);
+      break;
+
+    default:
+      return -1;
+    }
+
+  return 0;
+}
+
+/* Record 32-bit instructions.  */
+
+static int
+nds32_record32 (struct gdbarch *gdbarch, struct regcache *regcache,
+			uint32_t insn)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  const int op = N32_OP6 (insn);
+  const int rt = N32_RT5 (insn);
+  const int ra = N32_RA5 (insn);
+  const int rb = N32_RB5 (insn);
+  const int rd = N32_RD5 (insn);
+  const int imm15s = N32_IMM15S (insn);
+  const int imm15u = N32_IMM15U (insn);
+  const int imm12s = N32_IMM12S (insn);
+  const int sv = __GF (insn, 8, 2);
+  uint32_t shift;
+  uint32_t addr;
+  ULONGEST tmp0, tmp1;
+
+  switch (op)
+    {
+    case 0x4:			/* lbi.bi */
+    case 0x5:			/* lhi.bi */
+    case 0x6:			/* lwi.bi */
+    case 0x7:			/* ldi.bi */
+    case 0x14:			/* lbsi.bi */
+    case 0x15:			/* lhsi.bi */
+    case 0x16:			/* lwsi.bi */
+      record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + ra);
+      /* FALL-THROUGH */
+    case 0x0:			/* lbi */
+    case 0x1:			/* lhi */
+    case 0x2:			/* lwi */
+    case 0x3:			/* ldi */
+    case 0x10:			/* lbsi */
+    case 0x11:			/* lhsi */
+    case 0x12:			/* lwsi */
+    case 0x17:			/* LBGP - lbsi.gp or lbi.gp */
+      record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + rt);
+      break;
+
+    case 0x8:			/* sbi */
+    case 0x9:			/* shi */
+    case 0xa:			/* swi */
+    case 0xb:			/* sdi */
+      regcache_cooked_read_unsigned (regcache, NDS32_R0_REGNUM + ra, &tmp0);
+      shift = (op - 0x8);
+      addr = tmp0 + (imm15s << shift);
+      record_full_arch_list_add_mem (addr, 1 << shift);
+      break;
+
+    case 0xc:			/* sbi.bi */
+    case 0xd:			/* shi.bi */
+    case 0xe:			/* swi.bi */
+    case 0xf:			/* sdi.bi */
+      regcache_cooked_read_unsigned (regcache, NDS32_R0_REGNUM + ra, &tmp0);
+      shift = (op - 0xc);
+      record_full_arch_list_add_mem (tmp0, 1 << shift);
+      record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + ra);
+      break;
+
+    case 0x13:			/* dprefi */
+      /* do nothing */
+      break;
+
+    case 0x18:			/* LWC */
+      if (__TEST (insn, 12))
+	record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + ra);
+      record_full_arch_list_add_reg (regcache, tdep->fs0_regnum + rt);
+      break;
+
+    case 0x19:			/* SWC */
+      regcache_cooked_read_unsigned (regcache, NDS32_R0_REGNUM + ra, &tmp0);
+      if (__TEST (insn, 12))
+	{
+	  record_full_arch_list_add_mem (tmp0, 4);
+	  record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + ra);
+	}
+      else
+	{
+	  addr = tmp0 + (imm12s << 2);
+	  record_full_arch_list_add_mem (addr, 4);
+	}
+      break;
+
+    case 0x1a:			/* LDC */
+      if (__TEST (insn, 12))
+	record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + ra);
+      record_full_arch_list_add_reg (regcache, tdep->fd0_regnum + rt);
+      break;
+
+    case 0x1b:			/* SDC */
+      regcache_cooked_read_unsigned (regcache, NDS32_R0_REGNUM + ra, &tmp0);
+      if (__TEST (insn, 12))
+	{
+	  record_full_arch_list_add_mem (tmp0, 8);
+	  record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + ra);
+	}
+      else
+	{
+	  addr = tmp0 + (imm12s << 2);
+	  record_full_arch_list_add_mem (addr, 8);
+	}
+      break;
+
+    case 0x1c:			/* MEM */
+      return nds32_record32_mem (gdbarch, regcache, insn);
+
+    case 0x1d:			/* LSMW */
+      return nds32_record32_lsmw (gdbarch, regcache, insn);
+
+    case 0x1e:			/* HWGP */
+      switch (__GF (insn, 17, 3))
+	{
+	case 0: case 1:		/* lhi.gp */
+	case 2: case 3:		/* lhsi.gp */
+	case 6:			/* lwi.gp */
+	  record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + rt);
+	case 4: case 5:		/* shi.gp */
+	  regcache_cooked_read_unsigned (regcache, NDS32_GP_REGNUM, &tmp0);
+	  tmp0 += (N32_IMMS (insn, 18) << 1);
+	  record_full_arch_list_add_mem (tmp0, 2);
+	  break;
+	case 7:			/* swi.gp */
+	  regcache_cooked_read_unsigned (regcache, NDS32_GP_REGNUM, &tmp0);
+	  tmp0 += (N32_IMMS (insn, 17) << 2);
+	  record_full_arch_list_add_mem (tmp0, 4);
+	  break;
+	}
+      break;
+    case 0x1f:			/* SBGP */
+      if (__TEST (insn, 19))	/* addi.gp */
+	record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + rt);
+      else			/* sbi.gp */
+	{
+	  regcache_cooked_read_unsigned (regcache, NDS32_GP_REGNUM, &tmp0);
+	  tmp0 += N32_IMMS (insn, 19);
+	  record_full_arch_list_add_mem (tmp0, 1);
+	}
+      break;
+
+    case 0x20:			/* ALU_1 */
+      return nds32_record32_alu1 (gdbarch, regcache, insn);
+
+    case 0x21:			/* ALU_2 */
+      return nds32_record32_alu2 (gdbarch, regcache, insn);
+
+    case 0x22:			/* movi */
+    case 0x23:			/* sethi */
+    case 0x28:			/* addi rt, ra, imm15s */
+    case 0x29:			/* subri */
+    case 0x2a:			/* andi */
+    case 0x2b:			/* xori */
+    case 0x2c:			/* ori */
+    case 0x2e:			/* slti */
+    case 0x2f:			/* sltsi */
+    case 0x33:			/* bitci */
+      record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + rt);
+      break;
+
+    case 0x24:			/* ji, jal */
+      if (__TEST (insn, 24))	/* jal */
+	record_full_arch_list_add_reg (regcache, NDS32_LP_REGNUM);
+      /* TODO: Record PSW.IFCON.  */
+      break;
+
+    case 0x25:			/* jreg */
+      switch (N32_SUB5 (insn))
+	{
+	case 0:			/* jr, ifret, ret */
+	case 2:			/* jrnez */
+	  /* TODO: Record PSW.IFCON.  */
+	  break;
+
+	case 1:			/* jral */
+	case 3:			/* jralnez */
+	  /* TODO: Record PSW.IFCON.  */
+	  record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + rt);
+	  break;
+
+	default:
+	  return -1;
+	}
+      break;
+
+    case 0x26:			/* br1 */
+      /* TODO: Record PSW.IFCON.  */
+      break;
+    case 0x27:			/* br2 */
+      /* TODO: Record PSW.IFCON, USR0_IFCLP  */
+      switch (__GF (insn, 16, 4))
+	{
+	case 0x0:		/* ifcall */
+	case 0x2:		/* beqz */
+	case 0x3:		/* bnez */
+	case 0x4:		/* bgez */
+	case 0x5:		/* bltz */
+	case 0x6:		/* bgtz */
+	case 0x7:		/* blez */
+	  /* Do nothing.  */
+	  break;
+	case 0x1c:		/* bgezal */
+	case 0x1d:		/* bltzal */
+	  record_full_arch_list_add_reg (regcache, NDS32_LP_REGNUM);
+	  break;
+	default:
+	  return -1;
+	}
+      break;
+
+    case 0x2d:			/* br3, beqc, bnec */
+      /* TODO: Record PSW.IFCON.  */
+      break;
+
+    case 0x32:			/* misc */
+      switch (N32_SUB5 (insn))
+	{
+	case 0x0:		/* standby */
+	case 0x1:		/* cctl */
+	case 0x8:		/* dsb */
+	case 0x9:		/* isb */
+	case 0xd:		/* isync */
+	case 0xc:		/* msync */
+	case 0x5:		/* trap */
+	case 0xa:		/* break */
+	case 0x4:		/* iret */
+	case 0x6:		/* teqz */
+	case 0x7:		/* tnez */
+	case 0xe:		/* tlbop */
+	  break;
+
+	case 0x2:		/* mfsr */
+	  record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + rt);
+	  break;
+
+	case 0x3:		/* mtsr */
+	  /* TODO: Record system registers.  */
+	  break;
+
+	case 0xb:		/* syscall */
+	  /* TODO: Handle system call.  */
+	  break;
+
+	default:
+	  return -1;
+	}
+      break;
+
+    case 0x35:			/* COP */
+    default:
+      return -1;
+    }
+
+  return 0;
+}
+
+/* Record 16-bit instructions.  */
+
+static int
+nds32_record16 (struct gdbarch *gdbarch, struct regcache *regcache,
+		uint32_t insn)
+{
+  const int rt5 = N16_RT5 (insn);
+  const int ra5 = N16_RA5 (insn);
+  const int rt4 = N16_RT4 (insn);
+  const int imm5u = N16_IMM5U (insn);
+  const int imm5s = N16_IMM5S (insn);
+  const int imm9u = N16_IMM9U (insn);
+  const int rt3 = N16_RT3 (insn);
+  const int ra3 = N16_RA3 (insn);
+  const int rb3 = N16_RB3 (insn);
+  const int rt38 = N16_RT38 (insn);
+  const int imm3u = rb3;
+  uint32_t shift;
+  uint32_t addr;
+  int tmp;
+  ULONGEST tmp0;
+
+  switch (__GF (insn, 7, 8))
+    {
+    case 0xf8:			/* push25 */
+      {
+	uint32_t smw_adm = 0x3A6F83BC;
+	uint32_t res[] = { 6, 8, 10, 14 };
+	uint32_t re = __GF (insn, 5, 2);
+
+	smw_adm |= res[re] << 10;
+	record_full_arch_list_add_reg (regcache, NDS32_SP_REGNUM);
+	if (re >= 1)
+	  record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + 8);
+	return nds32_record32_lsmw (gdbarch, regcache, smw_adm);
+      }
+
+    case 0xf9:			/* pop25 */
+      {
+	uint32_t lmw_bim = 0x3A6F8384;
+	uint32_t res[] = { 6, 8, 10, 14 };
+	uint32_t re = __GF (insn, 5, 2);
+
+	lmw_bim |= res[re] << 10;
+	record_full_arch_list_add_reg (regcache, NDS32_SP_REGNUM);
+	return nds32_record32_lsmw (gdbarch, regcache, lmw_bim);
+      }
+    }
+
+  if (__GF (insn, 8, 7) == 0x7d)	/* movd44 */
+    {
+      int rt5e = __GF (insn, 4, 4) << 1;
+
+      record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + rt5e);
+      record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + rt5e + 1);
+      return 0;
+    }
+
+  switch (__GF (insn, 9, 6))
+    {
+    case 0x4:			/* add45 */
+    case 0x5:			/* sub45 */
+    case 0x6:			/* addi45 */
+    case 0x7:			/* subi45 */
+    case 0x8:			/* srai45 */
+    case 0x9:			/* srli45 */
+    case 0x19:			/* lwi45.fe */
+    case 0x1a:			/* lwi450 */
+    case 0x3d:			/* movpi45 */
+      record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + rt4);
+      break;
+
+    case 0x11:			/* lwi333.bi */
+      record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + ra3);
+      /* FALL-THROUGH */
+    case 0xa:			/* slli333 */
+    case 0xc:			/* add333 */
+    case 0xd:			/* sub333 */
+    case 0xe:			/* addi333 */
+    case 0xf:			/* subi333 */
+    case 0x10:			/* lwi333 */
+    case 0x12:			/* lhi333 */
+    case 0x13:			/* lbi333 */
+    case 0x18:			/* addri36.sp */
+      record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + rt3);
+      break;
+
+    case 0x14:			/* swi333 */
+    case 0x16:			/* shi333 */
+    case 0x17:			/* sbi333 */
+      {
+	int shtbl[] = { 2, -1, 1, 0 };
+
+	shift = shtbl[(__GF (insn, 9, 6) - 0x14)];
+	regcache_cooked_read_unsigned (regcache, NDS32_R0_REGNUM + ra3, &tmp0);
+	tmp0 += (imm3u << shift);
+	record_full_arch_list_add_mem (tmp0, 1 << shift);
+      }
+      break;
+
+    case 0x15:			/* swi333.bi */
+      regcache_cooked_read_unsigned (regcache, NDS32_R0_REGNUM + ra3, &tmp0);
+      record_full_arch_list_add_mem (tmp0, 4);
+      record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + ra3);
+      break;
+
+    case 0x1b:			/* swi450 */
+      regcache_cooked_read_unsigned (regcache, NDS32_R0_REGNUM + ra5, &tmp0);
+      record_full_arch_list_add_mem (tmp0, 4);
+      break;
+
+    case 0x30:			/* slts45 */
+    case 0x31:			/* slt45 */
+    case 0x32:			/* sltsi45 */
+    case 0x33:			/* slti45 */
+      record_full_arch_list_add_reg (regcache, NDS32_TA_REGNUM);
+      break;
+
+    case 0x34:			/* beqzs8, bnezs8 */
+      break;
+
+    case 0x35:			/* break16, ex9.it */
+      if (imm9u < 32)		/* break16 */
+	break;
+
+      /* TODO: ex9.it */
+      return -1;
+
+    case 0x3c:			/* ifcall9 */
+      /* TODO: IFCLP and PSW.  */
+      return -1;
+
+    case 0x3f:			/* MISC33 */
+      switch (insn & 0x7)
+	{
+	case 2:			/* neg33 */
+	case 3:			/* not33 */
+	case 4:			/* mul33 */
+	case 5:			/* xor33 */
+	case 6:			/* and33 */
+	case 7:			/* or33 */
+	  record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + rt3);
+	  break;
+
+	default:
+	  return -1;
+	}
+      break;
+
+    case 0xb:
+      /* zeb33 zeh33 seb33 seh33 xlsb33 x11b33 bmski33 fexti33 */
+      record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + rt3);
+      break;
+    }
+
+  switch (__GF (insn, 10, 5))
+    {
+    case 0x0:			/* mov55 or ifret16 */
+      if (rt5 != ra5)
+	record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + rt5);
+      /* TODO: Handle ifret.  */
+      break;
+
+    case 0x1:			/* movi55 */
+      record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + rt5);
+      break;
+
+    case 0x1b:			/* addi10s (V2) */
+      record_full_arch_list_add_reg (regcache, NDS32_SP_REGNUM);
+      break;
+    }
+
+  switch (__GF (insn, 11, 4))
+    {
+    case 0x7:			/* lwi37.fp/swi37.fp */
+      if (__TEST (insn, 7))	/* swi37.fp */
+	{
+	  regcache_cooked_read_unsigned (regcache, NDS32_FP_REGNUM, &tmp0);
+	  tmp0 += (N16_IMM7U (insn) << 2);
+	  record_full_arch_list_add_mem (tmp0, 4);
+	}
+      else			/* lwi37.fp */
+	{
+	  record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + rt38);
+	}
+      break;
+
+    case 0x8:			/* beqz38 */
+    case 0x9:			/* bnez38 */
+    case 0xa:			/* beqs38/j8, implied r5 */
+      break;
+
+    case 0xb:			/* bnes38 and others */
+      if (rt38 == 5)
+	{
+	  switch (__GF (insn, 5, 3))
+	    {
+	    case 0:		/* jr5 */
+	    case 4:		/* ret5 */
+	      break;
+
+	    case 1:		/* jral5 */
+	      record_full_arch_list_add_reg (regcache, NDS32_LP_REGNUM);
+	      break;
+
+	    case 2:		/* ex9.it imm5 */
+	      /* TODO: Record ex9.it.  */
+	      return -1;
+	    case 5:		/* add5.pc */
+	      record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + ra5);
+	      break;
+
+	    default:
+	      return -1;
+	    }
+	  break;
+	}
+      /* else bnes38 */
+      break;
+
+    case 0xe:			/* lwi37/swi37 */
+      if (__TEST (insn, 7))	/* swi37.sp */
+	{
+	  regcache_cooked_read_unsigned (regcache, NDS32_SP_REGNUM, &tmp0);
+	  tmp0 += (N16_IMM7U (insn) << 2);
+	  record_full_arch_list_add_mem (tmp0, 4);
+	}
+      else			/* lwi37.sp */
+	record_full_arch_list_add_reg (regcache, NDS32_R0_REGNUM + rt38);
+      break;
+    }
+
+  return 0;
+}
+
+/* Implement gdbarch_process_record.  */
+
+static int
+nds32_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
+		      CORE_ADDR addr)
+{
+  uint32_t insn;
+  int r;
+
+  insn = read_memory_unsigned_integer (addr, 4, BFD_ENDIAN_BIG);
+  if ((insn & 0x80000000) == 0)
+    r = nds32_record32 (gdbarch, regcache, insn);
+  else
+    r = nds32_record16 (gdbarch, regcache, insn >> 16);
+
+  record_full_arch_list_add_reg (regcache, gdbarch_pc_regnum (gdbarch));
+  if (r || record_full_arch_list_add_end ())
+    return -1;
+
+  return 0;
+}
+
 /* Implement gdbarch_print_insn method.  */
 
 static int
@@ -2525,7 +3419,7 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   struct gdbarch_list *best_arch;
   const struct target_desc *tdesc = NULL;
   struct tdesc_arch_data *tdesc_data = NULL;
-  int i;
+  int i, maxregs;
 
   /* Allocate space for the new architecture.  */
   tdep = xcalloc (1, sizeof (struct gdbarch_tdep));
@@ -2674,8 +3568,52 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
       return best_arch->gdbarch;
     }
 
+  /* Add nds32 register aliases.  */
+  maxregs = (gdbarch_num_regs (gdbarch) + gdbarch_num_pseudo_regs (gdbarch));
+  for (i = 0; i < (int) ARRAY_SIZE (nds32_register_aliases); i++)
+    {
+      int regnum, j;
+
+      regnum = -1;
+      for (j = 0; j < maxregs; j++)
+	{
+	  const char *regname = gdbarch_register_name (gdbarch, j);
+
+	  if (regname != NULL
+	      && strcmp (regname, nds32_register_aliases[i].name) == 0)
+	    {
+	      regnum = j;
+	      break;
+	    }
+	}
+
+      if (regnum == -1)
+	continue;
+
+      user_reg_add (gdbarch, nds32_register_aliases[i].alias,
+		    nds32_value_of_reg, nds32_register_aliases[i].name);
+    }
+
+  /* Find the register number of fs0 and fd0.  */
+  tdep->fs0_regnum = -1;
+  tdep->fd0_regnum = -1;
+  for (i = 0; i < maxregs; i++)
+    {
+      const char *regname = gdbarch_register_name (gdbarch, i);
+
+      if (regname == NULL || regname[0] != 'f' || regname[2] != '0' ||
+	  regname[3] != '\0')
+	continue;
+
+      if (regname[1] == 's')
+	tdep->fs0_regnum = i;
+      else if (regname[1] == 'd')
+	tdep->fd0_regnum = i;
+    }
+
   nds32_add_reggroups (gdbarch);
 
+  set_gdbarch_process_record (gdbarch, nds32_process_record);
   gdbarch_init_osabi (info, gdbarch);
 
   /* Override tdesc_register callbacks for system registers.  */
@@ -2716,28 +3654,11 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_get_longjmp_target (gdbarch, nds32_get_longjmp_target);
 
   /* The order of appending is the order it check frame.  */
+  frame_unwind_append_unwinder (gdbarch, &nds32_epilogue_frame_unwind);
   dwarf2_frame_set_init_reg (gdbarch, nds32_dwarf2_frame_init_reg);
   dwarf2_append_unwinders (gdbarch);
   frame_unwind_append_unwinder (gdbarch, &nds32_frame_unwind);
-
-  /* Add nds32 register aliases.  */
-  /* This is a simple workaround to force user-reg being initialized
-     before gdbarch initialized.  Without this, calling
-     user_reg_map_name_to_regnum will crash.  */
-  user_reg_add (gdbarch, "r0", nds32_value_of_reg, "r0");
-  for (i = 0; i < (int) ARRAY_SIZE (nds32_register_aliases); i++)
-    {
-      int regnum;
-
-      regnum = user_reg_map_name_to_regnum
-	(gdbarch, nds32_register_aliases[i].name, -1);
-
-      if (regnum == -1)
-	continue;
-
-      user_reg_add (gdbarch, nds32_register_aliases[i].alias,
-		    nds32_value_of_reg, nds32_register_aliases[i].name);
-    }
+  frame_base_append_sniffer (gdbarch, dwarf2_frame_base_sniffer);
 
   return gdbarch;
 }
