@@ -60,6 +60,8 @@ struct gdbarch_tdep
 {
   /* The configuration of FPU FREG.  */
   int fpu_freg;
+  int fs0_regnum;
+  int fd0_regnum;
 
   /* Large arguments are split between registers and stack.  */
   int abi_split;
