@@ -1,6 +1,6 @@
 # nds32 bit stream packing (normal)
 # mach:	 	all
-# as:		-mbaseline=V3 -mext-perf2
+# as:		-mbaseline=v3 -mperf2-ext
 # ld:		--defsym=_stack=0x3000000
 # output:	pass\n
 
