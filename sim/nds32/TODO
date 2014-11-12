@@ -6,10 +6,5 @@
   Unimplemented:
   * v1: svs, jr-with-sr-update (e.g., jr.itoff),
     MMU instructions (tlbop, ld_vlpt), teqz, tnez, iret, ret.*toff,
-  * v2: [ls][bw]up
   * perf-ext: pbsad, pbsada
-  * fpu: IVO exception, fmfcsr, fmtcsr, fui2s, fui2d
-  Partial implemented:
-  * v1: llw, scw, mfsr, mtsr, trap (as break), syscall,
-  Implemented as NOP:
-  * v1: msync, isync, dprefi, dprefe, dsb, isb, cctl, setgie.*, standby
+  * fpu: IVO exception, fui2s, fui2d

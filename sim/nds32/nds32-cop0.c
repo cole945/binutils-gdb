@@ -54,8 +54,8 @@ static inline void
 nds32_fd_from_64 (sim_cpu *cpu, int fd, uint64_t u64)
 {
   fd <<= 1;
-  CCPU_FPR[fd + 1].u = u64 & 0xFFFFFFFF;
-  CCPU_FPR[fd].u = (u64 >> 32) & 0xFFFFFFFF;
+  CCPU_FPR[fd + 1].u = u64;
+  CCPU_FPR[fd].u = (u64 >> 32);
 }
 
 sim_cia
@@ -69,7 +69,7 @@ nds32_decode32_lwc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 
   SIM_ASSERT (cop == 0);
 
-  if (insn & (1 << 12))
+  if (__TEST (insn, 12))
     {
       CCPU_FPR[fst].u = nds32_ld_aligned (cpu, CCPU_GPR[ra].u, 4);
       CCPU_GPR[ra].u += (imm12s << 2);
@@ -93,7 +93,7 @@ nds32_decode32_swc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 
   SIM_ASSERT (cop == 0);
 
-  if (insn & (1 << 12))		/* fssi.bi */
+  if (__TEST (insn, 12))	/* fssi.bi */
     {
       nds32_st_aligned (cpu, CCPU_GPR[ra].u, 4, CCPU_FPR[fst].u);
       CCPU_GPR[ra].u += (imm12s << 2);
@@ -118,7 +118,7 @@ nds32_decode32_ldc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 
   SIM_ASSERT (cop == 0);
 
-  if (insn & (1 << 12))		/* fldi.bi */
+  if (__TEST (insn, 12))	/* fldi.bi */
     {
       u64 = nds32_ld_aligned (cpu, CCPU_GPR[ra].u, 8);
       CCPU_GPR[ra].u += (imm12s << 2);
@@ -147,7 +147,7 @@ nds32_decode32_sdc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 
   u64 = nds32_fd_to_64 (cpu, fdt);
 
-  if (insn & (1 << 12))
+  if (__TEST (insn, 12))
     {
       nds32_st_aligned (cpu, CCPU_GPR[ra].u, 8, u64);
       CCPU_GPR[ra].u += (imm12s << 2);
@@ -305,13 +305,13 @@ nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	  if (!dp)
 	    {
 	      /* fcmovzs */
-	      if ((CCPU_FPR[fsb].u != 0) ^ ((insn & 1 << 6) != 0))
+	      if ((CCPU_FPR[fsb].u != 0) ^ (__TEST (insn, 6) != 0))
 		CCPU_FPR[fst] = CCPU_FPR[fsa];
 	    }
 	  else
 	    {
 	      /* fcmovzd */
-	      if ((CCPU_FPR[fsb].u != 0) ^ ((insn & 1 << 6) != 0))
+	      if ((CCPU_FPR[fsb].u != 0) ^ (__TEST (insn, 6) != 0))
 		{
 		  CCPU_FPR[fdt_] = CCPU_FPR[fda_];
 		  CCPU_FPR[fdt_ + 1] = CCPU_FPR[fda_ + 1];
@@ -334,10 +334,8 @@ nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	case 0xd:		/* fdivs */
 	  sim_fpu_div (&sft, &sfa, &sfb);
 	  break;
-#if 0
-	case 0xa:
-	case 0xb:		/* reserved */
-#endif
+	/* case 0xa:		reserved */
+	/* case 0xb:		reserved */
 	case 0xf:		/* F2OP */
 	  switch (__GF (insn, 10, 5))
 	    {
@@ -366,13 +364,13 @@ nds32_decode32_cop (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	      break;
 	    case 0x10:		/* fs2ui, fd2ui */
 	    case 0x14:		/* fs2ui.z, fd2ui.z */
-	      sim_fpu_to32u (&u32, &sfa, (insn & (1 << 12))
+	      sim_fpu_to32u (&u32, &sfa, __TEST (insn, 12)
 					 ? sim_fpu_round_zero : rounding);
 	      CCPU_FPR[fst].u = u32;
 	      goto done;	/* just return */
 	    case 0x18:		/* fs2si, fd2si */
 	    case 0x1c:		/* fs2si.z, fd2si.z */
-	      sim_fpu_to32i (&s32, &sfa, (insn & (1 << 12))
+	      sim_fpu_to32i (&s32, &sfa, __TEST (insn, 12)
 					 ? sim_fpu_round_zero : rounding);
 	      CCPU_FPR[fst].s = s32;
 	      goto done; /* Just return.  */
