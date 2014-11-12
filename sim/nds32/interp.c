@@ -2345,11 +2345,25 @@ sim_open (SIM_OPEN_KIND kind, host_callback * callback,
       return 0;
     }
 
+  /* Establish any remaining configuration options.  */
+  if (sim_config (sd) != SIM_RC_OK)
+    {
+      nds32_free_state (sd);
+      return 0;
+    }
+
   if (sim_post_argv_init (sd) != SIM_RC_OK)
     {
       nds32_free_state (sd);
       return 0;
     }
+
+  /* Allocate core memory if none is given by user.  */
+  if (STATE_MEMOPT (sd) == NULL)
+    {
+      sim_do_command (sd, "memory region 0,0x4000000");	/* 64 MB */
+    }
+
 
   /* CPU specific initialization.  */
   for (i = 0; i < MAX_NR_PROCESSORS; ++i)
@@ -2357,10 +2371,6 @@ sim_open (SIM_OPEN_KIND kind, host_callback * callback,
       sim_cpu *cpu = STATE_CPU (sd, i);
       nds32_initialize_cpu (sd, cpu, abfd);
     }
-
-  sd->mem_attached = FALSE;
-
-  callback->syscall_map = cb_nds32_libgloss_syscall_map;
 
   return sd;
 }
@@ -2379,6 +2389,33 @@ sim_dis_read (bfd_vma memaddr, bfd_byte *myaddr, unsigned int length,
 
   return sim_read (sd, memaddr, (unsigned char *) myaddr, length)
 	 != length;
+}
+
+void
+nds32_init_libgloss (SIM_DESC sd, struct bfd *abfd, char **argv, char **env)
+{
+  int len, mlen, i;
+
+  STATE_CALLBACK (sd)->syscall_map = cb_nds32_libgloss_syscall_map;
+
+  /* Save argv for -mcrt-arg hacking.  */
+  memset (sd->cmdline, 0, sizeof (sd->cmdline));
+  mlen = sizeof (sd->cmdline) - 1;
+  len = 0;
+  for (i = 0; argv && argv[i]; i++)
+    {
+      int l = strlen (argv[i]) + 1;
+
+      if (l + len >= mlen)
+	break;
+
+      len += sprintf (sd->cmdline + len, "%s ", argv[i]);
+    }
+
+  if (len > 0)
+    sd->cmdline[len - 1] = '\0';	/* Trim the last space. */
+
+  return;
 }
 
 SIM_RC
@@ -2409,6 +2446,7 @@ sim_create_inferior (SIM_DESC sd, struct bfd *prog_bfd, char **argv,
   else
     CCPU_SR_CLEAR (PSW, PSW_BE);
 
+  STATE_CALLBACK (sd)->syscall_map = cb_nds32_libgloss_syscall_map;
   nds32_init_libgloss (sd, prog_bfd, argv, env);
 
   return SIM_RC_OK;
