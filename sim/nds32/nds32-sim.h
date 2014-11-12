@@ -28,9 +28,6 @@
 
 #include "sim-main.h"
 
-typedef unsigned long long ulongest_t;
-typedef signed long long longest_t;
-
 enum nds32_cpu_regnum
 {
   GPR_TA = 15,
@@ -72,8 +69,8 @@ enum nds32_exceptions
 uint32_t nds32_raise_exception (sim_cpu *cpu, enum nds32_exceptions e, int sig, char *msg, ...);
 
 /* Do not use thsi directly. */
-ulongest_t __nds32_ld (sim_cpu *cpu, SIM_ADDR addr, int size, int aligned_p);
-void __nds32_st (sim_cpu *cpu, SIM_ADDR addr, int size, ulongest_t val, int aligned_p);
+unsigned long __nds32_ld (sim_cpu *cpu, SIM_ADDR addr, int size, int aligned_p);
+void __nds32_st (sim_cpu *cpu, SIM_ADDR addr, int size, unsigned long val, int aligned_p);
 /* Use these wrappers. */
 #define nds32_ld_aligned(CPU, ADDR, SIZE)		__nds32_ld (CPU, ADDR, SIZE, 1)
 #define nds32_st_aligned(CPU, ADDR, SIZE, VAL)		__nds32_st (CPU, ADDR, SIZE, VAL, 1)
@@ -193,6 +190,27 @@ enum
   FPCSR_RIT	= 19,
 };
 
+enum PERFM_EVENT_ENUM
+{
+  PFM_CYCLE = 0,
+  PFM_INST,
+
+  PFM_COND_BRANCH = 64 + 2,
+  PFM_TAKEN_COND,
+  PFM_PREFETCH,
+  PFM_RET,
+  PFM_JR,
+  PFM_JAL,
+  PFM_NOP,
+  PFM_SCW,
+  PFM_IDSB,
+  PFM_CCTL,
+  PFM_TAKEN_INT,
+  PFM_LOADS,
+
+  PFM_COND_BRANCH_MISPREDICT = 128 + 2,
+};
+
 ATTRIBUTE_UNUSED static void
 __put_field (uint32_t *src, int shift, int bs, uint32_t val)
 {
@@ -202,7 +220,7 @@ __put_field (uint32_t *src, int shift, int bs, uint32_t val)
   *src = (*src & ~(mask << shift)) | (val << shift);
 }
 
-#define __TEST(VALUE,BIT)	((VALUE) & (1 << (BIT)))
+#define __TEST(VALUE,BIT)	(((VALUE) & (1 << (BIT))) ? 1 : 0)
 #define __SET(VALUE,BIT)	do { (VALUE) |= (1 << (BIT)); } while (0)
 #define __CLEAR(VALUE,BIT)	do { (VALUE) &= ~(1 << (BIT)); } while (0)
 #define __GET(VALUE,BIT)	(((VALUE) >> (BIT)) & ((1 << (BIT##_N)) - 1))

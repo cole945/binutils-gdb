@@ -203,7 +203,7 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
   sc.read_mem = syscall_read_mem;
   sc.write_mem = syscall_write_mem;
 
-  /* FIXME and TODO: Handling big endian.  */
+  /* TODO: Handling big endian.  */
 
   /* switch (swid) */
   switch (cbid = cb_target_to_host_syscall (cb, sc.func))
