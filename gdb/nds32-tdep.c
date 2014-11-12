@@ -2482,7 +2482,7 @@ gdb_print_insn_nds32 (bfd_vma memaddr, disassemble_info *info)
 {
   struct obj_section * s = find_pc_section (memaddr);
 
-  /* When disassembling ex9 instructions, they are annotated with
+  /* When disassembling ex9 instructions, annotating them with
      the original instructions at the end of line.  For example,
 
 	0x00500122 <+82>:    ex9.it #4		! movi $r13, 10
@@ -2721,10 +2721,9 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   frame_unwind_append_unwinder (gdbarch, &nds32_frame_unwind);
 
   /* Add nds32 register aliases.  */
-  /* FIXME: This is a simple workaround to force user-reg being
-	    initialized before gdbarch initialized.
-	    Without this, calling user_reg_map_name_to_regnum ()
-	    will crash.  */
+  /* This is a simple workaround to force user-reg being initialized
+     before gdbarch initialized.  Without this, calling
+     user_reg_map_name_to_regnum will crash.  */
   user_reg_add (gdbarch, "r0", nds32_value_of_reg, "r0");
   for (i = 0; i < (int) ARRAY_SIZE (nds32_register_aliases); i++)
     {
