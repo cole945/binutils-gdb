@@ -39,7 +39,6 @@
 #include "opcode/nds32.h"
 #include "nds32-sim.h"
 #include "nds32-syscall.h"
-#include "nds32-pfm.h"
 
 #include <sys/types.h>
 #include <unistd.h>
@@ -54,10 +53,10 @@ static void nds32_set_nia (sim_cpu *cpu, sim_cia nia);
 static sim_cia recent_cia[RECENT_CIA_MASK + 1];
 static int recent_cia_idx = 0;
 
-static ulongest_t
+static unsigned long
 extract_unsigned_integer (unsigned char *addr, int len, int byte_order)
 {
-  ulongest_t retval;
+  unsigned long retval;
   const unsigned char *p;
   const unsigned char *startaddr = addr;
   const unsigned char *endaddr = startaddr + len;
@@ -78,7 +77,7 @@ extract_unsigned_integer (unsigned char *addr, int len, int byte_order)
 
 static void
 store_unsigned_integer (unsigned char *addr, int len,
-			int byte_order, ulongest_t val)
+			int byte_order, unsigned long val)
 {
   unsigned char *p;
   unsigned char *startaddr = addr;
@@ -103,44 +102,7 @@ store_unsigned_integer (unsigned char *addr, int len,
 	}
     }
 }
-
-/* Find first zero byte or mis-match in sequential memory address.
-   If no such byte is found, return 0.  */
-
-static uint32_t
-find_null_mism (unsigned char *b1, unsigned char *b2)
-{
-  int i;
-
-  for (i = 0; i < 4; i++)
-    {
-      if ((b1[i] == '\0') || (b1[i] != b2[i]))
-	return -4 + i;
-    }
-  return 0;
-}
-
-/* Find first mis-match in sequential memory address.
-   The 3rd argument inc: 1 means incremental memory address.
-			-1 means decremental memory address.
-   If no such byte is found, return 0.  */
-
-static uint32_t
-find_mism (unsigned char *b1, unsigned char *b2, int inc)
-{
-  int i, end;
-  i = (inc == 1) ? 0 : 3;
-  end = (inc == 1) ? 3 : 0;
-  while (1)
-    {
-      if ((b1[i] != b2[i]))
-	return -4 + i;
-      if (i == end)
-	return 0;
-      i += inc;
-    }
-}
-
+
 static void
 nds32_dump_registers (SIM_DESC sd)
 {
@@ -158,7 +120,6 @@ nds32_dump_registers (SIM_DESC sd)
   for (i = 0; i < MAX_NR_PROCESSORS; ++i)
     {
       sim_cpu *cpu = STATE_CPU (sd, i);
-      /* TODO ... */
       sim_io_eprintf (sd, "pc  %08x\n", CCPU_USR[USR0_PC].u);
 
       for (j = 0; j < 32; j++)
@@ -201,7 +162,6 @@ nds32_raise_exception (sim_cpu *cpu, enum nds32_exceptions e, int sig,
   uint32_t cia = CCPU_USR[USR0_PC].u;
   int i;
 
-  /* TODO: Show message only if it is not handled by user.  */
   if (msg)
     {
       va_list va;
@@ -234,15 +194,16 @@ nds32_bad_op (sim_cpu *cpu, uint32_t cia, uint32_t insn, char *tag)
 			 "Illegal/Unhandled %s instruction (%08x)\n", tag, insn);
 }
 
-ulongest_t
+/* Load an integer in endian specified in PSW.BE flag.  */
+
+unsigned long
 __nds32_ld (sim_cpu *cpu, SIM_ADDR addr, int size, int aligned_p)
 {
-  int r;
-  ulongest_t val = 0;
-  int order;
+  int r, order;
+  unsigned long val = 0;
   SIM_DESC sd = CPU_STATE (cpu);
 
-  SIM_ASSERT (size <= sizeof (ulongest_t));
+  SIM_ASSERT (size <= sizeof (unsigned long));
 
   if (aligned_p && (addr & (size - 1)) != 0)
     nds32_raise_exception (cpu, EXP_GENERAL, SIM_SIGSEGV,
@@ -263,15 +224,16 @@ __nds32_ld (sim_cpu *cpu, SIM_ADDR addr, int size, int aligned_p)
   return val;
 }
 
+/* Store an integer in endian specified in PSW.BE flag.  */
+
 void
-__nds32_st (sim_cpu *cpu, SIM_ADDR addr, int size, ulongest_t val,
+__nds32_st (sim_cpu *cpu, SIM_ADDR addr, int size, unsigned long val,
 	    int aligned_p)
 {
-  int r;
-  int order;
+  int r, order;
   SIM_DESC sd = CPU_STATE (cpu);
 
-  SIM_ASSERT (size <= sizeof (ulongest_t));
+  SIM_ASSERT (size <= sizeof (unsigned long));
 
   if (aligned_p && (addr & (size - 1)) != 0)
     nds32_raise_exception (cpu, EXP_GENERAL, SIM_SIGSEGV,
@@ -292,20 +254,6 @@ __nds32_st (sim_cpu *cpu, SIM_ADDR addr, int size, ulongest_t val,
   return;
 }
 
-static void
-nds32_free_state (SIM_DESC sd)
-{
-  if (STATE_MODULES (sd) != NULL)
-    sim_module_uninstall (sd);
-  sim_cpu_free_all (sd);
-  sim_state_free (sd);
-}
-
-void
-sim_size (int s)
-{
-}
-
 /* Set next-instructoin-address, so sim_engine_run () fetches `nia'
    instead of ($pc + 4) or ($pc + 2) for next instruction base on
    currenly instruction size. */
@@ -315,6 +263,45 @@ nds32_set_nia (sim_cpu *cpu, sim_cia nia)
 {
   cpu->iflags |= NIF_BRANCH;
   cpu->baddr = nia;
+}
+
+/* Find first zero byte or mis-match in sequential memory address.
+   If no such byte is found, return 0.  */
+
+static uint32_t
+find_null_mism (unsigned char *b1, unsigned char *b2)
+{
+  int i;
+
+  for (i = 0; i < 4; i++)
+    {
+      if ((b1[i] == '\0') || (b1[i] != b2[i]))
+	return -4 + i;
+    }
+  return 0;
+}
+
+/* Find first mis-match in sequential memory address.
+   The 3rd argument inc: 1 means incremental memory address.
+			-1 means decremental memory address.
+   If no such byte is found, return 0.  */
+
+static uint32_t
+find_mism (unsigned char *b1, unsigned char *b2, int inc)
+{
+  int i, end;
+
+  i = (inc == 1) ? 0 : 3;
+  end = (inc == 1) ? 3 : 0;
+
+  while (1)
+    {
+      if ((b1[i] != b2[i]))
+	return -4 + i;
+      if (i == end)
+	return 0;
+      i += inc;
+    }
 }
 
 static void
@@ -407,19 +394,17 @@ static void
 nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
   SIM_DESC sd = CPU_STATE (cpu);
-  int rb, re, ra, enable4, i;
-  int wac;			/* With Alignment Check ?  */
+  int rb, re, ra, enable4, i, ret;
+  char buf[4];
+  int wac;			/* With alignment-check?  */
   int reg_cnt = 0;		/* Total number of registers count.  */
   int di;			/* dec=-1 or inc=1  */
-  int order = CCPU_SR_TEST (PSW, PSW_BE) ? BIG_ENDIAN : LITTLE_ENDIAN;
   int size = 4;			/* The load/store bytes.  */
   int len = 4;			/* The length of a fixed-size string.  */
-  int ret;
-  char enb4map[2][4] =
-    { {3, 2, 1, 0}, /* With Aligment Check.  */ {0, 1, 2, 3} };
+  int order = CCPU_SR_TEST (PSW, PSW_BE) ? BIG_ENDIAN : LITTLE_ENDIAN;
+  char enb4map[2][4] = { {3, 2, 1, 0}, {0, 1, 2, 3} };
   uint32_t val = 0;
   SIM_ADDR base = -1;
-  char buf[4];
 
   /* Filter out undefined opcode.  */
   if ((insn & 0x3) == 0x3)
@@ -427,6 +412,7 @@ nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       nds32_bad_op (cpu, cia, insn, "LSMW");
       return;
     }
+
   /* Filter out invalid opcode.  */
   if ((insn & 0xB) == 0xA)
     {
@@ -440,12 +426,13 @@ nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
   re = N32_RB5 (insn);
   enable4 = (insn >> 6) & 0x0F;
   wac = (insn & 1) ? 1 : 0;
-  di = (insn & __BIT (3)) ? -1 : 1;
+  di = __TEST (insn, 3) ? -1 : 1;
 
-  base = CCPU_GPR[ra].u;	/* Get the first memory address  */
+  /* Get the first memory address  */
+  base = CCPU_GPR[ra].u;
 
   /* Do the alignment check. */
-  if (wac && base & 0x3)
+  if (wac && (base & 0x3))
     {
       nds32_raise_exception (cpu, EXP_GENERAL, SIM_SIGSEGV,
 			     (insn & 0x20)
@@ -468,20 +455,20 @@ nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     }
 
   /* Generate the first memory address.  */
-  if (insn & __BIT (4))
+  if (__TEST (insn, 4))
     base += 4 * di;
-  /* Adjust the first memory address
-     due to operating from low address memory.  */
-  if (insn & __BIT (3))
+  /* Set base to the lowest memory address we are going to access.
+     Because we may load/store in increasing or decreasing order,
+     always access the memory from the lowest address simplify the
+     opertions.  */
+  if (__TEST (insn, 3))
     base -= (reg_cnt - 1) * 4;
 
-
-  /* Operating from low address memory to high address memory.  */
   for (i = rb; i <= re && rb < GPR_FP; i++)
     {
       if (insn & 0x20)
 	{
-	  /* store */
+	  /* SMW */
 
 	  val = CCPU_GPR[i].u;
 	  store_unsigned_integer ((unsigned char *) buf, 4, order, val);
@@ -503,7 +490,7 @@ nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	}
       else
 	{
-	  /* load */
+	  /* LMW */
 
 	  ret = sim_read (sd, base, (unsigned char *) buf, 4);
 	  if (ret != 4)
@@ -525,15 +512,15 @@ nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       base += 4;
     }
 
-  /* Operating the 4 individual registers
-     from low address memory to high address memory. */
+  /* Load/store the 4 individual registers from low address memory
+     to high address memory. */
   for (i = 0; i < 4; i++)
     {
-      if (enable4 & (__BIT (enb4map[wac][i])))
+      if (__TEST (enable4, enb4map[wac][i]))
 	{
 	  if (insn & 0x20)
 	    {
-	      /* store */
+	      /* SMW */
 
 	      val = CCPU_GPR[GPR_SP - (enb4map[wac][i])].u;
 	      store_unsigned_integer ((unsigned char *) buf, 4, order, val);
@@ -554,7 +541,7 @@ nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	    }
 	  else
 	    {
-	      /* load */
+	      /* LMW */
 
 	      ret = sim_read (sd, base, (unsigned char *) buf, 4);
 	      if (ret != 4)
@@ -579,7 +566,7 @@ nds32_decode32_lsmw (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 
 zero_byte_exist:
   /* Update the base address register.  */
-  if (insn & __BIT (2))
+  if (__TEST (insn, 2))
     CCPU_GPR[ra].u += reg_cnt * 4 * di;
 
   return;
@@ -595,7 +582,7 @@ nds32_decode32_alu1 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
   const int imm5u = rb;
   const int sh5 = N32_SH5 (insn);
 
-  switch (insn & 0x1f)
+  switch (N32_SUB5 (insn))
     {
     case 0x0:			/* add, add_slli */
       CCPU_GPR[rt].u = CCPU_GPR[ra].u + (CCPU_GPR[rb].u << sh5);
@@ -643,8 +630,8 @@ nds32_decode32_alu1 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0xb:			/* rotri */
     case 0xf:			/* rotr */
       {
-	uint32_t shift = ((insn & 0x1f) == 0xb) ? imm5u : CCPU_GPR[rb].u;
-	uint32_t m = CCPU_GPR[ra].u & (__BIT (shift) - 1);
+	uint32_t shift = (N32_SUB5 (insn) == 0xb) ? imm5u : CCPU_GPR[rb].u;
+	uint32_t m = CCPU_GPR[ra].u & __MASK (shift);
 	CCPU_GPR[rt].u = CCPU_GPR[ra].u >> shift;
 	CCPU_GPR[rt].u |= m << (32 - shift);
       }
@@ -671,7 +658,7 @@ nds32_decode32_alu1 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       break;
     case 0x16:			/* divsr */
       {
-	/* FIXME: Positive qoutient exception.  */
+	/* TODO: Generate positive qoutient exception.  */
 	int64_t q;
 	int64_t r;
 
@@ -739,7 +726,7 @@ nds32_decode32_alu2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
   const int ra = N32_RA5 (insn);
   const int rb = N32_RB5 (insn);
   const int imm5u = rb;
-  const int dt = (insn & __BIT (21)) ? USR0_D1LO : USR0_D0LO;
+  const int dt = __TEST (insn, 21) ? USR0_D1LO : USR0_D0LO;
 
   if ((insn & 0x7f) == 0x4e)	/* ffbi */
     {
@@ -771,7 +758,7 @@ nds32_decode32_alu2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       {
 	int64_t r = ((int64_t) CCPU_GPR[ra].s << 1)
 		    + ((int64_t) CCPU_GPR[rb].s << 1) + 1;
-	CCPU_GPR[rt].u = (r >> 1) & 0xFFFFFFFF;
+	CCPU_GPR[rt].u = (r >> 1);
       }
       break;
     case 0x3:			/* abs */
@@ -804,7 +791,7 @@ nds32_decode32_alu2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 
 	for (i = 31; i >= 0; i--)
 	  {
-	    if (CCPU_GPR[ra].u & __BIT (i))
+	    if (__TEST (CCPU_GPR[ra].u, i))
 	      cnt++;
 	    else
 	      break;
@@ -818,7 +805,7 @@ nds32_decode32_alu2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 
 	for (i = 31; i >= 0; i--)
 	  {
-	    if ((CCPU_GPR[ra].u & __BIT (i)) == 0)
+	    if (__TEST (CCPU_GPR[ra].u, i) == 0)
 	      cnt++;
 	    else
 	      break;
@@ -827,23 +814,23 @@ nds32_decode32_alu2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       }
       break;
     case 0x8:			/* bset */
-      CCPU_GPR[rt].u = CCPU_GPR[ra].u | (1 << imm5u);
+      CCPU_GPR[rt].u = CCPU_GPR[ra].u | __BIT (imm5u);
       break;
     case 0x9:			/* bclr */
-      CCPU_GPR[rt].u = CCPU_GPR[ra].u & ~(1 << imm5u);
+      CCPU_GPR[rt].u = CCPU_GPR[ra].u & ~__BIT (imm5u);
       break;
     case 0xa:			/* btgl */
-      CCPU_GPR[rt].u = CCPU_GPR[ra].u ^ (1 << imm5u);
+      CCPU_GPR[rt].u = CCPU_GPR[ra].u ^ __BIT (imm5u);
       break;
     case 0xb:			/* btst */
-      CCPU_GPR[rt].u = (CCPU_GPR[ra].u & (1 << imm5u)) != 0;
+      CCPU_GPR[rt].u = __TEST (CCPU_GPR[ra].u, imm5u) ? 1 : 0;
       break;
     case 0xc:			/* bse */
       {
 	int n = __GF (CCPU_GPR[rb].u, 0, 5);
 	int m = __GF (CCPU_GPR[rb].u, 8, 5);
-	int underflow = CCPU_GPR[rb].u & __BIT (30);
-	int refill = CCPU_GPR[rb].u & __BIT (31);
+	int underflow = __TEST (CCPU_GPR[rb].u, 30);
+	int refill = __TEST (CCPU_GPR[rb].u, 31);
 	int len = m + 1;
 	int dist = 32 - len - n;	/* From LSB.  */
 	int val;
@@ -901,8 +888,8 @@ nds32_decode32_alu2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       {
 	int n = __GF (CCPU_GPR[rb].u, 0, 5);
 	int m = __GF (CCPU_GPR[rb].u, 8, 5);
-	int underflow = CCPU_GPR[rb].u & __BIT (30);
-	int refill = CCPU_GPR[rb].u & __BIT (31);
+	int underflow = __TEST (CCPU_GPR[rb].u, 30);
+	int refill = __TEST (CCPU_GPR[rb].u, 31);
 	int len = m + 1;
 	int dist = 32 - len - n;	/* From LSB.  */
 	int val;
@@ -1007,27 +994,27 @@ nds32_decode32_alu2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       {
 	int64_t d = (int64_t) CCPU_GPR[ra].s * (int64_t) CCPU_GPR[rb].s;
 
-	CCPU_USR[dt].s = d & 0xFFFFFFFF;
-	CCPU_USR[dt + 1].s = (d >> 32) & 0xFFFFFFFF;
+	CCPU_USR[dt].s = d;
+	CCPU_USR[dt + 1].s = (d >> 32);
       }
       break;
     case 0x29:			/* mult64 */
       {
 	uint64_t d = (uint64_t) CCPU_GPR[ra].u * (uint64_t) CCPU_GPR[rb].u;
 
-	CCPU_USR[dt].u = d & 0xFFFFFFFF;
-	CCPU_USR[dt + 1].u = (d >> 32) & 0xFFFFFFFF;
+	CCPU_USR[dt].u = d;
+	CCPU_USR[dt + 1].u = (d >> 32);
       }
       break;
     case 0x2a:			/* madds64 */
       {
 	int64_t mr = (int64_t) CCPU_GPR[ra].s * (int64_t) CCPU_GPR[rb].s;
 	int64_t d = ((int64_t) CCPU_USR[dt + 1].s << 32)
-		    | ((int64_t) CCPU_USR[dt].  s & 0xFFFFFFFF);
+		    | ((int64_t) CCPU_USR[dt].s & 0xFFFFFFFF);
 
 	d += mr;
-	CCPU_USR[dt].u = d & 0xFFFFFFFF;
-	CCPU_USR[dt + 1].u = (d >> 32) & 0xFFFFFFFF;
+	CCPU_USR[dt].u = d;
+	CCPU_USR[dt + 1].u = (d >> 32);
       }
       break;
     case 0x2b:			/* madd64 */
@@ -1037,8 +1024,8 @@ nds32_decode32_alu2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 		     | ((uint64_t) CCPU_USR[dt].u & 0xFFFFFFFF);
 
 	d += mr;
-	CCPU_USR[dt].u = d & 0xFFFFFFFF;
-	CCPU_USR[dt + 1].u = (d >> 32) & 0xFFFFFFFF;
+	CCPU_USR[dt].u = d;
+	CCPU_USR[dt + 1].u = (d >> 32);
       }
       break;
     case 0x2c:			/* msubs64 */
@@ -1048,8 +1035,8 @@ nds32_decode32_alu2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 		    | ((int64_t) CCPU_USR[dt].s & 0xFFFFFFFF);
 
 	d -= mr;
-	CCPU_USR[dt].u = d & 0xFFFFFFFF;
-	CCPU_USR[dt + 1].u = (d >> 32) & 0xFFFFFFFF;
+	CCPU_USR[dt].u = d;
+	CCPU_USR[dt + 1].u = (d >> 32);
       }
       break;
     case 0x2d:			/* msub64 */
@@ -1059,8 +1046,8 @@ nds32_decode32_alu2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 		     | ((uint64_t) CCPU_USR[dt].u & 0xFFFFFFFF);
 
 	d -= mr;
-	CCPU_USR[dt].u = d & 0xFFFFFFFF;
-	CCPU_USR[dt + 1].u = (d >> 32) & 0xFFFFFFFF;
+	CCPU_USR[dt].u = d;
+	CCPU_USR[dt + 1].u = (d >> 32);
       }
       break;
     case 0x2e:			/* divs */
@@ -1114,13 +1101,13 @@ nds32_decode32_alu2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 
 	if (CCPU_SR_TEST (PSW, PSW_BE))
 	  {
-	    CCPU_GPR[d].u = (r >> 32) & 0xFFFFFFFF;
-	    CCPU_GPR[d + 1].u = r & 0xFFFFFFFF;
+	    CCPU_GPR[d].u = (r >> 32);
+	    CCPU_GPR[d + 1].u = r;
 	  }
 	else
 	  {
-	    CCPU_GPR[d + 1].u = (r >> 32) & 0xFFFFFFFF;
-	    CCPU_GPR[d].u = r & 0xFFFFFFFF;
+	    CCPU_GPR[d + 1].u = (r >> 32);
+	    CCPU_GPR[d].u = r;
 	  }
       }
       break;
@@ -1131,21 +1118,21 @@ nds32_decode32_alu2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 
 	if (CCPU_SR_TEST (PSW, PSW_BE))
 	  {
-	    CCPU_GPR[d].u = (r >> 32) & 0xFFFFFFFF;
-	    CCPU_GPR[d + 1].u = r & 0xFFFFFFFF;
+	    CCPU_GPR[d].u = (r >> 32);
+	    CCPU_GPR[d + 1].u = r;
 	  }
 	else
 	  {
-	    CCPU_GPR[d + 1].u = (r >> 32) & 0xFFFFFFFF;
-	    CCPU_GPR[d].u = r & 0xFFFFFFFF;
+	    CCPU_GPR[d + 1].u = (r >> 32);
+	    CCPU_GPR[d].u = r;
 	  }
       }
       break;
     case 0x73:			/* maddr32 */
-      CCPU_GPR[rt].u += (CCPU_GPR[ra].u * CCPU_GPR[rb].u) & 0xFFFFFFFF;
+      CCPU_GPR[rt].u += (CCPU_GPR[ra].u * CCPU_GPR[rb].u);
       break;
     case 0x75:			/* msubr32 */
-      CCPU_GPR[rt].u -= (CCPU_GPR[ra].u * CCPU_GPR[rb].u) & 0xFFFFFFFF;
+      CCPU_GPR[rt].u -= (CCPU_GPR[ra].u * CCPU_GPR[rb].u);
       break;
     default:
       nds32_bad_op (cpu, cia, insn, "ALU2");
@@ -1172,7 +1159,7 @@ nds32_decode32_jreg (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     sim_io_error (sd, "JREG DT/IT not supported at pc=0x%x, code=0x%08x\n",
 		  cia, insn);
 
-  switch (insn & 0x1f)
+  switch (N32_SUB5 (insn))
     {
     case 0:			/* jr, ifret, ret */
       if (__GF (insn, 5, 2) == 0x3)
@@ -1375,6 +1362,55 @@ nds32_decode32_br2 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 }
 
 static void
+nds32_pfm_ctl (sim_cpu *cpu)
+{
+  int en, ie, ovf, ks, ku;
+  int sel0, sel1, sel2;
+
+  en = CCPU_SR_GET (PFM_CTL, PFM_CTL_EN);
+  ie = CCPU_SR_GET (PFM_CTL, PFM_CTL_IE);
+  ovf = CCPU_SR_GET (PFM_CTL, PFM_CTL_OVF);
+  ks = CCPU_SR_GET (PFM_CTL, PFM_CTL_KS);
+  ku = CCPU_SR_GET (PFM_CTL, PFM_CTL_KU);
+  sel0 = CCPU_SR_GET (PFM_CTL, PFM_CTL_SEL0);
+  sel1 = CCPU_SR_GET (PFM_CTL, PFM_CTL_SEL1);
+  sel2 = CCPU_SR_GET (PFM_CTL, PFM_CTL_SEL2);
+}
+
+static void
+nds32_pfm_event (sim_cpu *cpu, int pfm_event)
+{
+  int sel[3];
+  int en, ovf;
+  int i;
+
+  en = CCPU_SR_GET (PFM_CTL, PFM_CTL_EN);
+  ovf = CCPU_SR_GET (PFM_CTL, PFM_CTL_OVF);
+
+  sel[0] = CCPU_SR_GET (PFM_CTL, PFM_CTL_SEL0);
+  sel[1] = CCPU_SR_GET (PFM_CTL, PFM_CTL_SEL1);
+  sel[2] = CCPU_SR_GET (PFM_CTL, PFM_CTL_SEL2);
+
+  switch (pfm_event)
+    {
+    case PFM_CYCLE:
+    case PFM_INST:
+      for (i = 0; i < 3; i++)
+	{
+	  if (sel[i] == pfm_event && __TEST (en, i))
+	    {
+	      CCPU_SR[SRIDX_PFMC0 + i].u++;
+	      if (CCPU_SR[SRIDX_PFMC0 + i].u == 0)
+		ovf |= (1 << i);
+	    }
+	}
+      break;
+    }
+
+  CCPU_SR_PUT (PFM_CTL, PFM_CTL_OVF, ovf);
+}
+
+static void
 nds32_decode32_misc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 {
   const int rt = N32_RT5 (insn);
@@ -1391,7 +1427,7 @@ nds32_decode32_misc (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0x5:			/* trap */
     case 0xa:			/* break */
       nds32_raise_exception (cpu, EXP_DEBUG, SIM_SIGTRAP, NULL);
-      return; /* FIXME dispatch exception?  */
+      return;
     case 0x2:			/* mfsr */
       CCPU_GPR[rt] = CCPU_SR[__GF (insn, 10, 10)];
       break;
@@ -1539,7 +1575,7 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       }
       break;
     case 0x17:			/* LBGP */
-      if (insn & __BIT (19))	/* lbsi.gp */
+      if (__TEST (insn, 19))	/* lbsi.gp */
 	{
 	  addr = CCPU_GPR[GPR_GP].u + N32_IMMS (insn, 19);
 	  CCPU_GPR[rt].u = nds32_ld_aligned (cpu, addr, 1);
@@ -1594,7 +1630,7 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
 	}
       break;
     case 0x1f:			/* SBGP */
-      if (insn & __BIT (19))	/* addi.gp */
+      if (__TEST (insn, 19))	/* addi.gp */
 	CCPU_GPR[rt].s = CCPU_GPR[GPR_GP].u + N32_IMMS (insn, 19);
       else			/* sbi.gp */
 	nds32_st_aligned (cpu, CCPU_GPR[GPR_GP].u + N32_IMMS (insn, 19), 1,
@@ -1616,20 +1652,20 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       if (cpu->iflags & NIF_EX9)
 	{
 	  /* Address in ji/jal is treated as absolute address in ex9.  */
-	  if (insn & __BIT (24))	/* jal in ex9 */
+	  if (__TEST (insn, 24))	/* jal in ex9 */
 	    CCPU_GPR[GPR_LP].u = cia + 2;
 	  next_cia = (cia & 0xff000000) | (N32_IMMU (insn, 24) << 1);
 	}
       else
 	{
-	  if (insn & __BIT (24))	/* jal */
+	  if (__TEST (insn, 24))	/* jal */
 	    CCPU_GPR[GPR_LP].u = cia + 4;
 	  next_cia = cia + (N32_IMMS (insn, 24) << 1);
 	}
 
       if (CCPU_SR_TEST (PSW, PSW_IFCON))
 	{
-	  if (insn & __BIT (24))	/* jal */
+	  if (__TEST (insn, 24))	/* jal */
 	    CCPU_GPR[GPR_LP] = CCPU_USR[USR0_IFCLP];
 	}
 
@@ -1664,7 +1700,7 @@ nds32_decode32 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
       {
 	int imm11s = __SEXT (__GF (insn, 8, 11), 11);
 
-	if (((insn & __BIT (19)) == 0) ^ (CCPU_GPR[rt].s != imm11s))
+	if ((__TEST (insn, 19) == 0) ^ (CCPU_GPR[rt].s != imm11s))
 	  {
 	    CCPU_SR_CLEAR (PSW, PSW_IFCON);
 	    nds32_set_nia (cpu, cia + (N32_IMMS (insn, 8) << 1));
@@ -1719,6 +1755,7 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
   const int imm3u = rb3;
   uint32_t shift;
   uint32_t addr;
+  int tmp;
 
   switch (__GF (insn, 7, 8))
     {
@@ -1829,12 +1866,8 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
       CCPU_GPR[rt3].u = CCPU_GPR[GPR_SP].u + (N16_IMM6U (insn) << 2);
       return;
     case 0x19:			/* lwi45.fe */
-      {
-	/* Not tested yet */
-	int imm7n = -((32 - imm5u) << 2);
-
-	CCPU_GPR[rt4].u = nds32_ld_aligned (cpu, CCPU_GPR[8].u + imm7n, 4);
-      }
+      tmp = -((32 - imm5u) << 2); /* imm7n */
+      CCPU_GPR[rt4].u = nds32_ld_aligned (cpu, CCPU_GPR[8].u + tmp, 4);
       return;
     case 0x1a:			/* lwi450 */
       CCPU_GPR[rt4].u = nds32_ld_aligned (cpu, CCPU_GPR[ra5].u, 4);
@@ -1856,7 +1889,7 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
       return;
 
     case 0x34:			/* beqzs8, bnezs8 */
-      if (((insn & __BIT (8)) == 0) ^ (CCPU_GPR[GPR_TA].u != 0))
+      if ((__TEST (insn, 8) == 0) ^ (CCPU_GPR[GPR_TA].u != 0))
 	{
 	  CCPU_SR_CLEAR (PSW, PSW_IFCON);
 	  nds32_set_nia (cpu, cia + (N16_IMM8S (insn) << 1));
@@ -1870,7 +1903,7 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
 	}
 
       /* ex9.it */
-      sim_read (sd, (CCPU_USR[USR0_ITB].u & 0xfffffffc) + (imm9u << 2),
+      sim_read (sd, (CCPU_USR[USR0_ITB].u & ~3U) + (imm9u << 2),
 		(unsigned char *) &insn, 4);
       insn = extract_unsigned_integer ((unsigned char *) &insn, 4, BIG_ENDIAN);
       nds32_decode16_ex9 (cpu, insn, cia);
@@ -1966,7 +1999,7 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
     {
     case 0x7:			/* lwi37.fp/swi37.fp */
       addr = CCPU_GPR[GPR_FP].u + (N16_IMM7U (insn) << 2);
-      if (insn & (1 << 7))	/* swi37.fp */
+      if (__TEST (insn, 7))	/* swi37.fp */
 	nds32_st_aligned (cpu, addr, 4, CCPU_GPR[rt38].u);
       else			/* lwi37.fp */
 	CCPU_GPR[rt38].u = nds32_ld_aligned (cpu, addr, 4);
@@ -2010,7 +2043,7 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
 	      nds32_set_nia (cpu, CCPU_GPR[ra5].u);
 	      return;
 	    case 2:		/* ex9.it imm5 */
-	      sim_read (sd, (CCPU_USR[USR0_ITB].u & 0xfffffffc) + (imm5u << 2),
+	      sim_read (sd, (CCPU_USR[USR0_ITB].u & ~3U) + (imm5u << 2),
 			(unsigned char *) &insn, 4);
 	      insn = extract_unsigned_integer ((unsigned char *) &insn, 4,
 					       BIG_ENDIAN);
@@ -2018,14 +2051,15 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
 	      return;
 	    case 5:		/* add5.pc */
 	      CCPU_GPR[ra5].u += cia;
-	      break;
+	      return;
 	    default:
 	      goto bad_op;
 	    }
 	  return;
 	}
-      else if (CCPU_GPR[rt38].u != CCPU_GPR[5].u) /* bnes38 */
+      else if (CCPU_GPR[rt38].u != CCPU_GPR[5].u)
 	{
+	  /* bnes38 */
 	  CCPU_SR_CLEAR (PSW, PSW_IFCON);
 	  nds32_set_nia (cpu, cia + (N16_IMM8S (insn) << 1));
 	  return;
@@ -2033,7 +2067,7 @@ nds32_decode16 (sim_cpu *cpu, uint32_t insn, sim_cia cia)
       return;
     case 0xe:			/* lwi37/swi37 */
       addr = CCPU_GPR[GPR_SP].u + (N16_IMM7U (insn) << 2);
-      if (insn & (1 << 7))	/* swi37.sp */
+      if (__TEST (insn, 7))	/* swi37.sp */
 	nds32_st_aligned (cpu, addr, 4, CCPU_GPR[rt38].u);
       else			/* lwi37.sp */
 	CCPU_GPR[rt38].u = nds32_ld_aligned (cpu, addr, 4);
@@ -2056,9 +2090,6 @@ sim_engine_run (SIM_DESC sd, int next_cpu_nr, int nr_cpus, int siggnal)
 
   if (siggnal != 0)
     {
-      /* FIXME: Study kernel to make sure this.  */
-      /* TODO: In OPERATING_ENVIRONMENT, users may want to handle
-	       this himself. */
       sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia, sim_exited,
 		       128 + siggnal);
       return;
@@ -2115,7 +2146,7 @@ sim_engine_run (SIM_DESC sd, int next_cpu_nr, int nr_cpus, int siggnal)
 	  trace_result_addr1 (sd, cpu, TRACE_INSN_IDX, cia);
 	}
 
-      /* Sync registers. TODO: Sync PSW with current_target_endian.  */
+      /* Sync registers.  */
       CIA_SET (cpu, cia);
 
       /* process any events */
@@ -2134,7 +2165,7 @@ sim_engine_run (SIM_DESC sd, int next_cpu_nr, int nr_cpus, int siggnal)
 static int
 nds32_fetch_register (sim_cpu *cpu, int rn, unsigned char *memory, int length)
 {
-  ulongest_t val = 0;
+  unsigned long val = 0;
 
   /* General purpose registers.  */
   if (rn < 32)
@@ -2199,7 +2230,7 @@ do_fetch:
 static int
 nds32_store_register (sim_cpu *cpu, int rn, unsigned char *memory, int length)
 {
-  ulongest_t val;
+  unsigned long val;
 
   val = extract_unsigned_integer (memory, length,
 				  CCPU_SR_TEST (PSW, PSW_BE)
@@ -2242,8 +2273,8 @@ nds32_store_register (sim_cpu *cpu, int rn, unsigned char *memory, int length)
     {
       int fr = (rn - SIM_NDS32_FD0_REGNUM) << 1;
 
-      cpu->reg_fpr[fr + 1].u = val & 0xffffffff;
-      cpu->reg_fpr[fr].u = (val >> 32) & 0xffffffff;
+      cpu->reg_fpr[fr + 1].u = val;
+      cpu->reg_fpr[fr].u = (val >> 32);
       return 8;
     }
 
@@ -2308,6 +2339,15 @@ nds32_initialize_cpu (SIM_DESC sd, sim_cpu *cpu, struct bfd *abfd)
   CCPU_FPCSR.u = 0;
 }
 
+static void
+nds32_free_state (SIM_DESC sd)
+{
+  if (STATE_MODULES (sd) != NULL)
+    sim_module_uninstall (sd);
+  sim_cpu_free_all (sd);
+  sim_state_free (sd);
+}
+
 SIM_DESC
 sim_open (SIM_OPEN_KIND kind, host_callback * callback,
 	  struct bfd *abfd, char **argv)
@@ -2358,12 +2398,9 @@ sim_open (SIM_OPEN_KIND kind, host_callback * callback,
       return 0;
     }
 
-  /* Allocate core memory if none is given by user.  */
+  /* Allocate 64MB memory if none is set up by user.  */
   if (STATE_MEMOPT (sd) == NULL)
-    {
-      sim_do_command (sd, "memory region 0,0x4000000");	/* 64 MB */
-    }
-
+    sim_do_command (sd, "memory region 0,0x4000000");	/* 64 MB */
 
   /* CPU specific initialization.  */
   for (i = 0; i < MAX_NR_PROCESSORS; ++i)
