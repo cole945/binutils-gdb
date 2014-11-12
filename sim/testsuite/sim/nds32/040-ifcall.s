@@ -1,6 +1,6 @@
 # nds32 test basic ifcall and PSW.IFCON, expected to pass.
 # mach:	 	all
-# as:		-mbaseline=V3
+# as:		-mbaseline=v3
 # ld:		--defsym=_stack=0x3000000
 # output:	pass\n
 

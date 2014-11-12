@@ -1,6 +1,6 @@
 # nds32 test J/JAL in ex9, expected to pass.
 # mach:	 	all
-# as:		-mbaseline=V3
+# as:		-mbaseline=v3 -mfpu-freg=3 -mfpu-sp-ext -mfpu-dp-ext
 # ld:		--defsym=_stack=0x3000000
 # output:	pass\n
 
