@@ -3661,6 +3661,7 @@ bfd_uses_spe_extensions (bfd *abfd)
 #define PPC_BIT(insn,n)	((insn & (1 << (31 - (n)))) ? 1 : 0)
 #define PPC_OE(insn)	PPC_BIT (insn, 21)
 #define PPC_RC(insn)	PPC_BIT (insn, 31)
+#define PPC_Rc(insn)	PPC_BIT (insn, 21)
 #define PPC_LK(insn)	PPC_BIT (insn, 31)
 #define PPC_TX(insn)	PPC_BIT (insn, 31)
 
@@ -3708,7 +3709,57 @@ ppc64_process_record_op4 (struct gdbarch *gdbarch, struct regcache *regcache,
 			   CORE_ADDR addr, uint32_t insn)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-  int ext = (PPC_EXTOP (insn) << 1) | (insn & 1);
+  int ext = PPC_FIELD (insn, 21, 11);
+
+  if ((ext & 0x3f) == 45)
+    {
+      /* Vector Permute and Exclusive-OR */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_vr0_regnum + PPC_VRT (insn));
+      return 0;
+    }
+
+  switch ((ext & 0x1ff))
+    {
+			/* 5.16 Decimal Integer Arithmetic Instructions */
+    case 1:		/* Decimal Add Modulo */
+    case 65:		/* Decimal Subtract Modulo */
+
+      /* Bit-21 should be set.  */
+      if (!PPC_BIT (insn, 21))
+	break;
+
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_vr0_regnum + PPC_VRT (insn));
+      record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
+      return 0;
+    }
+
+  /* Bit-21 is used for RC */
+  switch (ext & 0x3ff)
+    {
+    case 6:		/* Vector Compare Equal To Unsigned Byte */
+    case 70:		/* Vector Compare Equal To Unsigned Halfword */
+    case 134:		/* Vector Compare Equal To Unsigned Word */
+    case 199:		/* Vector Compare Equal To Unsigned Doubleword */
+    case 774:		/* Vector Compare Greater Than Signed Byte */
+    case 838:		/* Vector Compare Greater Than Signed Halfword */
+    case 902:		/* Vector Compare Greater Than Signed Word */
+    case 967:		/* Vector Compare Greater Than Signed Doubleword */
+    case 518:		/* Vector Compare Greater Than Unsigned Byte */
+    case 646:		/* Vector Compare Greater Than Unsigned Word */
+    case 582:		/* Vector Compare Greater Than Unsigned Halfword */
+    case 711:		/* Vector Compare Greater Than Unsigned Doubleword */
+    case 966:		/* Vector Compare Bounds Single-Precision */
+    case 198:		/* Vector Compare Equal To Single-Precision */
+    case 454:		/* Vector Compare Greater Than or Equal To Single-Precision */
+    case 710:		/* Vector Compare Greater Than Single-Precision */
+      if (PPC_Rc (insn))
+	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_vr0_regnum + PPC_VRT (insn));
+      return 0;
+    }
 
   switch (ext)
     {
@@ -3735,6 +3786,18 @@ ppc64_process_record_op4 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 1792:		/* Vector Subtract Signed Byte Saturate */
     case 1856:		/* Vector Subtract Signed Halfword Saturate */
     case 1920:		/* Vector Subtract Signed Word Saturate */
+    case 32:		/* Vector Multiply-High-Add Signed Halfword Saturate */
+    case 33:		/* Vector Multiply-High-Round-Add Signed Halfword Saturate */
+    case 39:		/* Vector Multiply-Sum Unsigned Halfword Saturate */
+    case 41:		/* Vector Multiply-Sum Signed Halfword Saturate */
+    case 1544:		/* Vector Sum across Quarter Unsigned Byte Saturate */
+    case 1800:		/* Vector Sum across Quarter Signed Byte Saturate */
+    case 1608:		/* Vector Sum across Quarter Signed Halfword Saturate */
+    case 1672:		/* Vector Sum across Half Signed Word Saturate */
+    case 1928:		/* Vector Sum across Signed Word Saturate */
+			/* 5.10 Vector Floating-Point Instruction Set */
+    case 970:		/* Vector Convert To Signed Fixed-Point Word Saturate */
+    case 906:		/* Vector Convert To Unsigned Fixed-Point Word Saturate */
       record_full_arch_list_add_reg (regcache, PPC_VSCR_REGNUM);
       /* FALL-THROUGH */
 			/* 5.8 Vector Permute and Formatting Instructions */
@@ -3772,17 +3835,30 @@ ppc64_process_record_op4 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 1036:		/* Vector Shift Left by Octet */
     case 1100:		/* Vector Shift Right by Octet */
 			/* 5.9 Vector Integer Instructions */
-    case 0:		/* Vector Add Unsigned Byte Modulo */
     case 60:		/* Vector Add Extended Unsigned Quadword Modulo */
     case 61:		/* Vector Add Extended & write Carry Unsigned Quadword */
     case 62:		/* Vector Subtract Extended Unsigned Quadword Modulo */
     case 63:		/* Vector Subtract Extended & write Carry Unsigned Quadword */
+    case 0:		/* Vector Add Unsigned Byte Modulo */
     case 64:		/* Vector Add Unsigned Halfword Modulo */
     case 128:		/* Vector Add Unsigned Word Modulo */
     case 192:		/* Vector Add Unsigned Doubleword Modulo */
     case 256:		/* Vector Add Unsigned Quadword Modulo */
     case 320:		/* Vector Add & write Carry Unsigned Quadword */
     case 384:		/* Vector Add and Write Carry-Out Unsigned Word */
+    case 8:		/* Vector Multiply Odd Unsigned Byte */
+    case 72:		/* Vector Multiply Odd Unsigned Halfword */
+    case 136:		/* Vector Multiply Odd Unsigned Word */
+    case 264:		/* Vector Multiply Odd Signed Byte */
+    case 328:		/* Vector Multiply Odd Signed Halfword */
+    case 392:		/* Vector Multiply Odd Signed Word */
+    case 520:		/* Vector Multiply Even Unsigned Byte */
+    case 584:		/* Vector Multiply Even Unsigned Halfword */
+    case 648:		/* Vector Multiply Even Unsigned Word */
+    case 776:		/* Vector Multiply Even Signed Byte */
+    case 840:		/* Vector Multiply Even Signed Halfword */
+    case 940:		/* Vector Multiply Even Signed Word */
+    case 137:		/* Vector Multiply Unsigned Word Modulo */
     case 1024:		/* Vector Subtract Unsigned Byte Modulo */
     case 1088:		/* Vector Subtract Unsigned Halfword Modulo */
     case 1152:		/* Vector Subtract Unsigned Word Modulo */
@@ -3790,6 +3866,110 @@ ppc64_process_record_op4 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 1280:		/* Vector Subtract Unsigned Quadword Modulo */
     case 1344:		/* Vector Subtract & write Carry Unsigned Quadword */
     case 1408:		/* Vector Subtract and Write Carry-Out Unsigned Word */
+    case 34:		/* Vector Multiply-Low-Add Unsigned Halfword Modulo */
+    case 36:		/* Vector Multiply-Sum Unsigned Byte Modulo */
+    case 37:		/* Vector Multiply-Sum Mixed Byte Modulo */
+    case 38:		/* Vector Multiply-Sum Unsigned Halfword Modulo */
+    case 40:		/* Vector Multiply-Sum Signed Halfword Modulo */
+    case 1282:		/* Vector Average Signed Byte */
+    case 1346:		/* Vector Average Signed Halfword */
+    case 1410:		/* Vector Average Signed Word */
+    case 1026:		/* Vector Average Unsigned Byte */
+    case 1090:		/* Vector Average Unsigned Halfword */
+    case 1154:		/* Vector Average Unsigned Word */
+    case 258:		/* Vector Maximum Signed Byte */
+    case 322:		/* Vector Maximum Signed Halfword */
+    case 386:		/* Vector Maximum Signed Word */
+    case 450:		/* Vector Maximum Signed Doubleword */
+    case 2:		/* Vector Maximum Unsigned Byte */
+    case 66:		/* Vector Maximum Unsigned Halfword */
+    case 130:		/* Vector Maximum Unsigned Word */
+    case 194:		/* Vector Maximum Unsigned Doubleword */
+    case 770:		/* Vector Minimum Signed Byte */
+    case 834:		/* Vector Minimum Signed Halfword */
+    case 898:		/* Vector Minimum Signed Word */
+    case 962:		/* Vector Minimum Signed Doubleword */
+    case 514:		/* Vector Minimum Unsigned Byte */
+    case 578:		/* Vector Minimum Unsigned Halfword */
+    case 642:		/* Vector Minimum Unsigned Word */
+    case 706:		/* Vector Minimum Unsigned Doubleword */
+    case 1028:		/* Vector Logical AND */
+    case 1668:		/* Vector Logical Equivalent */
+    case 1092:		/* Vector Logical AND with Complement */
+    case 1412:		/* Vector Logical NAND */
+    case 1348:		/* Vector Logical OR with Complement */
+    case 1156:		/* Vector Logical OR */
+    case 1284:		/* Vector Logical NOR */
+    case 1220:		/* Vector Logical XOR */
+    case 4:		/* Vector Rotate Left Byte */
+    case 132:		/* Vector Rotate Left Word VX-form */
+    case 68:		/* Vector Rotate Left Halfword */
+    case 196:		/* Vector Rotate Left Doubleword */
+    case 260:		/* Vector Shift Left Byte */
+    case 388:		/* Vector Shift Left Word */
+    case 324:		/* Vector Shift Left Halfword */
+    case 1476:		/* Vector Shift Left Doubleword */
+    case 516:		/* Vector Shift Right Byte */
+    case 644:		/* Vector Shift Right Word */
+    case 580:		/* Vector Shift Right Halfword */
+    case 1732:		/* Vector Shift Right Doubleword */
+    case 772:		/* Vector Shift Right Algebraic Byte */
+    case 900:		/* Vector Shift Right Algebraic Word */
+    case 836:		/* Vector Shift Right Algebraic Halfword */
+    case 864:		/* Vector Shift Right Algebraic Doubleword */
+			/* 5.10 Vector Floating-Point Instruction Set */
+    case 10:		/* Vector Add Single-Precision */
+    case 74:		/* Vector Subtract Single-Precision */
+    case 46:		/* Vector Multiply-Add Single-Precision */
+    case 47:		/* Vector Negative Multiply-Subtract Single-Precision */
+    case 1034:		/* Vector Maximum Single-Precision */
+    case 1098:		/* Vector Minimum Single-Precision */
+    case 842:		/* Vector Convert From Signed Fixed-Point Word */
+    case 778:		/* Vector Convert From Unsigned Fixed-Point Word */
+    case 714:		/* Vector Round to Single-Precision Integer toward -Infinity */
+    case 522:		/* Vector Round to Single-Precision Integer Nearest */
+    case 650:		/* Vector Round to Single-Precision Integer toward +Infinity */
+    case 586:		/* Vector Round to Single-Precision Integer toward Zero */
+    case 394:		/* Vector 2 Raised to the Exponent Estimate Floating-Point */
+    case 458:		/* Vector Log Base 2 Estimate Floating-Point */
+    case 266:		/* Vector Reciprocal Estimate Single-Precision */
+    case 330:		/* Vector Reciprocal Square Root Estimate Single-Precision */
+			/* 5.11 Vector Exclusive-OR-based Instructions */
+    case 1288:		/* Vector AES Cipher */
+    case 1289:		/* Vector AES Cipher Last */
+    case 1352:		/* Vector AES Inverse Cipher */
+    case 1353:		/* Vector AES Inverse Cipher Last */
+    case 1480:		/* Vector AES SubBytes */
+    case 1730:		/* Vector SHA-512 Sigma Doubleword */
+    case 1666:		/* Vector SHA-256 Sigma Word */
+    case 1032:		/* Vector Polynomial Multiply-Sum Byte */
+    case 1160:		/* Vector Polynomial Multiply-Sum Word */
+    case 1096:		/* Vector Polynomial Multiply-Sum Halfword */
+    case 1224:		/* Vector Polynomial Multiply-Sum Doubleword */
+			/* 5.12 Vector Gather Instruction */
+    case 1292:		/* Vector Gather Bits by Bytes by Doubleword */
+			/* 5.13 Vector Count Leading Zeros Instructions */
+    case 1794:		/* Vector Count Leading Zeros Byte */
+    case 1858:		/* Vector Count Leading Zeros Halfword */
+    case 1922:		/* Vector Count Leading Zeros Word */
+    case 1986:		/* Vector Count Leading Zeros Doubleword */
+			/* 5.14 Vector Population Count Instructions */
+    case 1795:		/* Vector Population Count Byte */
+    case 1859:		/* Vector Population Count Halfword */
+    case 1923:		/* Vector Population Count Word */
+    case 1987:		/* Vector Population Count Doubleword */
+			/* 5.15 Vector Bit Permute Instruction */
+    case 1356:		/* Vector Bit Permute Quadword */
+			/* 5.16 Decimal Integer Arithmetic Instructions */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_vr0_regnum + PPC_VRT (insn));
+      break;
+
+			/* 5.17 Vector Status and Control Register Instructions */
+    case 1604:		/* Move To Vector Status and Control Register */
+      record_full_arch_list_add_reg (regcache, PPC_VSCR_REGNUM);
+      break;
+    case 1540:		/* Move From Vector Status and Control Register */
       record_full_arch_list_add_reg (regcache,
 				     tdep->ppc_vr0_regnum + PPC_VRT (insn));
       break;
@@ -3799,6 +3979,8 @@ ppc64_process_record_op4 (struct gdbarch *gdbarch, struct regcache *regcache,
 			  "%08x at %08lx, 4-%d.\n", insn, addr, ext);
       return -1;
     }
+
+  return 0;
 }
 
 /* Parse instructions of primary opcode-19.  */
@@ -3863,14 +4045,73 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
   if ((ext & 0x1f) == 15)
     ext = 15;		/* Integer Select. bit[16:20] is used for BC.  */
 
+  /* These instructions have OE bit.  */
+  switch (ext & 0x1ff)
+    {
+    /* These write RT and XER.  Update CR if RC is set.  */
+    case 8:		/* Subtract from carrying */
+    case 10:		/* Add carrying */
+    case 136:		/* Subtract from extended */
+    case 138:		/* Add extended */
+    case 200:		/* Subtract from zero extended */
+    case 202:		/* Add to zero extended */
+    case 232:		/* Subtract from minus one extended */
+    case 234:		/* Add to minus one extended */
+      /* CA is always altered, but SO/OV are only altered when OE=1.
+	 In any case, XER is always altered.  */
+      record_full_arch_list_add_reg (regcache, tdep->ppc_xer_regnum);
+      if (PPC_RC (insn))
+	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_gp0_regnum + PPC_RT (insn));
+      break;
+
+    /* These write RT.  Update CR if RC is set and update XER if OE is set.  */
+    case 40:		/* Subtract from */
+    case 104:		/* Negate */
+    case 233:		/* Multiply low doubleword */
+    case 235:		/* Multiply low word */
+    case 266:		/* Add */
+    case 393:		/* Divide Doubleword Extended Unsigned */
+    case 395:		/* Divide Word Extended Unsigned */
+    case 425:		/* Divide Doubleword Extended */
+    case 427:		/* Divide Word Extended */
+    case 457:		/* Divide Doubleword Unsigned */
+    case 459:		/* Divide Word Unsigned */
+    case 489:		/* Divide Doubleword */
+    case 491:		/* Divide Word */
+      if (PPC_OE (insn))
+	record_full_arch_list_add_reg (regcache, tdep->ppc_xer_regnum);
+      /* FALL-THROUGH */
+    case 9:		/* Multiply High Doubleword Unsigned */
+    case 11:		/* Multiply High Word Unsigned */
+    case 73:		/* Multiply High Doubleword */
+    case 75:		/* Multiply High Word */
+      if (PPC_RC (insn))
+	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_gp0_regnum + PPC_RT (insn));
+      break;
+    }
+
   switch (ext)
     {
+    case 78:		/* Determine Leftmost Zero Byte */
+      /* CA is always altered, but SO/OV are only altered when OE=1.
+	 In any case, XER is always altered.  */
+      record_full_arch_list_add_reg (regcache, tdep->ppc_xer_regnum);
+      if (PPC_RC (insn))
+	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_gp0_regnum + PPC_RT (insn));
+      break;
+
     /* These only write RT.  */
     case 15:		/* Integer Select */
     case 19:		/* Move from condition register */
 			/* Move From One Condition Register Field */
     case 74:		/* Add and Generate Sixes */
-    case 74 | 0x200:	/* Add and Generate Sixes (OE-DONTCARE) */
+    case 74 | 0x200:	/* Add and Generate Sixes (bit-21 dont-care) */
     case 302:		/* Move From Branch History Rolling Buffer */
     case 339:		/* Move From Special Purpose Register */
       record_full_arch_list_add_reg (regcache,
@@ -4034,77 +4275,6 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
 	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
       record_full_arch_list_add_reg (regcache,
 				     tdep->ppc_gp0_regnum + PPC_RA (insn));
-      break;
-
-    /* These write RT and XER.  Update CR if RC is set.  */
-    case 8:		/* Subtract from carrying */
-    case 8 | 0x200:	/* Subtract from carrying (OE) */
-    case 10:		/* Add carrying */
-    case 10 | 0x200:	/* Add carrying (OE) */
-    case 78:		/* Determine Leftmost Zero Byte */
-    case 136:		/* Subtract from extended */
-    case 136 | 0x200:	/* Subtract from extended (OE) */
-    case 138:		/* Add extended */
-    case 138 | 0x200:	/* Add extended (OE) */
-    case 200:		/* Subtract from zero extended */
-    case 200 | 0x200:	/* Subtract from zero extended (OE) */
-    case 202:		/* Add to zero extended */
-    case 202 | 0x200:	/* Add to zero extended (OE) */
-    case 232:		/* Subtract from minus one extended */
-    case 232 | 0x200:	/* Subtract from minus one extended (OE) */
-    case 234:		/* Add to minus one extended */
-    case 234 | 0x200:	/* Add to minus one extended (OE) */
-      /* CA is always altered, but SO/OV are only altered when OE=1.
-	 In any case, XER is always altered.  */
-      record_full_arch_list_add_reg (regcache, tdep->ppc_xer_regnum);
-      if (PPC_RC (insn))
-	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
-      record_full_arch_list_add_reg (regcache,
-				     tdep->ppc_gp0_regnum + PPC_RT (insn));
-      break;
-
-    /* These write RT.  Update CR if RC is set and update XER if OE is set.  */
-    case 40:		/* Subtract from */
-    case 40 | 0x200:	/* Subtract from (OE) */
-    case 104:		/* Negate */
-    case 104 | 0x200:	/* Negate (OE) */
-    case 233:		/* Multiply low doubleword */
-    case 233 | 0x200:	/* Multiply low doubleword (OE) */
-    case 235:		/* Multiply low word */
-    case 235 | 0x200:	/* Multiply low word (OE) */
-    case 266:		/* Add */
-    case 266 | 0x200:	/* Add (OE) */
-    case 393:		/* Divide Doubleword Extended Unsigned */
-    case 393 | 0x200:	/* Divide Doubleword Extended Unsigned (OE) */
-    case 395:		/* Divide Word Extended Unsigned */
-    case 395 | 0x200:	/* Divide Word Extended Unsigned (OE) */
-    case 425:		/* Divide Doubleword Extended */
-    case 425 | 0x200:	/* Divide Doubleword Extended (OE) */
-    case 427:		/* Divide Word Extended */
-    case 427 | 0x200:	/* Divide Word Extended (OE) */
-    case 457:		/* Divide Doubleword Unsigned */
-    case 457 | 0x200:	/* Divide Doubleword Unsigned (OE) */
-    case 459:		/* Divide Word Unsigned */
-    case 459 | 0x200:	/* Divide Word Unsigned (OE) */
-    case 489:		/* Divide Doubleword */
-    case 489 | 0x200:	/* Divide Doubleword (OE) */
-    case 491:		/* Divide Word */
-    case 491 | 0x200:	/* Divide Word (OE) */
-      if (PPC_OE (insn))
-	record_full_arch_list_add_reg (regcache, tdep->ppc_xer_regnum);
-      /* FALL-THROUGH */
-    case 9:		/* Multiply High Doubleword Unsigned */
-    case 9 | 0x200:	/* Multiply High Doubleword Unsigned (OE-DONTCARE) */
-    case 11:		/* Multiply High Word Unsigned */
-    case 11 | 0x200:	/* Multiply High Word Unsigned (OE-DONTCARE) */
-    case 73:		/* Multiply High Doubleword */
-    case 73 | 0x200:	/* Multiply High Doubleword (OE-DONTCARE) */
-    case 75:		/* Multiply High Word */
-    case 75 | 0x200:	/* Multiply High Word (OE-DONTCARE) */
-      if (PPC_RC (insn))
-	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
-      record_full_arch_list_add_reg (regcache,
-				     tdep->ppc_gp0_regnum + PPC_RT (insn));
       break;
 
     /* Store memory.  */
