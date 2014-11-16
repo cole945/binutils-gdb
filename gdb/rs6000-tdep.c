@@ -4236,6 +4236,12 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
 				     tdep->ppc_fp0_regnum + PPC_FRT (insn));
       break;
 
+    case 791:		/* Load Floating-Point Double Pair Indexed */
+      tmp = (tdep->ppc_fp0_regnum + PPC_FRT (insn)) & ~1;
+      record_full_arch_list_add_reg (regcache, tmp);
+      record_full_arch_list_add_reg (regcache, tmp | 1);
+      break;
+
     /* These write VSR of size 8.  */
     case 588:		/* Load VSX Scalar Doubleword Indexed */
       ppc_record_vsr (regcache, tdep, PPC_XT (insn), 8);
@@ -4316,6 +4322,8 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 949:		/* Store Halfword Caching Inhibited Indexed */
     case 917:		/* Store Word Caching Inhibited Indexed */
     case 1013:		/* Store Doubleword Caching Inhibited Indexed */
+    case 919:		/* Store Floating-Point Double Pair Indexed */
+    case 983:		/* Store Floating-Point as Integer Word Indexed */
       if (ext == 694 || ext == 726 || ext == 150 || ext == 214 || ext == 182)
 	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
 
@@ -4338,6 +4346,7 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
 	case 663:	/* Store Floating-Point Single Indexed */
 	case 695:	/* Store Floating-Point Single with Update Indexed */
 	case 917:	/* Store Word Caching Inhibited Indexed */
+	case 983:	/* Store Floating-Point as Integer Word Indexed */
 	  size = 4;
 	  break;
 	case 247:	/* Store Byte with Update Indexed */
@@ -4369,6 +4378,7 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
 	case 182:	/* Store Quadword Conditional Indexed */
 	case 231:	/* Store Vector Indexed */
 	case 487:	/* Store Vector Indexed LRU */
+	case 919:	/* Store Floating-Point Double Pair Indexed */
 	  size = 16;
 	  break;
 	}
