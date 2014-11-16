@@ -3646,6 +3646,7 @@ bfd_uses_spe_extensions (bfd *abfd)
 #define PPC_OP6(insn)	PPC_FIELD (insn, 0, 6)
 #define PPC_EXTOP(insn)	PPC_FIELD (insn, 21, 10)
 #define PPC_RT(insn)	PPC_FIELD (insn, 6, 5)
+#define PPC_RS(insn)	PPC_FIELD (insn, 6, 5)
 #define PPC_RA(insn)	PPC_FIELD (insn, 11, 5)
 #define PPC_RB(insn)	PPC_FIELD (insn, 16, 5)
 #define PPC_NB(insn)	PPC_FIELD (insn, 16, 5)
@@ -4729,8 +4730,7 @@ ppc64_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   uint32_t insn;
-  int op6;
-  int tmp;
+  int op6, tmp, i;
 
   insn = read_memory_unsigned_integer (addr, 4, byte_order);
   op6 = PPC_OP6 (insn);
@@ -4842,6 +4842,12 @@ ppc64_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
 				     tdep->ppc_gp0_regnum + PPC_RT (insn));
       break;
 
+    case 46:		/* Load Multiple Word */
+      for (i = PPC_RT (insn); i < 32; i++)
+	record_full_arch_list_add_reg (regcache,
+				       tdep->ppc_gp0_regnum + PPC_RT (insn));
+      break;
+
     case 56:		/* Load Quadword */
       tmp = (tdep->ppc_gp0_regnum + PPC_RT (insn)) & ~1;
       record_full_arch_list_add_reg (regcache, tmp);
@@ -4863,6 +4869,25 @@ ppc64_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
     case 50:		/* Load Floating-Point Double */
       record_full_arch_list_add_reg (regcache,
 				     tdep->ppc_fp0_regnum + PPC_FRT (insn));
+      break;
+
+    case 47:		/* Store Multiple Word */
+	{
+	  ULONGEST addr = 0;
+	  int size;
+
+	  if (PPC_RA (insn) != 0)
+	    regcache_raw_read_unsigned (regcache,
+					tdep->ppc_gp0_regnum + PPC_RA (insn),
+					&addr);
+
+	  addr += PPC_D (insn);
+
+	  for (i = PPC_RS (insn); i < 32; i++)
+	    record_full_arch_list_add_mem (addr + i * 4, 4);
+
+	  break;
+	}
       break;
 
     case 37:		/* Store word with Update */
@@ -4922,18 +4947,29 @@ ppc64_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
 	return -1;
       break;
 
-    case 62:		/* Store doubleword */
+    case 61:		/* Floating-Point Double Pair */
+    case 62:		/* Store Doubleword */
+			/* Store Doubleword with Update */
+			/* Store Quadword with Update */
 	{
 	  ULONGEST addr = 0;
+	  int size;
+	  int sub2 = PPC_FIELD (insn, 30, 2);
+
+	  if ((op6 == 61 && sub2 != 0) || (op6 == 62 && sub2 > 2))
+	    goto UNKNOWN_OP;
 
 	  if (PPC_RA (insn) != 0)
 	    regcache_raw_read_unsigned (regcache,
 					tdep->ppc_gp0_regnum + PPC_RA (insn),
 					&addr);
-	  addr += PPC_DS (insn) << 2;
-	  record_full_arch_list_add_mem (addr, 8);
 
-	  if (PPC_BIT (insn, 31))
+	  size = ((op6 == 61) || sub2 == 2) ? 16 : 8;
+
+	  addr += PPC_DS (insn) << 2;
+	  record_full_arch_list_add_mem (addr, size);
+
+	  if (op6 == 62 && sub2 == 1)
 	    record_full_arch_list_add_reg (regcache,
 					   tdep->ppc_gp0_regnum +
 					   PPC_RA (insn));
@@ -4947,6 +4983,7 @@ ppc64_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
       break;
 
     default:
+UNKNOWN_OP:
       fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to reverse "
 			  "%08x at %08lx, %d.\n", insn, addr, op6);
       return -1;
