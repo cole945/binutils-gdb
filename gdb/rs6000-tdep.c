@@ -3964,24 +3964,21 @@ ppc64_process_record_op4 (struct gdbarch *gdbarch, struct regcache *regcache,
 			/* 5.16 Decimal Integer Arithmetic Instructions */
       record_full_arch_list_add_reg (regcache,
 				     tdep->ppc_vr0_regnum + PPC_VRT (insn));
-      break;
+      return 0;
 
 			/* 5.17 Vector Status and Control Register Instructions */
     case 1604:		/* Move To Vector Status and Control Register */
       record_full_arch_list_add_reg (regcache, PPC_VSCR_REGNUM);
-      break;
+      return 0;
     case 1540:		/* Move From Vector Status and Control Register */
       record_full_arch_list_add_reg (regcache,
 				     tdep->ppc_vr0_regnum + PPC_VRT (insn));
-      break;
-
-    default:
-      fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to reverse "
-			  "%08x at %08lx, 4-%d.\n", insn, addr, ext);
-      return -1;
+      return 0;
     }
 
-  return 0;
+  fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to reverse "
+		      "%08x at %08lx, 4-%d.\n", insn, addr, ext);
+  return -1;
 }
 
 /* Parse instructions of primary opcode-19.  */
@@ -4005,7 +4002,7 @@ ppc64_process_record_op19 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 417:		/* Condition Register OR with Complement */
     case 449:		/* Condition Register OR */
       record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
-      break;
+      return 0;
 
     case 16:		/* Branch Conditional */
     case 560:		/* Branch Conditional to Branch Target Address Register */
@@ -4015,19 +4012,16 @@ ppc64_process_record_op19 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 528:		/* Branch Conditional to Count Register */
       if (PPC_LK (insn))
 	record_full_arch_list_add_reg (regcache, tdep->ppc_lr_regnum);
-      break;
+      return 0;
 
     case 150:		/* Instruction Synchronize */
       /* Do nothing.  */
-      break;
-
-    default:
-      fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to reverse "
-			  "%08x at %08lx, 19-%d.\n", insn, addr, ext);
-      return -1;
+      return 0;
     }
 
-  return 0;
+  fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to reverse "
+		      "%08x at %08lx, 19-%d.\n", insn, addr, ext);
+  return -1;
 }
 
 /* Parse instructions of primary opcode-31.  */
@@ -4042,9 +4036,6 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
   CORE_ADDR at_dcsz, at_icsz, ea = 0;
   ULONGEST rb, ra, xer;
   int size = 0;
-
-  if ((ext & 0x1f) == 15)
-    ext = 15;		/* Integer Select. bit[16:20] is used for BC.  */
 
   /* These instructions have OE bit.  */
   switch (ext & 0x1ff)
@@ -4065,7 +4056,7 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
 	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
       record_full_arch_list_add_reg (regcache,
 				     tdep->ppc_gp0_regnum + PPC_RT (insn));
-      break;
+      return 0;
 
     /* These write RT.  Update CR if RC is set and update XER if OE is set.  */
     case 40:		/* Subtract from */
@@ -4092,8 +4083,11 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
 	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
       record_full_arch_list_add_reg (regcache,
 				     tdep->ppc_gp0_regnum + PPC_RT (insn));
-      break;
+      return 0;
     }
+
+  if ((ext & 0x1f) == 15)
+    ext = 15;		/* Integer Select. bit[16:20] is used for BC.  */
 
   switch (ext)
     {
@@ -4105,7 +4099,7 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
 	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
       record_full_arch_list_add_reg (regcache,
 				     tdep->ppc_gp0_regnum + PPC_RT (insn));
-      break;
+      return 0;
 
     /* These only write RT.  */
     case 15:		/* Integer Select */
@@ -4117,7 +4111,7 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 339:		/* Move From Special Purpose Register */
       record_full_arch_list_add_reg (regcache,
 				     tdep->ppc_gp0_regnum + PPC_RT (insn));
-      break;
+      return 0;
 
     /* These only write to RA.  */
     case 51:		/* Move From VSR Doubleword */
@@ -4133,7 +4127,7 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 508:		/* Compare bytes */
       record_full_arch_list_add_reg (regcache,
 				     tdep->ppc_gp0_regnum + PPC_RA (insn));
-      break;
+      return 0;
 
     /* These write CR and optional RA.  */
     case 792:		/* Shift Right Algebraic Word */
@@ -4149,7 +4143,7 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 144:		/* Move To Condition Register Fields */
 			/* Move To One Condition Register Field */
       record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
-      break;
+      return 0;
 
     /* These write to RT.  Update RA if 'update indexed.'  */
     case 53:		/* Load Doubleword with Update Indexed */
@@ -4184,7 +4178,7 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 885:		/* Load Doubleword Caching Inhibited Indexed */
       record_full_arch_list_add_reg (regcache,
 				     tdep->ppc_gp0_regnum + PPC_RT (insn));
-      break;
+      return 0;
 
     case 597:		/* Load String Word Immediate */
     case 533:		/* Load String Word Indexed */
@@ -4202,13 +4196,13 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
 	record_full_arch_list_add_reg (regcache,
 				       tdep->ppc_gp0_regnum
 				       + ((PPC_RT (insn) + i) & 0x1f));
-      break;
+      return 0;
 
     case 276:		/* Load Quadword And Reserve Indexed */
       tmp = (tdep->ppc_gp0_regnum + PPC_RT (insn)) & ~1;
       record_full_arch_list_add_reg (regcache, tmp);
       record_full_arch_list_add_reg (regcache, tmp | 1);
-      break;
+      return 0;
 
     /* These write VRT.  */
     case 6:		/* Load Vector for Shift Left Indexed */
@@ -4220,7 +4214,7 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 359:		/* Load Vector Indexed LRU */
       record_full_arch_list_add_reg (regcache,
 				     tdep->ppc_vr0_regnum + PPC_VRT (insn));
-      break;
+      return 0;
 
     /* These write FRT.  Update RA if 'update indexed.'  */
     case 567:		/* Load Floating-Point Single with Update Indexed */
@@ -4234,18 +4228,18 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 887:		/* Load Floating-Point as Integer Word and Zero Indexed */
       record_full_arch_list_add_reg (regcache,
 				     tdep->ppc_fp0_regnum + PPC_FRT (insn));
-      break;
+      return 0;
 
     case 791:		/* Load Floating-Point Double Pair Indexed */
       tmp = (tdep->ppc_fp0_regnum + PPC_FRT (insn)) & ~1;
       record_full_arch_list_add_reg (regcache, tmp);
       record_full_arch_list_add_reg (regcache, tmp | 1);
-      break;
+      return 0;
 
     /* These write VSR of size 8.  */
     case 588:		/* Load VSX Scalar Doubleword Indexed */
       ppc_record_vsr (regcache, tdep, PPC_XT (insn), 8);
-      break;
+      return 0;
 
     /* These write VSR of size 16.  */
     case 179:		/* Move To VSR Doubleword */
@@ -4258,7 +4252,7 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 332:		/* Load VSX Vector Doubleword & Splat Indexed */
     case 780:		/* Load VSX Vector Word*4 Indexed */
       ppc_record_vsr (regcache, tdep, PPC_XT (insn), 16);
-      break;
+      return 0;
 
     /* These write RA.  Update CR if RC is set.  */
     case 24:		/* Shift Left Word */
@@ -4282,7 +4276,7 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
 	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
       record_full_arch_list_add_reg (regcache,
 				     tdep->ppc_gp0_regnum + PPC_RA (insn));
-      break;
+      return 0;
 
     /* Store memory.  */
     case 181:		/* Store Doubleword with Update Indexed */
@@ -4393,7 +4387,7 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
 	}
 
       record_full_arch_list_add_mem (addr, size);
-      break;
+      return 0;
 
     case 725:		/* Store String Word Immediate */
     case 661:		/* Store String Word Indexed */
@@ -4414,36 +4408,35 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
 	}
 
       record_full_arch_list_add_mem (ea, nb);
-      break;
+      return 0;
 
     case 467:		/* Move To Special Purpose Register */
       switch (PPC_SPR (insn))
 	{
-	case 1:		/* XER */
+	case 1:			/* XER */
 	  record_full_arch_list_add_reg (regcache, tdep->ppc_xer_regnum);
-	  break;
-	case 8:		/* LR */
+	  return 0;
+	case 8:			/* LR */
 	  record_full_arch_list_add_reg (regcache, tdep->ppc_lr_regnum);
-	  break;
-	case 9:		/* CTR */
+	  return 0;
+	case 9:			/* CTR */
 	  record_full_arch_list_add_reg (regcache, tdep->ppc_ctr_regnum);
-	  break;
-	default:
-	  goto UNKNOWN_OP;
+	  return 0;
 	}
-      break;
+
+      goto UNKNOWN_OP;
 
     case 146:		/* Move To Machine State Register */
     case 147:		/* Move To Split Little Endian */
     case 163:		/* Write MSR External Enable Immediate */
     case 178:		/* Move To Machine State Register Doubleword */
       record_full_arch_list_add_reg (regcache, tdep->ppc_ps_regnum);
-      break;
+      return 0;
 
     case 512:		/* Move to Condition Register from XER */
       record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
       record_full_arch_list_add_reg (regcache, tdep->ppc_xer_regnum);
-      break;
+      return 0;
 
     case 4:		/* Trap Word */
     case 68:		/* Trap Doubleword */
@@ -4453,7 +4446,7 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 598:		/* Synchronize */
     case 62:		/* Wait for Interrupt */
       /* Do nothing */
-      break;
+      return 0;
 
     case 854:		/* Enforce In-order Execution of I/O */
     case 966:		/* Instruction Cache Invalidate */
@@ -4475,7 +4468,7 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 390:		/* Data Cache Block Lock Clear */
     case 422:		/* Data Cache Block Lock Query */
     case 758:		/* Data Cache Block Allocate */
-      break;
+      return 0;
     case 1014:		/* Data Cache Block set to Zero */
       if (target_auxv_search (&current_target, AT_DCACHEBSIZE, &at_dcsz) <= 0
 	  || at_dcsz == 0)
@@ -4488,16 +4481,13 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
 				  tdep->ppc_gp0_regnum + PPC_RB (insn), &rb);
       ea = (ra + rb) & (at_dcsz - 1);
 
-      break;
-
-    default:
-UNKNOWN_OP:
-      fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to reverse "
-			  "%08x at %08lx, 31-%d.\n", insn, addr, ext);
-      return -1;
+      return 0;
     }
 
-  return 0;
+UNKNOWN_OP:
+  fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to reverse "
+		      "%08x at %08lx, 31-%d.\n", insn, addr, ext);
+  return -1;
 }
 
 /* Parse instructions of primary opcode-59.  */
@@ -4537,7 +4527,7 @@ ppc64_process_record_op59 (struct gdbarch *gdbarch, struct regcache *regcache,
       if (PPC_RC (insn))
 	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
       record_full_arch_list_add_reg (regcache, tdep->ppc_fpscr_regnum);
-      break;
+      return 0;
 
     case 66:		/* DFP Shift Significand Left Immediate */
     case 98:		/* DFP Shift Significand Right Immediate */
@@ -4548,7 +4538,7 @@ ppc64_process_record_op59 (struct gdbarch *gdbarch, struct regcache *regcache,
 				     tdep->ppc_fp0_regnum + PPC_FRT (insn));
       if (PPC_RC (insn))
 	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
-      break;
+      return 0;
 
     case 18:		/* Floating Divide */
     case 20:		/* Floating Subtract */
@@ -4569,14 +4559,13 @@ ppc64_process_record_op59 (struct gdbarch *gdbarch, struct regcache *regcache,
       if (PPC_RC (insn))
 	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
       record_full_arch_list_add_reg (regcache, tdep->ppc_fpscr_regnum);
-      break;
 
-    default:
-      fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to reverse "
-			  "%08x at %08lx, 59-%d.\n", insn, addr, ext);
+      return 0;
     }
 
-  return 0;
+  fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to reverse "
+		      "%08x at %08lx, 59-%d.\n", insn, addr, ext);
+  return -1;
 }
 
 /* Parse instructions of primary opcode-60.  */
@@ -4585,17 +4574,11 @@ static int
 ppc64_process_record_op60 (struct gdbarch *gdbarch, struct regcache *regcache,
 			   CORE_ADDR addr, uint32_t insn)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int ext = PPC_EXTOP (insn);
 
-  switch (ext)
-    {
-    default:
-      fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to reverse "
-			  "%08x at %08lx, 60-%d.\n", insn, addr, ext);
-    }
-
-  return 0;
+  fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to reverse "
+		      "%08x at %08lx, 60-%d.\n", insn, addr, ext);
+  return -1;
 }
 
 /* Parse instructions of primary opcode-63.  */
@@ -4637,7 +4620,7 @@ ppc64_process_record_op63 (struct gdbarch *gdbarch, struct regcache *regcache,
       if (PPC_RC (insn))
 	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
       record_full_arch_list_add_reg (regcache, tdep->ppc_fpscr_regnum);
-      break;
+      return 0;
 
     case 66:		/* DFP Shift Significand Left Immediate */
     case 98:		/* DFP Shift Significand Right Immediate */
@@ -4648,7 +4631,7 @@ ppc64_process_record_op63 (struct gdbarch *gdbarch, struct regcache *regcache,
 				     tdep->ppc_fp0_regnum + PPC_FRT (insn));
       if (PPC_RC (insn))
 	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
-      break;
+      return 0;
 
     case 12:		/* Floating Round to Single-Precision */
     case 14:		/* Floating Convert To Integer Word */
@@ -4685,7 +4668,7 @@ ppc64_process_record_op63 (struct gdbarch *gdbarch, struct regcache *regcache,
       if (PPC_RC (insn))
 	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
       record_full_arch_list_add_reg (regcache, tdep->ppc_fpscr_regnum);
-      break;
+      return 0;
 
     case 8:		/* Floating Copy Sign */
     case 40:		/* Floating Negate */
@@ -4696,13 +4679,13 @@ ppc64_process_record_op63 (struct gdbarch *gdbarch, struct regcache *regcache,
 				     tdep->ppc_fp0_regnum + PPC_FRT (insn));
       if (PPC_RC (insn))
 	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
-      break;
+      return 0;
 
     case 838:		/* Floating Merge Odd Word */
     case 966:		/* Floating Merge Even Word */
       record_full_arch_list_add_reg (regcache,
 				     tdep->ppc_fp0_regnum + PPC_FRT (insn));
-      break;
+      return 0;
 
     case 0:		/* Floating Compare Unordered */
     case 32:		/* Floating Compare Ordered */
@@ -4718,15 +4701,13 @@ ppc64_process_record_op63 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 160:		/* Floating Test for software Square Root */
     case 583:		/* Move From FPSCR */
       record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
-      break;
+      return 0;
 
-    default:
-      fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to reverse "
-			  "%08x at %08lx, 59-%d.\n", insn, addr, ext);
-      return -1;
     }
 
-  return 0;
+  fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to reverse "
+		      "%08x at %08lx, 59-%d.\n", insn, addr, ext);
+  return -1;
 }
 
 /* Parse the current instruction and record the values of the registers and
@@ -4895,8 +4876,6 @@ ppc64_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
 
 	  for (i = PPC_RS (insn); i < 32; i++)
 	    record_full_arch_list_add_mem (addr + i * 4, 4);
-
-	  break;
 	}
       break;
 
@@ -4935,9 +4914,8 @@ ppc64_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
 	    gdb_assert (0);
 
 	  record_full_arch_list_add_mem (addr, size);
-
-	  break;
 	}
+      break;
 
     case 58:		/* Load doubleword */
       record_full_arch_list_add_reg (regcache,
