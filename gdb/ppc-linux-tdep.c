@@ -872,13 +872,36 @@ ppc_linux_syscall_record (struct regcache *regcache)
   if (ret != 0)
     return ret;
 
-  /* Record the return value of the system call.  */
+  /* Record registers clobbered during syscall.  */
+  if (record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + 0))
+    return -1;
   if (record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + 3))
     return -1;
-
-  /* Record LR.  */
-  if (record_full_arch_list_add_reg (regcache, tdep->ppc_lr_regnum))
+  if (record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + 4))
     return -1;
+  if (record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + 5))
+    return -1;
+  if (record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + 6))
+    return -1;
+  if (record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + 7))
+    return -1;
+  if (record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + 8))
+    return -1;
+  if (record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + 9))
+    return -1;
+  if (record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + 10))
+    return -1;
+  if (record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + 11))
+    return -1;
+  if (record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + 12))
+    return -1;
+  if (record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum))
+    return -1;
+  if (record_full_arch_list_add_reg (regcache, tdep->ppc_ctr_regnum + 8))
+    return -1;
+  if (record_full_arch_list_add_reg (regcache, tdep->ppc_lr_regnum + 8))
+    return -1;
+
 
   return 0;
 }
