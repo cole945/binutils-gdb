@@ -897,11 +897,10 @@ ppc_linux_syscall_record (struct regcache *regcache)
     return -1;
   if (record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum))
     return -1;
-  if (record_full_arch_list_add_reg (regcache, tdep->ppc_ctr_regnum + 8))
+  if (record_full_arch_list_add_reg (regcache, tdep->ppc_ctr_regnum))
     return -1;
-  if (record_full_arch_list_add_reg (regcache, tdep->ppc_lr_regnum + 8))
+  if (record_full_arch_list_add_reg (regcache, tdep->ppc_lr_regnum))
     return -1;
-
 
   return 0;
 }
