@@ -4337,9 +4337,9 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
 	case 652:	/* Store VSX Scalar Single-Precision Indexed */
 	case 151:	/* Store Word Indexed */
 	case 150:	/* Store Word Conditional Indexed */
+	case 917:	/* Store Word Caching Inhibited Indexed */
 	case 663:	/* Store Floating-Point Single Indexed */
 	case 695:	/* Store Floating-Point Single with Update Indexed */
-	case 917:	/* Store Word Caching Inhibited Indexed */
 	case 983:	/* Store Floating-Point as Integer Word Indexed */
 	  size = 4;
 	  break;
@@ -4728,8 +4728,8 @@ ppc64_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
 
   switch (op6)
     {
-    case 2:		/* Trap-if instructions.  */
-    case 3:		/* Trap-if instructions.  */
+    case 2:		/* Trap Doubleword Immediate */
+    case 3:		/* Trap Word Immediate */
       /* Do nothing.  */
       break;
 
@@ -4738,7 +4738,7 @@ ppc64_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
 	return -1;
       break;
 
-    case 17:		/* System call instructions.  */
+    case 17:		/* System call */
       if (tdep->syscall_record != NULL)
 	{
 	  if (tdep->syscall_record (regcache) != 0)
@@ -4751,19 +4751,19 @@ ppc64_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
 	}
       break;
 
-    case 7:
+    case 7:		/* Multiply Low Immediate */
       record_full_arch_list_add_reg (regcache,
 				     tdep->ppc_gp0_regnum + PPC_RT (insn));
       break;
 
-    case 8:
+    case 8:		/* Subtract From Immediate Carrying */
       record_full_arch_list_add_reg (regcache, tdep->ppc_xer_regnum);
       record_full_arch_list_add_reg (regcache,
 				     tdep->ppc_gp0_regnum + PPC_RT (insn));
       break;
 
-    case 10:		/* Comparisons.  */
-    case 11:
+    case 10:		/* Compare Logical Immediate  */
+    case 11:		/* Compare Immediate */
       record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
       break;
 
@@ -4793,11 +4793,15 @@ ppc64_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
 	return -1;
       break;
 
-    case 20:		/* Rotate */
-    case 21:		/* Rotate */
-    case 22:		/* Rotate */
-    case 23:		/* Rotate */
-    case 30:		/* Rotate */
+    case 20:		/* Rotate Left Word Immediate then Mask Insert */
+    case 21:		/* Rotate Left Word Immediate then AND with Mask */
+    case 23:		/* Rotate Left Word then AND with Mask */
+    case 30:		/* Rotate Left Doubleword Immediate then Clear Left */
+			/* Rotate Left Doubleword Immediate then Clear Right */
+			/* Rotate Left Doubleword Immediate then Clear */
+			/* Rotate Left Doubleword then Clear Left */
+			/* Rotate Left Doubleword then Clear Right */
+			/* Rotate Left Doubleword Immediate then Mask Insert */
       record_full_arch_list_add_reg (regcache,
 				     tdep->ppc_gp0_regnum + PPC_RA (insn));
       record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
@@ -4845,12 +4849,6 @@ ppc64_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
       record_full_arch_list_add_reg (regcache, tmp | 1);
       break;
 
-    case 57:		/* Load Floating-Point Double Pair */
-      tmp = (tdep->ppc_fp0_regnum + PPC_RT (insn)) & ~1;
-      record_full_arch_list_add_reg (regcache, tmp);
-      record_full_arch_list_add_reg (regcache, tmp | 1);
-      break;
-
     case 49:		/* Load Floating-Point Single with Update */
     case 51:		/* Load Floating-Point Double with Update */
       record_full_arch_list_add_reg (regcache,
@@ -4879,17 +4877,17 @@ ppc64_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
 	}
       break;
 
-    case 37:		/* Store word with Update */
-    case 39:		/* Store byte with Update */
-    case 45:		/* Store Half Word with Update */
+    case 37:		/* Store Word with Update */
+    case 39:		/* Store Byte with Update */
+    case 45:		/* Store Halfword with Update */
     case 53:		/* Store Floating-Point Single with Update */
     case 55:		/* Store Floating-Point Double with Update */
       record_full_arch_list_add_reg (regcache,
 				     tdep->ppc_gp0_regnum + PPC_RA (insn));
       /* FALL-THROUGH */
-    case 36:		/* Store word */
-    case 38:		/* Store byte */
-    case 44:		/* Store Half Word */
+    case 36:		/* Store Word */
+    case 38:		/* Store Byte */
+    case 44:		/* Store Halfword */
     case 52:		/* Store Floating-Point Single */
     case 54:		/* Store Floating-Point Double */
 	{
@@ -4917,7 +4915,18 @@ ppc64_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
 	}
       break;
 
-    case 58:		/* Load doubleword */
+    case 57:		/* Load Floating-Point Double Pair */
+      tmp = (tdep->ppc_fp0_regnum + PPC_RT (insn)) & ~1;
+      record_full_arch_list_add_reg (regcache, tmp);
+      record_full_arch_list_add_reg (regcache, tmp | 1);
+      break;
+
+    case 58:		/* Load Doubleword */
+			/* Load Doubleword with Update */
+			/* Load Doubleword Algebraic */
+      if (PPC_FIELD (insn, 30, 2) > 2)
+	    goto UNKNOWN_OP;
+
       record_full_arch_list_add_reg (regcache,
 				     tdep->ppc_gp0_regnum + PPC_RT (insn));
       if (PPC_BIT (insn, 31))
@@ -4935,7 +4944,7 @@ ppc64_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
 	return -1;
       break;
 
-    case 61:		/* Floating-Point Double Pair */
+    case 61:		/* Store Floating-Point Double Pair */
     case 62:		/* Store Doubleword */
 			/* Store Doubleword with Update */
 			/* Store Quadword with Update */
