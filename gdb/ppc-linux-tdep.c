@@ -303,6 +303,12 @@ powerpc_linux_in_dynsym_resolve_code (CORE_ADDR pc)
     return 1;
   else if (sym.minsym != NULL && execution_direction == EXEC_REVERSE)
     {
+      /* When reverse stepping, gdb needs to know whether PC lies in
+	 the dynamic symbol resolve code, so it can keep going until
+	 reaching some user code.
+	 Using insns-match-pattern is not suitable, because we had to
+	 look both ahead and behind to check where we are in the middle
+	 of one of trampline sequences.  */
 #define SUBSTRCMP(sym, stub)  (memcmp (sym + 8, stub, sizeof (stub) - 1) == 0)
       if (SUBSTRCMP (MSYMBOL_LINKAGE_NAME (sym.minsym), ".plt_call."))
 	return 1;
@@ -832,8 +838,6 @@ ppc_all_but_pc_registers_record (struct regcache *regcache)
   if (record_full_arch_list_add_reg (regcache, tdep->ppc_lr_regnum))
     return -1;
   if (record_full_arch_list_add_reg (regcache, tdep->ppc_ctr_regnum))
-    return -1;
-  if (record_full_arch_list_add_reg (regcache, tdep->ppc_xer_regnum))
     return -1;
 
   return 0;

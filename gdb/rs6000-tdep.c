@@ -3678,14 +3678,6 @@ ppc_record_vsr (struct regcache *regcache, struct gdbarch_tdep *tdep, int vsr,
   if (vsr < 0 || vsr >= 64)
     return -1;
 
-  /* vsr0  = vs0h || fp0
-     vsr1  = vs1h || fp1
-     ...
-     vsr32 = vr0
-     ...
-     vsr63 = vr32
-   */
-
   if (vsr >= 32)
     {
       if (tdep->ppc_vr0_regnum >= 0)
@@ -3976,7 +3968,7 @@ ppc64_process_record_op4 (struct gdbarch *gdbarch, struct regcache *regcache,
       return 0;
     }
 
-  fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to reverse "
+  fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to record "
 		      "%08x at %08lx, 4-%d.\n", insn, addr, ext);
   return -1;
 }
@@ -4019,7 +4011,7 @@ ppc64_process_record_op19 (struct gdbarch *gdbarch, struct regcache *regcache,
       return 0;
     }
 
-  fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to reverse "
+  fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to record "
 		      "%08x at %08lx, 19-%d.\n", insn, addr, ext);
   return -1;
 }
@@ -4087,7 +4079,12 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
     }
 
   if ((ext & 0x1f) == 15)
-    ext = 15;		/* Integer Select. bit[16:20] is used for BC.  */
+    {
+      /* Integer Select. bit[16:20] is used for BC.  */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_gp0_regnum + PPC_RT (insn));
+      return 0;
+    }
 
   switch (ext)
     {
@@ -4102,12 +4099,12 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
       return 0;
 
     /* These only write RT.  */
-    case 15:		/* Integer Select */
     case 19:		/* Move from condition register */
 			/* Move From One Condition Register Field */
     case 74:		/* Add and Generate Sixes */
     case 74 | 0x200:	/* Add and Generate Sixes (bit-21 dont-care) */
     case 302:		/* Move From Branch History Rolling Buffer */
+    case 334:		/* Move From Performance Monitor Register */
     case 339:		/* Move From Special Purpose Register */
       record_full_arch_list_add_reg (regcache,
 				     tdep->ppc_gp0_regnum + PPC_RT (insn));
@@ -4168,10 +4165,6 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 790:		/* Load Halfword Byte-Reverse Indexed */
     case 534:		/* Load Word Byte-Reverse Indexed */
     case 532:		/* Load Doubleword Byte-Reverse Indexed */
-    case 95:		/* Load Byte by External Process ID Indexed */
-    case 287:		/* Load Halfword by External Process ID Indexed */
-    case 31:		/* Load Word by External Process ID Indexed */
-    case 29:		/* Load Doubleword by External Process ID Indexed */
     case 853:		/* Load Byte and Zero Caching Inhibited Indexed */
     case 821:		/* Load Halfword and Zero Caching Inhibited Indexed */
     case 789:		/* Load Word and Zero Caching Inhibited Indexed */
@@ -4426,10 +4419,7 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
 
       goto UNKNOWN_OP;
 
-    case 146:		/* Move To Machine State Register */
     case 147:		/* Move To Split Little Endian */
-    case 163:		/* Write MSR External Enable Immediate */
-    case 178:		/* Move To Machine State Register Doubleword */
       record_full_arch_list_add_reg (regcache, tdep->ppc_ps_regnum);
       return 0;
 
@@ -4440,35 +4430,80 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
 
     case 4:		/* Trap Word */
     case 68:		/* Trap Doubleword */
-    case 18:		/* TLB Invalidate Local Indexed */
-    case 22:		/* Instruction Cache Block Touch */
     case 430:		/* Clear BHRB */
     case 598:		/* Synchronize */
     case 62:		/* Wait for Interrupt */
-      /* Do nothing */
-      return 0;
-
+    case 22:		/* Instruction Cache Block Touch */
     case 854:		/* Enforce In-order Execution of I/O */
-    case 966:		/* Instruction Cache Invalidate */
-    case 262:		/* Instruction Cache Block Touch */
-    case 982:		/* Instruction Cache Block Invalidate */
-    case 198:		/* Instruction Cache Block Lock Query */
-    case 230:		/* Instruction Cache Block Lock Clear */
-    case 486:		/* Instruction Cache Block Touch and Lock Set */
     case 246:		/* Data Cache Block Touch for Store */
     case 54:		/* Data Cache Block Store */
-    case 63:		/* Data Cache Block Store by External PID */
     case 86:		/* Data Cache Block Flush */
+    case 278:		/* Data Cache Block Touch */
+    case 758:		/* Data Cache Block Allocate */
+      return 0;
+
+    case 18:		/* TLB Invalidate Local Indexed */
+    case 326:		/* Data Cache Read */
+    case 63:		/* Data Cache Block Store by External PID */
     case 127:		/* Data Cache Block Flush by External PID */
     case 134:		/* Data Cache Block Touch for Store and Lock Set */
     case 166:		/* Data Cache Block Touch and Lock Set */
     case 255:		/* Data Cache Block Touch for Store by External PID */
-    case 278:		/* Data Cache Block Touch */
     case 319:		/* Data Cache Block Touch by External PID */
     case 390:		/* Data Cache Block Lock Clear */
     case 422:		/* Data Cache Block Lock Query */
-    case 758:		/* Data Cache Block Allocate */
-      return 0;
+    case 454:		/* Data Cache Invalidate */
+    case 998:		/* Instruction Cache Read */
+    case 966:		/* Instruction Cache Invalidate */
+    case 982:		/* Instruction Cache Block Invalidate */
+    case 198:		/* Instruction Cache Block Lock Query */
+    case 230:		/* Instruction Cache Block Lock Clear */
+    case 486:		/* Instruction Cache Block Touch and Lock Set */
+    case 206:		/* Message Send */
+    case 238:		/* Message Clear */
+    case 142:		/* Message Send Privileged */
+    case 174:		/* Message Clear Privileged */
+    case 131:		/* Write MSR External Enable */
+    case 163:		/* Write MSR External Enable Immediate */
+    case 270:		/* Embedded Hypervisor Privilege */
+    case 462:		/* Move To Performance Monitor Register */
+    case 494:		/* Move To Thread Management Register */
+    case 807:		/* Store Vector by External Process ID Indexed */
+    case 775:		/* Store Vector by External Process ID Indexed LRU */
+    case 95:		/* Load Byte by External Process ID Indexed */
+    case 287:		/* Load Halfword by External Process ID Indexed */
+    case 31:		/* Load Word by External Process ID Indexed */
+    case 29:		/* Load Doubleword by External Process ID Indexed */
+    case 295:		/* Load Vector by External Process ID Indexed */
+    case 263:		/* Load Vector by External Process ID Indexed LRU */
+    case 259:		/* Move From Device Control Register Indexed */
+    case 323:		/* Move From Device Control Register */
+    case 146:		/* Move To Machine State Register */
+    case 178:		/* Move To Machine State Register Doubleword */
+    case 387:		/* Move To Device Control Register Indexed */
+    case 419:		/* Move To Device Control Register User-mode Indexed */
+    case 291:		/* Move From Device Control Register User-mode Indexed */
+    case 451:		/* Move To Device Control Register */
+      /* Privileged instructions.  */
+      fprintf_unfiltered (gdb_stdlog, "Cannot record privileged instructions. "
+			  "%08x at %08lx, 31-%d.\n", insn, addr, ext);
+      return -1;
+
+    case 654:		/* Transaction Begin */
+    case 686:		/* Transaction End */
+    case 718:		/* Transaction Check */
+    case 750:		/* Transaction Suspend or Resume */
+    case 782:		/* Transaction Abort Word Conditional */
+    case 814:		/* Transaction Abort Doubleword Conditional */
+    case 846:		/* Transaction Abort Word Conditional Immediate */
+    case 878:		/* Transaction Abort Doubleword Conditional Immediate */
+    case 910:		/* Transaction Abort */
+    case 942:		/* Transaction Reclaim */
+    case 1006:		/* Transaction Recheckpoint */
+      fprintf_unfiltered (gdb_stdlog, "Cannot record Transaction instructions. "
+			  "%08x at %08lx, 31-%d.\n", insn, addr, ext);
+      return -1;
+
     case 1014:		/* Data Cache Block set to Zero */
       if (target_auxv_search (&current_target, AT_DCACHEBSIZE, &at_dcsz) <= 0
 	  || at_dcsz == 0)
@@ -4485,7 +4520,7 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
     }
 
 UNKNOWN_OP:
-  fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to reverse "
+  fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to record "
 		      "%08x at %08lx, 31-%d.\n", insn, addr, ext);
   return -1;
 }
@@ -4498,6 +4533,28 @@ ppc64_process_record_op59 (struct gdbarch *gdbarch, struct regcache *regcache,
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int ext = PPC_EXTOP (insn);
+
+  switch (ext & 0x1f)
+    {
+    case 18:		/* Floating Divide */
+    case 20:		/* Floating Subtract */
+    case 21:		/* Floating Add */
+    case 22:		/* Floating Square Root */
+    case 24:		/* Floating Reciprocal Estimate */
+    case 25:		/* Floating Multiply */
+    case 26:		/* Floating Reciprocal Square Root Estimate */
+    case 28:		/* Floating Multiply-Subtract */
+    case 29:		/* Floating Multiply-Add */
+    case 30:		/* Floating Negative Multiply-Subtract */
+    case 31:		/* Floating Negative Multiply-Add */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_fp0_regnum + PPC_FRT (insn));
+      if (PPC_RC (insn))
+	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
+      record_full_arch_list_add_reg (regcache, tdep->ppc_fpscr_regnum);
+
+      return 0;
+    }
 
   switch (ext)
     {
@@ -4540,17 +4597,6 @@ ppc64_process_record_op59 (struct gdbarch *gdbarch, struct regcache *regcache,
 	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
       return 0;
 
-    case 18:		/* Floating Divide */
-    case 20:		/* Floating Subtract */
-    case 21:		/* Floating Add */
-    case 22:		/* Floating Square Root */
-    case 24:		/* Floating Reciprocal Estimate */
-    case 25:		/* Floating Multiply */
-    case 26:		/* Floating Reciprocal Square Root Estimate */
-    case 28:		/* Floating Multiply-Subtract */
-    case 29:		/* Floating Multiply-Add */
-    case 30:		/* Floating Negative Multiply-Subtract */
-    case 31:		/* Floating Negative Multiply-Add */
     case 846:		/* Floating Convert From Integer Doubleword Single */
     case 974:		/* Floating Convert From Integer Doubleword Unsigned
 			   Single */
@@ -4563,7 +4609,7 @@ ppc64_process_record_op59 (struct gdbarch *gdbarch, struct regcache *regcache,
       return 0;
     }
 
-  fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to reverse "
+  fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to record "
 		      "%08x at %08lx, 59-%d.\n", insn, addr, ext);
   return -1;
 }
@@ -4576,7 +4622,7 @@ ppc64_process_record_op60 (struct gdbarch *gdbarch, struct regcache *regcache,
 {
   int ext = PPC_EXTOP (insn);
 
-  fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to reverse "
+  fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to record "
 		      "%08x at %08lx, 60-%d.\n", insn, addr, ext);
   return -1;
 }
@@ -4590,6 +4636,27 @@ ppc64_process_record_op63 (struct gdbarch *gdbarch, struct regcache *regcache,
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int ext = PPC_EXTOP (insn);
   int tmp;
+
+  switch (ext & 0x1f)
+    {
+    case 18:		/* Floating Divide */
+    case 20:		/* Floating Subtract */
+    case 21:		/* Floating Add */
+    case 22:		/* Floating Square Root */
+    case 24:		/* Floating Reciprocal Estimate */
+    case 25:		/* Floating Multiply */
+    case 26:		/* Floating Reciprocal Square Root Estimate */
+    case 28:		/* Floating Multiply-Subtract */
+    case 29:		/* Floating Multiply-Add */
+    case 30:		/* Floating Negative Multiply-Subtract */
+    case 31:		/* Floating Negative Multiply-Add */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_fp0_regnum + PPC_FRT (insn));
+      if (PPC_RC (insn))
+	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
+      record_full_arch_list_add_reg (regcache, tdep->ppc_fpscr_regnum);
+      return 0;
+    }
 
   switch (ext)
     {
@@ -4637,17 +4704,6 @@ ppc64_process_record_op63 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 14:		/* Floating Convert To Integer Word */
     case 15:		/* Floating Convert To Integer Word
 			   with round toward Zero */
-    case 18:		/* Floating Divide */
-    case 20:		/* Floating Subtract */
-    case 21:		/* Floating Add */
-    case 22:		/* Floating Square Root */
-    case 24:		/* Floating Reciprocal Estimate */
-    case 25:		/* Floating Multiply */
-    case 26:		/* Floating Reciprocal Square Root Estimate */
-    case 28:		/* Floating Multiply-Subtract */
-    case 29:		/* Floating Multiply-Add */
-    case 30:		/* Floating Negative Multiply-Subtract */
-    case 31:		/* Floating Negative Multiply-Add */
     case 142:		/* Floating Convert To Integer Word Unsigned */
     case 143:		/* Floating Convert To Integer Word Unsigned
 			   with round toward Zero */
@@ -4705,7 +4761,7 @@ ppc64_process_record_op63 (struct gdbarch *gdbarch, struct regcache *regcache,
 
     }
 
-  fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to reverse "
+  fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to record "
 		      "%08x at %08lx, 59-%d.\n", insn, addr, ext);
   return -1;
 }
@@ -4981,7 +5037,7 @@ ppc64_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
 
     default:
 UNKNOWN_OP:
-      fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to reverse "
+      fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to record "
 			  "%08x at %08lx, %d.\n", insn, addr, op6);
       return -1;
     }
