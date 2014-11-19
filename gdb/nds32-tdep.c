@@ -528,16 +528,12 @@ nds32_pseudo_register_write (struct gdbarch *gdbarch,
 /* Skip prologue should be conservative, and frame-unwind should be
    relative-aggressive.*/
 
-static int
+static CORE_ADDR
 nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
-			CORE_ADDR scan_limit, CORE_ADDR *pl_endptr)
+			CORE_ADDR scan_limit)
 {
   uint32_t insn;
   CORE_ADDR cpc = -1;		/* Candidate PC if no suitable PC is found.  */
-
-  /* If there is no buffer to store result, ignore this prologue decoding.  */
-  if (pl_endptr == NULL)
-    return 0;
 
   /* Look up end of prologue.  */
   for (; pc < scan_limit; )
@@ -701,9 +697,7 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 	pc = cpc;
     }
 
-  *pl_endptr = pc;
-
-  return 0;
+  return pc;
 }
 
 /* Implement the gdbarch_skip_prologue method.
@@ -713,40 +707,31 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 static CORE_ADDR
 nds32_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
-  CORE_ADDR func_addr, func_end;
-  struct symtab_and_line sal = { 0 };
   LONGEST return_value;
   const char *func_name;
-  enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
-  const int search_limit = 128;
+  const int search_limit = 128; /* Magic.  */
+  CORE_ADDR func_addr, scan_limit;
 
   /* See what the symbol table says */
-  if (find_pc_partial_function (pc, &func_name, &func_addr, &func_end))
+  if (find_pc_partial_function (pc, NULL, &func_addr, NULL))
     {
-      sal = find_pc_line (func_addr, 0);
+      CORE_ADDR post_prologue_pc
+	= skip_prologue_using_sal (gdbarch, func_addr);
 
-      if (sal.line != 0 && sal.end <= func_end)
-	func_end = sal.end;
-      else
-	{
-	  /* Either there's no line info, or the line after the prologue
-	     is after the end of the function.  In this case, there probably
-	     isn't a prologue.  */
-	  func_end = min (func_end, func_addr + search_limit);
-	}
+      if (post_prologue_pc != 0)
+	return max (pc, post_prologue_pc);
     }
-  else
-    func_end = pc + search_limit;
+
+  scan_limit = skip_prologue_using_sal (gdbarch, pc);
+  if (scan_limit == 0)
+    scan_limit = pc + search_limit;
 
   /* If current instruction is not readable, just quit.  */
-  if (!safe_read_memory_integer (pc, 4, byte_order, &return_value))
+  if (!safe_read_memory_integer (pc, 4, BFD_ENDIAN_BIG, &return_value))
     return pc;
 
   /* Find the end of prologue.  */
-  if (nds32_analyze_prologue (gdbarch, pc, func_end, &sal.end) < 0)
-    return pc;
-
-  return sal.end;
+  return nds32_analyze_prologue (gdbarch, pc, scan_limit);
 }
 
 struct nds32_unwind_cache
