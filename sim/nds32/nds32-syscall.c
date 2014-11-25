@@ -312,6 +312,24 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
       }
       break;
 #endif
+    /* This a nds32 libgloss only system calls.  */
+
+    case CB_SYS_NDS32_isatty:
+      sc.result = sim_io_isatty (sd, CCPU_GPR[0].s);
+      if (sc.result == -1)
+	sc.result = 0; /* -1 is returned if EBADF, but caller wants 0. */
+      break;
+
+    case CB_SYS_NDS32_getcmdline:
+      sc.result = CCPU_GPR[0].u;
+      sim_write (sd, CCPU_GPR[0].u, (unsigned char*)sd->cmdline,
+		 strlen (sd->cmdline) + 1);
+      break;
+
+    /* This is used by libgloss only.  */
+    case CB_SYS_NDS32_errno:
+      sc.result = sim_io_get_errno (sd);
+      break;
     }
 
 out:
