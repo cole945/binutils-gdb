@@ -86,73 +86,9 @@ CB_TARGET_DEFS_MAP cb_nds32_libgloss_syscall_map[] =
   {-1, -1}
 };
 
-CB_TARGET_DEFS_MAP cb_nds32_linux_syscall_map[] =
-{
-  {CB_SYS_exit,		LINUX_SYS_BASE + 1},
-  {CB_SYS_read,		LINUX_SYS_BASE + 3},
-  {CB_SYS_write,	LINUX_SYS_BASE + 4},
-  {CB_SYS_open,		LINUX_SYS_BASE + 5},
-  {CB_SYS_close,	LINUX_SYS_BASE + 6},
-  {CB_SYS_link,		LINUX_SYS_BASE + 9},
-  {CB_SYS_unlink,	LINUX_SYS_BASE + 10},
-  {CB_SYS_chdir,	LINUX_SYS_BASE + 12},
-  {CB_SYS_time,		LINUX_SYS_BASE + 13},
-  {CB_SYS_chmod,	LINUX_SYS_BASE + 15},
-  {CB_SYS_lseek,	LINUX_SYS_BASE + 19},
-  {CB_SYS_getpid,	LINUX_SYS_BASE + 20},
-  {CB_SYS_utime,	LINUX_SYS_BASE + 30},
-  {CB_SYS_access,	LINUX_SYS_BASE + 33},
-  {CB_SYS_rename,	LINUX_SYS_BASE + 38},
-  {CB_SYS_times,	LINUX_SYS_BASE + 43},
-  {CB_SYS_brk,		LINUX_SYS_BASE + 45},
-  {CB_SYS_ioctl,	LINUX_SYS_BASE + 54},
-  {CB_SYS_setrlimit,	LINUX_SYS_BASE + 75},
-  {CB_SYS_getrlimit,	LINUX_SYS_BASE + 76},
-  {CB_SYS_gettimeofday,	LINUX_SYS_BASE + 78},
-  /* {CB_SYS_settimeofday,	LINUX_SYS_BASE + 79}, */
-  {CB_SYS_mmap,		LINUX_SYS_BASE + 90},
-  {CB_SYS_munmap,	LINUX_SYS_BASE + 91},
-  {CB_SYS_stat,		LINUX_SYS_BASE + 106},
-  {CB_SYS_lstat,	LINUX_SYS_BASE + 107},
-  {CB_SYS_fstat,	LINUX_SYS_BASE + 108},
-  {CB_SYS_uname,	LINUX_SYS_BASE + 122},
-  {CB_SYS_mprotect,	LINUX_SYS_BASE + 125},
-  {CB_SYS_llseek,	LINUX_SYS_BASE + 140},
-  {CB_SYS_readv,	LINUX_SYS_BASE + 145},
-  {CB_SYS_writev,	LINUX_SYS_BASE + 146},
-  {CB_SYS_nanosleep,	LINUX_SYS_BASE + 162},
-  {CB_SYS_getpagesize,	LINUX_SYS_BASE + 166},
-  {CB_SYS_ugetrlimit,	LINUX_SYS_BASE + 191},
-  {CB_SYS_mmap2,	LINUX_SYS_BASE + 192},
-  {CB_SYS_stat64,	LINUX_SYS_BASE + 195},
-  {CB_SYS_lstat64,	LINUX_SYS_BASE + 196},
-  {CB_SYS_fstat64,	LINUX_SYS_BASE + 197},
-  {CB_SYS_getuid32,	LINUX_SYS_BASE + 199},
-  {CB_SYS_getgid32,	LINUX_SYS_BASE + 200},
-  {CB_SYS_geteuid32,	LINUX_SYS_BASE + 201},
-  {CB_SYS_getegid32,	LINUX_SYS_BASE + 202},
-  {CB_SYS_setuid32,	LINUX_SYS_BASE + 213},
-  {CB_SYS_setgid32,	LINUX_SYS_BASE + 214},
-  {CB_SYS_exit_group,	LINUX_SYS_BASE + 248},
-  {CB_SYS_fcntl64,	LINUX_SYS_BASE + 221},
-
-  {-1, -1}
-};
-
 /* Check
-	linux: arch/nds32/include/asm/stat.h
 	newlib: libc/include/sys/stat.h
    for details.  */
-static const char cb_linux_stat_map_32[] =
-"st_dev,2:space,2:st_ino,4:st_mode,2:st_nlink,2:st_uid,2:st_gid,2:st_rdev,2:space,2:"
-"st_size,4:st_blksize,4:st_blocks,4:st_atime,4:st_atimensec,4:"
-"st_mtime,4:st_mtimensec,4:st_ctime,4:st_ctimensec,4:space,4:space,4";
-
-static const char cb_linux_stat_map_64[] =
-"st_dev,8:space,4:__st_ino,4:st_mode,4:st_nlink,4:st_uid,4:st_gid,4:st_rdev,8:"
-"space,8:st_size,8:st_blksize,4:space,4:st_blocks,8:st_atime,4:st_atimensec,4:"
-"st_mtime,4:st_mtimensec,4:st_ctime,4:st_ctimensec,4:st_ino,8";
-
 static const char cb_libgloss_stat_map_32[] =
 "st_dev,2:st_ino,2:st_mode,4:st_nlink,2:st_uid,2:st_gid,2:st_rdev,2:"
 "st_size,4:st_atime,4:space,4:st_mtime,4:space,4:st_ctime,4:space,4:"
@@ -259,26 +195,7 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
     case CB_SYS_stat:
     case CB_SYS_lstat:
     case CB_SYS_fstat:
-      if (STATE_ENVIRONMENT (sd) == USER_ENVIRONMENT)
-	cb->stat_map = cb_linux_stat_map_32;
-      else
-	cb->stat_map = cb_libgloss_stat_map_32;
-      cb_syscall (cb, &sc);
-      break;
-
-    case CB_SYS_stat64:
-      cb->stat_map = cb_linux_stat_map_64;
-      sc.func = TARGET_LINUX_SYS_stat;
-      cb_syscall (cb, &sc);
-      break;
-    case CB_SYS_lstat64:
-      cb->stat_map = cb_linux_stat_map_64;
-      sc.func = TARGET_LINUX_SYS_lstat;
-      cb_syscall (cb, &sc);
-      break;
-    case CB_SYS_fstat64:
-      cb->stat_map = cb_linux_stat_map_64;
-      sc.func = TARGET_LINUX_SYS_fstat;
+      cb->stat_map = cb_libgloss_stat_map_32;
       cb_syscall (cb, &sc);
       break;
 
@@ -342,10 +259,7 @@ out:
 
       /* Our libgloss implementation uses SYS_NDS32_errno for `errno'.
 	 Syscalls per se only return -1 when fail.  */
-      if (cb->syscall_map == cb_nds32_libgloss_syscall_map)
-	CCPU_GPR[0].s = -1;
-      else /* cb_nds32_linux_syscall_map */
-	CCPU_GPR[0].s = -sc.errcode;
+      CCPU_GPR[0].s = -1;
     }
   else
     CCPU_GPR[0].s = sc.result;
