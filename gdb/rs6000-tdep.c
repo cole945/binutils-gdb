@@ -4192,9 +4192,9 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
       return 0;
 
     case 276:		/* Load Quadword And Reserve Indexed */
-      tmp = (tdep->ppc_gp0_regnum + PPC_RT (insn)) & ~1;
+      tmp = tdep->ppc_gp0_regnum + (PPC_RT (insn) & ~1);
       record_full_arch_list_add_reg (regcache, tmp);
-      record_full_arch_list_add_reg (regcache, tmp | 1);
+      record_full_arch_list_add_reg (regcache, tmp + 1);
       return 0;
 
     /* These write VRT.  */
@@ -4224,9 +4224,9 @@ ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
       return 0;
 
     case 791:		/* Load Floating-Point Double Pair Indexed */
-      tmp = (tdep->ppc_fp0_regnum + PPC_FRT (insn)) & ~1;
+      tmp = tdep->ppc_fp0_regnum + (PPC_FRT (insn) & ~1);
       record_full_arch_list_add_reg (regcache, tmp);
-      record_full_arch_list_add_reg (regcache, tmp | 1);
+      record_full_arch_list_add_reg (regcache, tmp + 1);
       return 0;
 
     /* These write VSR of size 8.  */
@@ -4674,9 +4674,9 @@ ppc64_process_record_op63 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 770:		/* DFP Round To DFP Long */
     case 802:		/* DFP Convert From Fixed */
     case 834:		/* DFP Encode BCD To DPD */
-      tmp = (tdep->ppc_fp0_regnum + PPC_FRT (insn)) & ~1;
+      tmp = tdep->ppc_fp0_regnum + (PPC_FRT (insn) & ~1);
       record_full_arch_list_add_reg (regcache, tmp);
-      record_full_arch_list_add_reg (regcache, tmp | 1);
+      record_full_arch_list_add_reg (regcache, tmp + 1);
       /* FALL-THROUGH */
     case 130:		/* DFP Compare Ordered */
     case 162:		/* DFP Test Exponent */
@@ -4895,14 +4895,15 @@ ppc64_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
 
     case 46:		/* Load Multiple Word */
       for (i = PPC_RT (insn); i < 32; i++)
-	record_full_arch_list_add_reg (regcache,
-				       tdep->ppc_gp0_regnum + PPC_RT (insn));
+	record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + i);
       break;
 
     case 56:		/* Load Quadword */
-      tmp = (tdep->ppc_gp0_regnum + PPC_RT (insn)) & ~1;
+      if (PPC_FIELD (insn, 30, 2) != 0)
+	goto UNKNOWN_OP;
+      tmp = tdep->ppc_gp0_regnum + (PPC_RT (insn) & ~1);
       record_full_arch_list_add_reg (regcache, tmp);
-      record_full_arch_list_add_reg (regcache, tmp | 1);
+      record_full_arch_list_add_reg (regcache, tmp + 1);
       break;
 
     case 49:		/* Load Floating-Point Single with Update */
@@ -4919,7 +4920,6 @@ ppc64_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
     case 47:		/* Store Multiple Word */
 	{
 	  ULONGEST addr = 0;
-	  int size;
 
 	  if (PPC_RA (insn) != 0)
 	    regcache_raw_read_unsigned (regcache,
@@ -4927,9 +4927,7 @@ ppc64_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
 					&addr);
 
 	  addr += PPC_D (insn);
-
-	  for (i = PPC_RS (insn); i < 32; i++)
-	    record_full_arch_list_add_mem (addr + i * 4, 4);
+	  record_full_arch_list_add_mem (addr, 4 * (32 - PPC_RS (insn)));
 	}
       break;
 
@@ -4972,16 +4970,18 @@ ppc64_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
       break;
 
     case 57:		/* Load Floating-Point Double Pair */
-      tmp = (tdep->ppc_fp0_regnum + PPC_RT (insn)) & ~1;
+      if (PPC_FIELD (insn, 30, 2) != 0)
+	goto UNKNOWN_OP;
+      tmp = tdep->ppc_fp0_regnum + (PPC_RT (insn) & ~1);
       record_full_arch_list_add_reg (regcache, tmp);
-      record_full_arch_list_add_reg (regcache, tmp | 1);
+      record_full_arch_list_add_reg (regcache, tmp + 1);
       break;
 
     case 58:		/* Load Doubleword */
 			/* Load Doubleword with Update */
-			/* Load Doubleword Algebraic */
+			/* Load Word Algebraic */
       if (PPC_FIELD (insn, 30, 2) > 2)
-	    goto UNKNOWN_OP;
+	goto UNKNOWN_OP;
 
       record_full_arch_list_add_reg (regcache,
 				     tdep->ppc_gp0_regnum + PPC_RT (insn));
