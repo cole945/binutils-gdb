@@ -182,10 +182,6 @@ nds32_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr,
   gdb_assert (pcptr != NULL);
   gdb_assert (lenptr != NULL);
 
-  if ((*pcptr) & 1)
-    error (_("Bad address %p for inserting breakpoint.\n"
-	     "Address must be at least 2-byte aligned."), (void *) *pcptr);
-
   /* Always insert 16-bit break instruction.  */
   *lenptr = 2;
   return NDS32_BREAK16;
