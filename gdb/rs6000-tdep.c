@@ -4774,9 +4774,9 @@ ppc_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
       if (PPC_LEV (insn) != 0)
 	goto UNKNOWN_OP;
 
-      if (tdep->syscall_record != NULL)
+      if (tdep->ppc_syscall_record != NULL)
 	{
-	  if (tdep->syscall_record (regcache) != 0)
+	  if (tdep->ppc_syscall_record (regcache) != 0)
 	    return -1;
 	}
       else

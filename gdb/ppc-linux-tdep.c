@@ -787,6 +787,7 @@ ppc_linux_get_syscall_number (struct gdbarch *gdbarch,
 /* PPC process record-replay */
 
 struct linux_record_tdep ppc_linux_record_tdep;
+struct linux_record_tdep ppc64_linux_record_tdep;
 
 static enum gdb_syscall
 ppc_canonicalize_syscall (int syscall)
@@ -872,7 +873,7 @@ ppc_linux_syscall_record (struct regcache *regcache)
    }
 
   ret = record_linux_system_call (syscall_gdb, regcache,
-                                  &ppc_linux_record_tdep);
+                                  tdep->ppc_linux_record_tdep);
   if (ret != 0)
     return ret;
 
@@ -1420,7 +1421,6 @@ ppc_linux_init_abi (struct gdbarch_info info,
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   struct tdesc_arch_data *tdesc_data = (void *) info.tdep_info;
-  CORE_ADDR at_pagesz;
   static const char *const stap_integer_prefixes[] = { "i", NULL };
   static const char *const stap_register_indirection_prefixes[] = { "(",
 								    NULL };
@@ -1607,160 +1607,312 @@ ppc_linux_init_abi (struct gdbarch_info info,
   /* Support reverse debugging.  */
   set_gdbarch_process_record (gdbarch, ppc_process_record);
   set_gdbarch_process_record_signal (gdbarch, ppc64_linux_record_signal);
-  tdep->syscall_record = ppc_linux_syscall_record;
+  tdep->ppc_syscall_record = ppc_linux_syscall_record;
+  if (tdep->wordsize == 8)
+    tdep->ppc_linux_record_tdep = &ppc64_linux_record_tdep;
+  else if (tdep->wordsize == 4)
+    tdep->ppc_linux_record_tdep = &ppc_linux_record_tdep;
 
-  /* Initialize the ppc_linux_record_tdep.  */
+  /* Initialize the linux_record_tdep.  */
   /* These values are the size of the type that will be used in a system
-     call.  They are obtained from Linux Kernel source.
+     call.  They are obtained from Linux Kernel source.  */
 
-     See arch/powerpc/include/uapi/asm/ioctls.h.  */
-  ppc_linux_record_tdep.size_pointer
-    = gdbarch_ptr_bit (gdbarch) / TARGET_CHAR_BIT;
-  ppc_linux_record_tdep.size__old_kernel_stat = 32;
-  ppc_linux_record_tdep.size_tms = 32;
-  ppc_linux_record_tdep.size_loff_t = 8;
-  ppc_linux_record_tdep.size_flock = 32;
-  ppc_linux_record_tdep.size_oldold_utsname = 45;
-  ppc_linux_record_tdep.size_ustat = 32;
-  ppc_linux_record_tdep.size_old_sigaction = 152;
-  ppc_linux_record_tdep.size_old_sigset_t = 128;
-  ppc_linux_record_tdep.size_rlimit = 16;
-  ppc_linux_record_tdep.size_rusage = 144;
-  ppc_linux_record_tdep.size_timeval = 16;
-  ppc_linux_record_tdep.size_timezone = 8;
-  ppc_linux_record_tdep.size_old_gid_t = 4;
-  ppc_linux_record_tdep.size_old_uid_t = 4;
-  ppc_linux_record_tdep.size_fd_set = 128;
-  ppc_linux_record_tdep.size_dirent = 280;
-  ppc_linux_record_tdep.size_dirent64 = 280;
-  ppc_linux_record_tdep.size_statfs = 120;
-  ppc_linux_record_tdep.size_statfs64 = 120;
-  ppc_linux_record_tdep.size_sockaddr = 16;
-  ppc_linux_record_tdep.size_int
-    = gdbarch_int_bit (gdbarch) / TARGET_CHAR_BIT;
-  ppc_linux_record_tdep.size_long
-    = gdbarch_long_bit (gdbarch) / TARGET_CHAR_BIT;
-  ppc_linux_record_tdep.size_ulong
-    = gdbarch_long_bit (gdbarch) / TARGET_CHAR_BIT;
-  ppc_linux_record_tdep.size_msghdr = 56;
-  ppc_linux_record_tdep.size_itimerval = 32;
-  ppc_linux_record_tdep.size_stat = 144;
-  ppc_linux_record_tdep.size_old_utsname = 325;
-  ppc_linux_record_tdep.size_sysinfo = 112;
-  ppc_linux_record_tdep.size_msqid_ds = 120;
-  ppc_linux_record_tdep.size_shmid_ds = 112;
-  ppc_linux_record_tdep.size_new_utsname = 390;
-  ppc_linux_record_tdep.size_timex = 208;
-  ppc_linux_record_tdep.size_mem_dqinfo = 24;
-  ppc_linux_record_tdep.size_if_dqblk = 72;
-  ppc_linux_record_tdep.size_fs_quota_stat = 80;
-  ppc_linux_record_tdep.size_timespec = 16;
-  ppc_linux_record_tdep.size_pollfd = 8;
-  ppc_linux_record_tdep.size_NFS_FHSIZE = 32;
-  ppc_linux_record_tdep.size_knfsd_fh = 132;
-  ppc_linux_record_tdep.size_TASK_COMM_LEN = 32;
-  ppc_linux_record_tdep.size_sigaction = 152;
-  ppc_linux_record_tdep.size_sigset_t = 128;
-  ppc_linux_record_tdep.size_siginfo_t = 128;
-  ppc_linux_record_tdep.size_cap_user_data_t = 8;
-  ppc_linux_record_tdep.size_stack_t = 24;
-  ppc_linux_record_tdep.size_off_t = 8;
-  ppc_linux_record_tdep.size_stat64 = 104;
-  ppc_linux_record_tdep.size_gid_t = 4;
-  ppc_linux_record_tdep.size_uid_t = 4;
-  if (target_auxv_search (&current_target, AT_PAGESZ, &at_pagesz) <= 0)
-    at_pagesz = 0x10000;	/* 64KB */
-  ppc_linux_record_tdep.size_PAGE_SIZE = at_pagesz;
-  ppc_linux_record_tdep.size_flock64 = 32;
-  ppc_linux_record_tdep.size_io_event = 32;
-  ppc_linux_record_tdep.size_iocb = 64;
-  ppc_linux_record_tdep.size_epoll_event = 16;
-  ppc_linux_record_tdep.size_itimerspec = 32;
-  ppc_linux_record_tdep.size_mq_attr = 64;
-  ppc_linux_record_tdep.size_siginfo = 128;
-  ppc_linux_record_tdep.size_termios = 44;
-  ppc_linux_record_tdep.size_pid_t = 4;
-  ppc_linux_record_tdep.size_winsize = 8;
-  ppc_linux_record_tdep.size_serial_struct = 72;
-  ppc_linux_record_tdep.size_serial_icounter_struct = 80;
-  ppc_linux_record_tdep.size_hayes_esp_config = 12;
-  ppc_linux_record_tdep.size_size_t = 8;
-  ppc_linux_record_tdep.size_iovec = 16;
+  if (tdep->wordsize == 8 && ppc64_linux_record_tdep.size_pointer == 0)
+    {
+      ppc64_linux_record_tdep.size_pointer
+	= gdbarch_ptr_bit (gdbarch) / TARGET_CHAR_BIT;
+      ppc64_linux_record_tdep.size__old_kernel_stat = 32;
+      ppc64_linux_record_tdep.size_tms = 32;
+      ppc64_linux_record_tdep.size_loff_t = 8;
+      ppc64_linux_record_tdep.size_flock = 32;
+      ppc64_linux_record_tdep.size_oldold_utsname = 45;
+      ppc64_linux_record_tdep.size_ustat = 32;
+      ppc64_linux_record_tdep.size_old_sigaction = 152;
+      ppc64_linux_record_tdep.size_old_sigset_t = 128;
+      ppc64_linux_record_tdep.size_rlimit = 16;
+      ppc64_linux_record_tdep.size_rusage = 144;
+      ppc64_linux_record_tdep.size_timeval = 16;
+      ppc64_linux_record_tdep.size_timezone = 8;
+      ppc64_linux_record_tdep.size_old_gid_t = 4;
+      ppc64_linux_record_tdep.size_old_uid_t = 4;
+      ppc64_linux_record_tdep.size_fd_set = 128;
+      ppc64_linux_record_tdep.size_dirent = 280;
+      ppc64_linux_record_tdep.size_dirent64 = 280;
+      ppc64_linux_record_tdep.size_statfs = 120;
+      ppc64_linux_record_tdep.size_statfs64 = 120;
+      ppc64_linux_record_tdep.size_sockaddr = 16;
+      ppc64_linux_record_tdep.size_int
+	= gdbarch_int_bit (gdbarch) / TARGET_CHAR_BIT;
+      ppc64_linux_record_tdep.size_long
+	= gdbarch_long_bit (gdbarch) / TARGET_CHAR_BIT;
+      ppc64_linux_record_tdep.size_ulong
+	= gdbarch_long_bit (gdbarch) / TARGET_CHAR_BIT;
+      ppc64_linux_record_tdep.size_msghdr = 56;
+      ppc64_linux_record_tdep.size_itimerval = 32;
+      ppc64_linux_record_tdep.size_stat = 144;
+      ppc64_linux_record_tdep.size_old_utsname = 325;
+      ppc64_linux_record_tdep.size_sysinfo = 112;
+      ppc64_linux_record_tdep.size_msqid_ds = 120;
+      ppc64_linux_record_tdep.size_shmid_ds = 112;
+      ppc64_linux_record_tdep.size_new_utsname = 390;
+      ppc64_linux_record_tdep.size_timex = 208;
+      ppc64_linux_record_tdep.size_mem_dqinfo = 24;
+      ppc64_linux_record_tdep.size_if_dqblk = 72;
+      ppc64_linux_record_tdep.size_fs_quota_stat = 80;
+      ppc64_linux_record_tdep.size_timespec = 16;
+      ppc64_linux_record_tdep.size_pollfd = 8;
+      ppc64_linux_record_tdep.size_NFS_FHSIZE = 32;
+      ppc64_linux_record_tdep.size_knfsd_fh = 132;
+      ppc64_linux_record_tdep.size_TASK_COMM_LEN = 32;
+      ppc64_linux_record_tdep.size_sigaction = 152;
+      ppc64_linux_record_tdep.size_sigset_t = 128;
+      ppc64_linux_record_tdep.size_siginfo_t = 128;
+      ppc64_linux_record_tdep.size_cap_user_data_t = 8;
+      ppc64_linux_record_tdep.size_stack_t = 24;
+      ppc64_linux_record_tdep.size_off_t = 8;
+      ppc64_linux_record_tdep.size_stat64 = 104;
+      ppc64_linux_record_tdep.size_gid_t = 4;
+      ppc64_linux_record_tdep.size_uid_t = 4;
+      ppc64_linux_record_tdep.size_PAGE_SIZE = 0x10000;	/* 64KB */
+      ppc64_linux_record_tdep.size_flock64 = 32;
+      ppc64_linux_record_tdep.size_io_event = 32;
+      ppc64_linux_record_tdep.size_iocb = 64;
+      ppc64_linux_record_tdep.size_epoll_event = 16;
+      ppc64_linux_record_tdep.size_itimerspec = 32;
+      ppc64_linux_record_tdep.size_mq_attr = 64;
+      ppc64_linux_record_tdep.size_siginfo = 128;
+      ppc64_linux_record_tdep.size_termios = 44;
+      ppc64_linux_record_tdep.size_pid_t = 4;
+      ppc64_linux_record_tdep.size_winsize = 8;
+      ppc64_linux_record_tdep.size_serial_struct = 72;
+      ppc64_linux_record_tdep.size_serial_icounter_struct = 80;
+      ppc64_linux_record_tdep.size_size_t = 8;
+      ppc64_linux_record_tdep.size_iovec = 16;
 
-  /* These values are the second argument of system call "sys_fcntl"
-     and "sys_fcntl64".  They are obtained from Linux Kernel source.  */
-  ppc_linux_record_tdep.fcntl_F_GETLK = 5;
-  ppc_linux_record_tdep.fcntl_F_GETLK64 = 12;
-  ppc_linux_record_tdep.fcntl_F_SETLK64 = 13;
-  ppc_linux_record_tdep.fcntl_F_SETLKW64 = 14;
+      /* These values are the second argument of system call "sys_fcntl"
+	 and "sys_fcntl64".  They are obtained from Linux Kernel source.  */
+      ppc64_linux_record_tdep.fcntl_F_GETLK = 5;
+      ppc64_linux_record_tdep.fcntl_F_GETLK64 = 12;
+      ppc64_linux_record_tdep.fcntl_F_SETLK64 = 13;
+      ppc64_linux_record_tdep.fcntl_F_SETLKW64 = 14;
 
-  ppc_linux_record_tdep.arg1 = PPC_R0_REGNUM + 3;
-  ppc_linux_record_tdep.arg2 = PPC_R0_REGNUM + 4;
-  ppc_linux_record_tdep.arg3 = PPC_R0_REGNUM + 5;
-  ppc_linux_record_tdep.arg4 = PPC_R0_REGNUM + 6;
-  ppc_linux_record_tdep.arg5 = PPC_R0_REGNUM + 7;
-  ppc_linux_record_tdep.arg6 = PPC_R0_REGNUM + 8;
+      ppc64_linux_record_tdep.arg1 = PPC_R0_REGNUM + 3;
+      ppc64_linux_record_tdep.arg2 = PPC_R0_REGNUM + 4;
+      ppc64_linux_record_tdep.arg3 = PPC_R0_REGNUM + 5;
+      ppc64_linux_record_tdep.arg4 = PPC_R0_REGNUM + 6;
+      ppc64_linux_record_tdep.arg5 = PPC_R0_REGNUM + 7;
+      ppc64_linux_record_tdep.arg6 = PPC_R0_REGNUM + 8;
 
-  /* These values are the second argument of system call "sys_ioctl".
-     They are obtained from Linux Kernel source.  */
-  ppc_linux_record_tdep.ioctl_TCGETS = 0x403c7413;
-  ppc_linux_record_tdep.ioctl_TCSETS = 0x803c7414;
-  ppc_linux_record_tdep.ioctl_TCSETSW = 0x803c7415;
-  ppc_linux_record_tdep.ioctl_TCSETSF = 0x803c7416;
-  ppc_linux_record_tdep.ioctl_TCGETA = 0x40147417;
-  ppc_linux_record_tdep.ioctl_TCSETA = 0x80147418;
-  ppc_linux_record_tdep.ioctl_TCSETAW = 0x80147419;
-  ppc_linux_record_tdep.ioctl_TCSETAF = 0x8014741c;
-  ppc_linux_record_tdep.ioctl_TCSBRK = 0x2000741d;
-  ppc_linux_record_tdep.ioctl_TCXONC = 0x2000741e;
-  ppc_linux_record_tdep.ioctl_TCFLSH = 0x2000741f;
-  ppc_linux_record_tdep.ioctl_TIOCEXCL = 0x540c;
-  ppc_linux_record_tdep.ioctl_TIOCNXCL = 0x540d;
-  ppc_linux_record_tdep.ioctl_TIOCSCTTY = 0x540e;
-  ppc_linux_record_tdep.ioctl_TIOCGPGRP = 0x40047477;
-  ppc_linux_record_tdep.ioctl_TIOCSPGRP = 0x80047476;
-  ppc_linux_record_tdep.ioctl_TIOCOUTQ = 0x40047473;
-  ppc_linux_record_tdep.ioctl_TIOCSTI = 0x5412;
-  ppc_linux_record_tdep.ioctl_TIOCGWINSZ = 0x40087468;
-  ppc_linux_record_tdep.ioctl_TIOCSWINSZ = 0x80087467;
-  ppc_linux_record_tdep.ioctl_TIOCMGET = 0x5415;
-  ppc_linux_record_tdep.ioctl_TIOCMBIS = 0x5416;
-  ppc_linux_record_tdep.ioctl_TIOCMBIC = 0x5417;
-  ppc_linux_record_tdep.ioctl_TIOCMSET = 0x5418;
-  ppc_linux_record_tdep.ioctl_TIOCGSOFTCAR = 0x5419;
-  ppc_linux_record_tdep.ioctl_TIOCSSOFTCAR = 0x541a;
-  ppc_linux_record_tdep.ioctl_FIONREAD = 0x4004667f;
-  ppc_linux_record_tdep.ioctl_TIOCINQ = 0x4004667f;
-  ppc_linux_record_tdep.ioctl_TIOCLINUX = 0x541c;
-  ppc_linux_record_tdep.ioctl_TIOCCONS = 0x541d;
-  ppc_linux_record_tdep.ioctl_TIOCGSERIAL = 0x541e;
-  ppc_linux_record_tdep.ioctl_TIOCSSERIAL = 0x541f;
-  ppc_linux_record_tdep.ioctl_TIOCPKT = 0x5420;
-  ppc_linux_record_tdep.ioctl_FIONBIO = 0x8004667e;
-  ppc_linux_record_tdep.ioctl_TIOCNOTTY = 0x5422;
-  ppc_linux_record_tdep.ioctl_TIOCSETD = 0x5423;
-  ppc_linux_record_tdep.ioctl_TIOCGETD = 0x5424;
-  ppc_linux_record_tdep.ioctl_TCSBRKP = 0x5425;
-  ppc_linux_record_tdep.ioctl_TIOCSBRK = 0x5427;
-  ppc_linux_record_tdep.ioctl_TIOCCBRK = 0x5428;
-  ppc_linux_record_tdep.ioctl_TIOCGSID = 0x5429;
-  ppc_linux_record_tdep.ioctl_TIOCGPTN = 0x40045430;
-  ppc_linux_record_tdep.ioctl_TIOCSPTLCK = 0x80045431;
-  ppc_linux_record_tdep.ioctl_FIONCLEX = 0x20006602;
-  ppc_linux_record_tdep.ioctl_FIOCLEX = 0x20006601;
-  ppc_linux_record_tdep.ioctl_FIOASYNC = 0x8004667d;
-  ppc_linux_record_tdep.ioctl_TIOCSERCONFIG = 0x5453;
-  ppc_linux_record_tdep.ioctl_TIOCSERGWILD = 0x5454;
-  ppc_linux_record_tdep.ioctl_TIOCSERSWILD = 0x5455;
-  ppc_linux_record_tdep.ioctl_TIOCGLCKTRMIOS = 0x5456;
-  ppc_linux_record_tdep.ioctl_TIOCSLCKTRMIOS = 0x5457;
-  ppc_linux_record_tdep.ioctl_TIOCSERGSTRUCT = 0x5458;
-  ppc_linux_record_tdep.ioctl_TIOCSERGETLSR = 0x5459;
-  ppc_linux_record_tdep.ioctl_TIOCSERGETMULTI = 0x545a;
-  ppc_linux_record_tdep.ioctl_TIOCSERSETMULTI = 0x545b;
-  ppc_linux_record_tdep.ioctl_TIOCMIWAIT = 0x545c;
-  ppc_linux_record_tdep.ioctl_TIOCGICOUNT = 0x545d;
-  ppc_linux_record_tdep.ioctl_FIOQSIZE = 0x40086680;
+      /* These values are the second argument of system call "sys_ioctl".
+	 They are obtained from Linux Kernel source.
+	 See arch/powerpc/include/uapi/asm/ioctls.h.  */
+      ppc64_linux_record_tdep.ioctl_TCGETS = 0x403c7413;
+      ppc64_linux_record_tdep.ioctl_TCSETS = 0x803c7414;
+      ppc64_linux_record_tdep.ioctl_TCSETSW = 0x803c7415;
+      ppc64_linux_record_tdep.ioctl_TCSETSF = 0x803c7416;
+      ppc64_linux_record_tdep.ioctl_TCGETA = 0x40147417;
+      ppc64_linux_record_tdep.ioctl_TCSETA = 0x80147418;
+      ppc64_linux_record_tdep.ioctl_TCSETAW = 0x80147419;
+      ppc64_linux_record_tdep.ioctl_TCSETAF = 0x8014741c;
+      ppc64_linux_record_tdep.ioctl_TCSBRK = 0x2000741d;
+      ppc64_linux_record_tdep.ioctl_TCXONC = 0x2000741e;
+      ppc64_linux_record_tdep.ioctl_TCFLSH = 0x2000741f;
+      ppc64_linux_record_tdep.ioctl_TIOCEXCL = 0x540c;
+      ppc64_linux_record_tdep.ioctl_TIOCNXCL = 0x540d;
+      ppc64_linux_record_tdep.ioctl_TIOCSCTTY = 0x540e;
+      ppc64_linux_record_tdep.ioctl_TIOCGPGRP = 0x40047477;
+      ppc64_linux_record_tdep.ioctl_TIOCSPGRP = 0x80047476;
+      ppc64_linux_record_tdep.ioctl_TIOCOUTQ = 0x40047473;
+      ppc64_linux_record_tdep.ioctl_TIOCSTI = 0x5412;
+      ppc64_linux_record_tdep.ioctl_TIOCGWINSZ = 0x40087468;
+      ppc64_linux_record_tdep.ioctl_TIOCSWINSZ = 0x80087467;
+      ppc64_linux_record_tdep.ioctl_TIOCMGET = 0x5415;
+      ppc64_linux_record_tdep.ioctl_TIOCMBIS = 0x5416;
+      ppc64_linux_record_tdep.ioctl_TIOCMBIC = 0x5417;
+      ppc64_linux_record_tdep.ioctl_TIOCMSET = 0x5418;
+      ppc64_linux_record_tdep.ioctl_TIOCGSOFTCAR = 0x5419;
+      ppc64_linux_record_tdep.ioctl_TIOCSSOFTCAR = 0x541a;
+      ppc64_linux_record_tdep.ioctl_FIONREAD = 0x4004667f;
+      ppc64_linux_record_tdep.ioctl_TIOCINQ = 0x4004667f;
+      ppc64_linux_record_tdep.ioctl_TIOCLINUX = 0x541c;
+      ppc64_linux_record_tdep.ioctl_TIOCCONS = 0x541d;
+      ppc64_linux_record_tdep.ioctl_TIOCGSERIAL = 0x541e;
+      ppc64_linux_record_tdep.ioctl_TIOCSSERIAL = 0x541f;
+      ppc64_linux_record_tdep.ioctl_TIOCPKT = 0x5420;
+      ppc64_linux_record_tdep.ioctl_FIONBIO = 0x8004667e;
+      ppc64_linux_record_tdep.ioctl_TIOCNOTTY = 0x5422;
+      ppc64_linux_record_tdep.ioctl_TIOCSETD = 0x5423;
+      ppc64_linux_record_tdep.ioctl_TIOCGETD = 0x5424;
+      ppc64_linux_record_tdep.ioctl_TCSBRKP = 0x5425;
+      ppc64_linux_record_tdep.ioctl_TIOCSBRK = 0x5427;
+      ppc64_linux_record_tdep.ioctl_TIOCCBRK = 0x5428;
+      ppc64_linux_record_tdep.ioctl_TIOCGSID = 0x5429;
+      ppc64_linux_record_tdep.ioctl_TIOCGPTN = 0x40045430;
+      ppc64_linux_record_tdep.ioctl_TIOCSPTLCK = 0x80045431;
+      ppc64_linux_record_tdep.ioctl_FIONCLEX = 0x20006602;
+      ppc64_linux_record_tdep.ioctl_FIOCLEX = 0x20006601;
+      ppc64_linux_record_tdep.ioctl_FIOASYNC = 0x8004667d;
+      ppc64_linux_record_tdep.ioctl_TIOCSERCONFIG = 0x5453;
+      ppc64_linux_record_tdep.ioctl_TIOCSERGWILD = 0x5454;
+      ppc64_linux_record_tdep.ioctl_TIOCSERSWILD = 0x5455;
+      ppc64_linux_record_tdep.ioctl_TIOCGLCKTRMIOS = 0x5456;
+      ppc64_linux_record_tdep.ioctl_TIOCSLCKTRMIOS = 0x5457;
+      ppc64_linux_record_tdep.ioctl_TIOCSERGSTRUCT = 0x5458;
+      ppc64_linux_record_tdep.ioctl_TIOCSERGETLSR = 0x5459;
+      ppc64_linux_record_tdep.ioctl_TIOCSERGETMULTI = 0x545a;
+      ppc64_linux_record_tdep.ioctl_TIOCSERSETMULTI = 0x545b;
+      ppc64_linux_record_tdep.ioctl_TIOCMIWAIT = 0x545c;
+      ppc64_linux_record_tdep.ioctl_TIOCGICOUNT = 0x545d;
+      ppc64_linux_record_tdep.ioctl_FIOQSIZE = 0x40086680;
+    }
+  else if (tdep->wordsize == 4 && ppc_linux_record_tdep.size_pointer == 0)
+    {
+      ppc_linux_record_tdep.size_pointer
+	= gdbarch_ptr_bit (gdbarch) / TARGET_CHAR_BIT;
+      ppc_linux_record_tdep.size__old_kernel_stat = 32;
+      ppc_linux_record_tdep.size_tms = 16;
+      ppc_linux_record_tdep.size_loff_t = 8;
+      ppc_linux_record_tdep.size_flock = 16;
+      ppc_linux_record_tdep.size_oldold_utsname = 45;
+      ppc_linux_record_tdep.size_ustat = 20;
+      ppc_linux_record_tdep.size_old_sigaction = 152;
+      ppc_linux_record_tdep.size_old_sigset_t = 128;
+      ppc_linux_record_tdep.size_rlimit = 8;
+      ppc_linux_record_tdep.size_rusage = 72;
+      ppc_linux_record_tdep.size_timeval = 8;
+      ppc_linux_record_tdep.size_timezone = 8;
+      ppc_linux_record_tdep.size_old_gid_t = 4;
+      ppc_linux_record_tdep.size_old_uid_t = 4;
+      ppc_linux_record_tdep.size_fd_set = 128;
+      ppc_linux_record_tdep.size_dirent = 268;
+      ppc_linux_record_tdep.size_dirent64 = 280;
+      ppc_linux_record_tdep.size_statfs = 64;
+      ppc_linux_record_tdep.size_statfs64 = 88;
+      ppc_linux_record_tdep.size_sockaddr = 16;
+      ppc_linux_record_tdep.size_int
+	= gdbarch_int_bit (gdbarch) / TARGET_CHAR_BIT;
+      ppc_linux_record_tdep.size_long
+	= gdbarch_long_bit (gdbarch) / TARGET_CHAR_BIT;
+      ppc_linux_record_tdep.size_ulong
+	= gdbarch_long_bit (gdbarch) / TARGET_CHAR_BIT;
+      ppc_linux_record_tdep.size_msghdr = 28;
+      ppc_linux_record_tdep.size_itimerval = 16;
+      ppc_linux_record_tdep.size_stat = 88;
+      ppc_linux_record_tdep.size_old_utsname = 325;
+      ppc_linux_record_tdep.size_sysinfo = 64;
+      ppc_linux_record_tdep.size_msqid_ds = 68;
+      ppc_linux_record_tdep.size_shmid_ds = 60;
+      ppc_linux_record_tdep.size_new_utsname = 390;
+      ppc_linux_record_tdep.size_timex = 128;
+      ppc_linux_record_tdep.size_mem_dqinfo = 24;
+      ppc_linux_record_tdep.size_if_dqblk = 72;
+      ppc_linux_record_tdep.size_fs_quota_stat = 80;
+      ppc_linux_record_tdep.size_timespec = 8;
+      ppc_linux_record_tdep.size_pollfd = 8;
+      ppc_linux_record_tdep.size_NFS_FHSIZE = 32;
+      ppc_linux_record_tdep.size_knfsd_fh = 132;
+      ppc_linux_record_tdep.size_TASK_COMM_LEN = 32;
+      ppc_linux_record_tdep.size_sigaction = 140;
+      ppc_linux_record_tdep.size_sigset_t = 128;
+      ppc_linux_record_tdep.size_siginfo_t = 128;
+      ppc_linux_record_tdep.size_cap_user_data_t = 4;
+      ppc_linux_record_tdep.size_stack_t = 12;
+      ppc_linux_record_tdep.size_off_t = 4;
+      ppc_linux_record_tdep.size_stat64 = 104;
+      ppc_linux_record_tdep.size_gid_t = 4;
+      ppc_linux_record_tdep.size_uid_t = 4;
+      ppc_linux_record_tdep.size_PAGE_SIZE = 0x10000;	/* 64KB */
+      ppc_linux_record_tdep.size_flock64 = 32;
+      ppc_linux_record_tdep.size_io_event = 32;
+      ppc_linux_record_tdep.size_iocb = 64;
+      ppc_linux_record_tdep.size_epoll_event = 16;
+      ppc_linux_record_tdep.size_itimerspec = 16;
+      ppc_linux_record_tdep.size_mq_attr = 32;
+      ppc_linux_record_tdep.size_siginfo = 128;
+      ppc_linux_record_tdep.size_termios = 44;
+      ppc_linux_record_tdep.size_pid_t = 4;
+      ppc_linux_record_tdep.size_winsize = 8;
+      ppc_linux_record_tdep.size_serial_struct = 60;
+      ppc_linux_record_tdep.size_serial_icounter_struct = 80;
+      ppc_linux_record_tdep.size_size_t = 4;
+      ppc_linux_record_tdep.size_iovec = 8;
+
+      /* These values are the second argument of system call "sys_fcntl"
+	 and "sys_fcntl64".  They are obtained from Linux Kernel source.  */
+      ppc_linux_record_tdep.fcntl_F_GETLK = 5;
+      ppc_linux_record_tdep.fcntl_F_GETLK64 = 12;
+      ppc_linux_record_tdep.fcntl_F_SETLK64 = 13;
+      ppc_linux_record_tdep.fcntl_F_SETLKW64 = 14;
+
+      ppc_linux_record_tdep.arg1 = PPC_R0_REGNUM + 3;
+      ppc_linux_record_tdep.arg2 = PPC_R0_REGNUM + 4;
+      ppc_linux_record_tdep.arg3 = PPC_R0_REGNUM + 5;
+      ppc_linux_record_tdep.arg4 = PPC_R0_REGNUM + 6;
+      ppc_linux_record_tdep.arg5 = PPC_R0_REGNUM + 7;
+      ppc_linux_record_tdep.arg6 = PPC_R0_REGNUM + 8;
+
+      /* These values are the second argument of system call "sys_ioctl".
+	 They are obtained from Linux Kernel source.
+	 See arch/powerpc/include/uapi/asm/ioctls.h.  */
+      ppc_linux_record_tdep.ioctl_TCGETS = 0x403c7413;
+      ppc_linux_record_tdep.ioctl_TCSETS = 0x803c7414;
+      ppc_linux_record_tdep.ioctl_TCSETSW = 0x803c7415;
+      ppc_linux_record_tdep.ioctl_TCSETSF = 0x803c7416;
+      ppc_linux_record_tdep.ioctl_TCGETA = 0x40147417;
+      ppc_linux_record_tdep.ioctl_TCSETA = 0x80147418;
+      ppc_linux_record_tdep.ioctl_TCSETAW = 0x80147419;
+      ppc_linux_record_tdep.ioctl_TCSETAF = 0x8014741c;
+      ppc_linux_record_tdep.ioctl_TCSBRK = 0x2000741d;
+      ppc_linux_record_tdep.ioctl_TCXONC = 0x2000741e;
+      ppc_linux_record_tdep.ioctl_TCFLSH = 0x2000741f;
+      ppc_linux_record_tdep.ioctl_TIOCEXCL = 0x540c;
+      ppc_linux_record_tdep.ioctl_TIOCNXCL = 0x540d;
+      ppc_linux_record_tdep.ioctl_TIOCSCTTY = 0x540e;
+      ppc_linux_record_tdep.ioctl_TIOCGPGRP = 0x40047477;
+      ppc_linux_record_tdep.ioctl_TIOCSPGRP = 0x80047476;
+      ppc_linux_record_tdep.ioctl_TIOCOUTQ = 0x40047473;
+      ppc_linux_record_tdep.ioctl_TIOCSTI = 0x5412;
+      ppc_linux_record_tdep.ioctl_TIOCGWINSZ = 0x40087468;
+      ppc_linux_record_tdep.ioctl_TIOCSWINSZ = 0x80087467;
+      ppc_linux_record_tdep.ioctl_TIOCMGET = 0x5415;
+      ppc_linux_record_tdep.ioctl_TIOCMBIS = 0x5416;
+      ppc_linux_record_tdep.ioctl_TIOCMBIC = 0x5417;
+      ppc_linux_record_tdep.ioctl_TIOCMSET = 0x5418;
+      ppc_linux_record_tdep.ioctl_TIOCGSOFTCAR = 0x5419;
+      ppc_linux_record_tdep.ioctl_TIOCSSOFTCAR = 0x541a;
+      ppc_linux_record_tdep.ioctl_FIONREAD = 0x4004667f;
+      ppc_linux_record_tdep.ioctl_TIOCINQ = 0x4004667f;
+      ppc_linux_record_tdep.ioctl_TIOCLINUX = 0x541c;
+      ppc_linux_record_tdep.ioctl_TIOCCONS = 0x541d;
+      ppc_linux_record_tdep.ioctl_TIOCGSERIAL = 0x541e;
+      ppc_linux_record_tdep.ioctl_TIOCSSERIAL = 0x541f;
+      ppc_linux_record_tdep.ioctl_TIOCPKT = 0x5420;
+      ppc_linux_record_tdep.ioctl_FIONBIO = 0x8004667e;
+      ppc_linux_record_tdep.ioctl_TIOCNOTTY = 0x5422;
+      ppc_linux_record_tdep.ioctl_TIOCSETD = 0x5423;
+      ppc_linux_record_tdep.ioctl_TIOCGETD = 0x5424;
+      ppc_linux_record_tdep.ioctl_TCSBRKP = 0x5425;
+      ppc_linux_record_tdep.ioctl_TIOCSBRK = 0x5427;
+      ppc_linux_record_tdep.ioctl_TIOCCBRK = 0x5428;
+      ppc_linux_record_tdep.ioctl_TIOCGSID = 0x5429;
+      ppc_linux_record_tdep.ioctl_TIOCGPTN = 0x40045430;
+      ppc_linux_record_tdep.ioctl_TIOCSPTLCK = 0x80045431;
+      ppc_linux_record_tdep.ioctl_FIONCLEX = 0x20006602;
+      ppc_linux_record_tdep.ioctl_FIOCLEX = 0x20006601;
+      ppc_linux_record_tdep.ioctl_FIOASYNC = 0x8004667d;
+      ppc_linux_record_tdep.ioctl_TIOCSERCONFIG = 0x5453;
+      ppc_linux_record_tdep.ioctl_TIOCSERGWILD = 0x5454;
+      ppc_linux_record_tdep.ioctl_TIOCSERSWILD = 0x5455;
+      ppc_linux_record_tdep.ioctl_TIOCGLCKTRMIOS = 0x5456;
+      ppc_linux_record_tdep.ioctl_TIOCSLCKTRMIOS = 0x5457;
+      ppc_linux_record_tdep.ioctl_TIOCSERGSTRUCT = 0x5458;
+      ppc_linux_record_tdep.ioctl_TIOCSERGETLSR = 0x5459;
+      ppc_linux_record_tdep.ioctl_TIOCSERGETMULTI = 0x545a;
+      ppc_linux_record_tdep.ioctl_TIOCSERSETMULTI = 0x545b;
+      ppc_linux_record_tdep.ioctl_TIOCMIWAIT = 0x545c;
+      ppc_linux_record_tdep.ioctl_TIOCGICOUNT = 0x545d;
+      ppc_linux_record_tdep.ioctl_FIOQSIZE = 0x40086680;
+    }
 }
 
 /* Provide a prototype to silence -Wmissing-prototypes.  */
