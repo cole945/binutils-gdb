@@ -1882,7 +1882,7 @@ proc supports_process_record {} {
 
     if { [istarget "arm*-*-linux*"] || [istarget "x86_64-*-linux*"]
          || [istarget "i\[34567\]86-*-linux*"]
-         || [istarget "powerpc*-linux*"] } {
+         || [istarget "powerpc*-*-linux*"] } {
 	return 1
     }
 
@@ -1899,7 +1899,7 @@ proc supports_reverse {} {
 
     if { [istarget "arm*-*-linux*"] || [istarget "x86_64-*-linux*"]
          || [istarget "i\[34567\]86-*-linux*"]
-         || [istarget "powerpc*-linux*"] } {
+         || [istarget "powerpc*-*-linux*"] } {
 	return 1
     }
 

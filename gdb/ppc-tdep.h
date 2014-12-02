@@ -260,7 +260,7 @@ struct gdbarch_tdep
     struct type *ppc_builtin_type_vec64;
     struct type *ppc_builtin_type_vec128;
 
-    int (* syscall_record) (struct regcache *regcache);
+    int (*syscall_record) (struct regcache *regcache);
 };
 
 
@@ -320,8 +320,8 @@ extern CORE_ADDR ppc_insn_d_field (unsigned int insn);
 
 extern CORE_ADDR ppc_insn_ds_field (unsigned int insn);
 
-extern int ppc64_process_record (struct gdbarch *gdbarch,
-				 struct regcache *regcache, CORE_ADDR addr);
+extern int ppc_process_record (struct gdbarch *gdbarch,
+			       struct regcache *regcache, CORE_ADDR addr);
 
 /* Instruction size.  */
 #define PPC_INSN_SIZE 4
