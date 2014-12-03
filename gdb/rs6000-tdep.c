@@ -4691,6 +4691,103 @@ ppc_process_record_op60 (struct gdbarch *gdbarch, struct regcache *regcache,
       return 0;
     }
 
+  switch (ext >> 1)
+    {
+    case 265:		/* VSX Scalar round Double-Precision to
+			   Single-Precision and Convert to
+			   Single-Precision format */
+    case 344:		/* VSX Scalar truncate Double-Precision to
+			   Integer and Convert to Signed Integer
+			   Doubleword format with Saturate */
+    case 88:		/* VSX Scalar truncate Double-Precision to
+			   Integer and Convert to Signed Integer Word
+			   Format with Saturate */
+    case 328:		/* VSX Scalar truncate Double-Precision integer
+			   and Convert to Unsigned Integer Doubleword
+			   Format with Saturate */
+    case 72:		/* VSX Scalar truncate Double-Precision to
+			   Integer and Convert to Unsigned Integer Word
+			   Format with Saturate */
+    case 329:		/* VSX Scalar Convert Single-Precision to
+			   Double-Precision format */
+    case 376:		/* VSX Scalar Convert Signed Integer
+			   Doubleword to floating-point format and
+			   Round to Double-Precision format */
+    case 312:		/* VSX Scalar Convert Signed Integer
+			   Doubleword to floating-point format and
+			   round to Single-Precision */
+    case 360:		/* VSX Scalar Convert Unsigned Integer
+			   Doubleword to floating-point format and
+			   Round to Double-Precision format */
+    case 296:		/* VSX Scalar Convert Unsigned Integer
+			   Doubleword to floating-point format and
+			   Round to Single-Precision */
+    case 73:		/* VSX Scalar Round to Double-Precision Integer
+			   Using Round to Nearest Away */
+    case 107:		/* VSX Scalar Round to Double-Precision Integer
+			   Exact using Current rounding mode */
+    case 121:		/* VSX Scalar Round to Double-Precision Integer
+			   Using Round toward -Infinity */
+    case 105:		/* VSX Scalar Round to Double-Precision Integer
+			   Using Round toward +Infinity */
+    case 89:		/* VSX Scalar Round to Double-Precision Integer
+			   Using Round toward Zero */
+    case 90:		/* VSX Scalar Reciprocal Estimate Double-Precision */
+    case 26:		/* VSX Scalar Reciprocal Estimate Single-Precision */
+    case 281:		/* VSX Scalar Round to Single-Precision */
+    case 74:		/* VSX Scalar Reciprocal Square Root Estimate
+			   Double-Precision */
+    case 10:		/* VSX Scalar Reciprocal Square Root Estimate
+			   Single-Precision */
+    case 75:		/* VSX Scalar Square Root Double-Precision */
+    case 393:		/* VSX Vector round Double-Precision to
+			   Single-Precision and Convert to
+			   Single-Precision format */
+    case 472:		/* VSX Vector truncate Double-Precision to
+			   Integer and Convert to Signed Integer
+			   Doubleword format with Saturate */
+    case 216:		/* VSX Vector truncate Double-Precision to
+			   Integer and Convert to Signed Integer Word
+			   Format with Saturate */
+    case 456:		/* VSX Vector truncate Double-Precision to
+			   Integer and Convert to Unsigned Integer
+			   Doubleword format with Saturate */
+    case 200:		/* VSX Vector truncate Double-Precision to
+			   Integer and Convert to Unsigned Integer Word
+			   Format with Saturate */
+    case 457:		/* VSX Vector Convert Single-Precision to
+			   Double-Precision format */
+    case 408:		/* VSX Vector truncate Single-Precision to
+			   Integer and Convert to Signed Integer
+			   Doubleword format with Saturate */
+    case 152:		/* VSX Vector truncate Single-Precision to
+			   Integer and Convert to Signed Integer Word
+			   Format with Saturate */
+    case 392:		/* VSX Vector truncate Single-Precision to
+			   Integer and Convert to Unsigned Integer
+			   Doubleword format with Saturate */
+    case 136:		/* VSX Vector truncate Single-Precision to
+			   Integer and Convert to Unsigned Integer Word
+			   Format with Saturate */
+      record_full_arch_list_add_reg (regcache, tdep->ppc_fpscr_regnum);
+    case 345:		/* VSX Scalar Absolute Value Double-Precision */
+    case 267:		/* VSX Scalar Convert Scalar Single-Precision to
+			   Vector Single-Precision format Non-signalling */
+    case 331:		/* VSX Scalar Convert Single-Precision to
+			   Double-Precision format Non-signalling */
+    case 361:		/* VSX Scalar Negative Absolute Value Double-Precision */
+    case 377:		/* VSX Scalar Negate Double-Precision */
+    case 473:		/* VSX Vector Absolute Value Double-Precision */
+    case 409:		/* VSX Vector Absolute Value Single-Precision */
+      ppc_record_vsr (regcache, tdep, PPC_XT (insn));
+      return 0;
+
+    case 106:		/* VSX Scalar Test for software Square Root
+			   Double-Precision */
+      record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
+      return 0;
+    }
+
   if (((ext >> 3) & 0x3) == 3)	/* VSX Select */
     {
       ppc_record_vsr (regcache, tdep, PPC_XT (insn));
