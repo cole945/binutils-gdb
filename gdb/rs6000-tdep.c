@@ -4576,6 +4576,109 @@ ppc_process_record_op60 (struct gdbarch *gdbarch, struct regcache *regcache,
 {
   int ext = PPC_EXTOP (insn);
 
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  int ext = PPC_EXTOP (insn);
+  int tmp;
+
+  switch (ext >> 2)
+    {
+    case 0:		/* VSX Scalar Add Single-Precision */
+    case 32:		/* VSX Scalar Add Double-Precision */
+    case 24:		/* VSX Scalar Divide Single-Precision */
+    case 56:		/* VSX Scalar Divide Double-Precision */
+    case 176:		/* VSX Scalar Copy Sign Double-Precision */
+    case 33:		/* VSX Scalar Multiply-Add Double-Precision/a */
+    case 41:		/* VSX Scalar Multiply-Add Double-Precision/m */
+    case 1:		/* VSX Scalar Multiply-Add Single-Precision/a */
+    case 9:		/* VSX Scalar Multiply-Add Single-Precision/m */
+    case 160:		/* VSX Scalar Maximum Double-Precision */
+    case 168:		/* VSX Scalar Minimum Double-Precision */
+    case 49:		/* VSX Scalar Multiply-Subtract Double-Precision/a */
+    case 57:		/* VSX Scalar Multiply-Subtract Double-Precision/m */
+    case 17:		/* VSX Scalar Multiply-Subtract Single-Precision/a */
+    case 25:		/* VSX Scalar Multiply-Subtract Single-Precision/m */
+    case 48:		/* VSX Scalar Multiply Double-Precision */
+    case 16:		/* VSX Scalar Multiply Single-Precision */
+    case 161:		/* VSX Scalar Negative Multiply-Add Double-Precision/a */
+    case 169:		/* VSX Scalar Negative Multiply-Add Double-Precision/m */
+    case 129:		/* VSX Scalar Negative Multiply-Add Single-Precision/a */
+    case 137:		/* VSX Scalar Negative Multiply-Add Single-Precision/m */
+    case 177:		/* VSX Scalar Negative Multiply-Subtract Double-Precision/a */
+    case 185:		/* VSX Scalar Negative Multiply-Subtract Double-Precision/m */
+    case 145:		/* VSX Scalar Negative Multiply-Subtract Single-Precision/a */
+    case 153:		/* VSX Scalar Negative Multiply-Subtract Single-Precision/m */
+    case 40:		/* VSX Scalar Subtract Double-Precision */
+    case 8:		/* VSX Scalar Subtract Single-Precision */
+    case 61:		/* VSX Scalar Test for software Divide Double-Precision */
+    case 96:		/* VSX Vector Add Double-Precision */
+    case 64:		/* VSX Vector Add Single-Precision */
+    case 240:		/* VSX Vector Copy Sign Double-Precision */
+    case 208:		/* VSX Vector Copy Sign Single-Precision */
+    case 120:		/* VSX Vector Divide Double-Precision */
+    case 88:		/* VSX Vector Divide Single-Precision */
+    case 97:		/* VSX Vector Multiply-Add Double-Precision/a */
+    case 105:		/* VSX Vector Multiply-Add Double-Precision/m */
+    case 65:		/* VSX Vector Multiply-Add Single-Precision/a */
+    case 73:		/* VSX Vector Multiply-Add Single-Precision/m */
+    case 224:		/* VSX Vector Maximum Double-Precision */
+    case 192:		/* VSX Vector Maximum Single-Precision */
+    case 232:		/* VSX Vector Minimum Double-Precision */
+    case 200:		/* VSX Vector Minimum Single-Precision */
+    case 113:		/* VSX Vector Multiply-Subtract Double-Precision/a */
+    case 121:		/* VSX Vector Multiply-Subtract Double-Precision/m */
+    case 81:		/* VSX Vector Multiply-Subtract Single-Precision/a */
+    case 89:		/* VSX Vector Multiply-Subtract Single-Precision/m */
+    case 112:		/* VSX Vector Multiply Double-Precision */
+    case 80:		/* VSX Vector Multiply Single-Precision */
+    case 225:		/* VSX Vector Negative Multiply-Add Double-Precision/a */
+    case 233:		/* VSX Vector Negative Multiply-Add Double-Precision/m */
+    case 193:		/* VSX Vector Negative Multiply-Add Single-Precision/a */
+    case 201:		/* VSX Vector Negative Multiply-Add Single-Precision/m */
+    case 241:		/* VSX Vector Negative Multiply-Subtract Double-Precision/a */
+    case 249:		/* VSX Vector Negative Multiply-Subtract Double-Precision/m */
+    case 209:		/* VSX Vector Negative Multiply-Subtract Single-Precision/a */
+    case 217:		/* VSX Vector Negative Multiply-Subtract Single-Precision/m */
+    case 104:		/* VSX Vector Subtract Double-Precision */
+    case 72:		/* VSX Vector Subtract Single-Precision */
+      record_full_arch_list_add_reg (regcache, tdep->ppc_fpscr_regnum);
+    case 130:		/* VSX Logical AND */
+    case 138:		/* VSX Logical AND with Complement */
+    case 186:		/* VSX Logical Equivalence */
+    case 178:		/* VSX Logical NAND */
+    case 170:		/* VSX Logical OR with Complement */
+    case 162:		/* VSX Logical NOR */
+      ppc_record_vsr (regcache, tdep, PPC_XT (insn));
+      return 0;
+
+    case 125:		/* VSX Vector Test for software Divide Double-Precision */
+    case 93:		/* VSX Vector Test for software Divide Single-Precision */
+      record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
+      return 0;
+
+    case 35:		/* VSX Scalar Compare Unordered Double-Precision */
+    case 43:		/* VSX Scalar Compare Ordered Double-Precision */
+      record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
+      record_full_arch_list_add_reg (regcache, tdep->ppc_fpscr_regnum);
+      return 0;
+    }
+
+  switch ((ext >> 2) & 0x7f) /* Mask out Rc-bit.  */
+    {
+    case 99:		/* VSX Vector Compare Equal To Double-Precision */
+    case 67:		/* VSX Vector Compare Equal To Single-Precision */
+    case 115:		/* VSX Vector Compare Greater Than or
+			   Equal To Double-Precision */
+    case 83:		/* VSX Vector Compare Greater Than or
+			   Equal To Single-Precision */
+    case 107:		/* VSX Vector Compare Greater Than Double-Precision */
+    case 75:		/* VSX Vector Compare Greater Than Single-Precision */
+      if (PPC_Rc (insn))
+	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
+      record_full_arch_list_add_reg (regcache, tdep->ppc_fpscr_regnum);
+      ppc_record_vsr (regcache, tdep, PPC_XT (insn));
+      return 0;
+    }
+
   fprintf_unfiltered (gdb_stdlog, "VSX instructions not yet supported. "
 		      "%08x at %08lx, 60-%d.\n", insn, addr, ext);
   return -1;
