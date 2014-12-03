@@ -4587,26 +4587,26 @@ ppc_process_record_op60 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 24:		/* VSX Scalar Divide Single-Precision */
     case 56:		/* VSX Scalar Divide Double-Precision */
     case 176:		/* VSX Scalar Copy Sign Double-Precision */
-    case 33:		/* VSX Scalar Multiply-Add Double-Precision/a */
-    case 41:		/* VSX Scalar Multiply-Add Double-Precision/m */
-    case 1:		/* VSX Scalar Multiply-Add Single-Precision/a */
-    case 9:		/* VSX Scalar Multiply-Add Single-Precision/m */
+    case 33:		/* VSX Scalar Multiply-Add Double-Precision */
+    case 41:		/* ditto */
+    case 1:		/* VSX Scalar Multiply-Add Single-Precision */
+    case 9:		/* ditto */
     case 160:		/* VSX Scalar Maximum Double-Precision */
     case 168:		/* VSX Scalar Minimum Double-Precision */
-    case 49:		/* VSX Scalar Multiply-Subtract Double-Precision/a */
-    case 57:		/* VSX Scalar Multiply-Subtract Double-Precision/m */
-    case 17:		/* VSX Scalar Multiply-Subtract Single-Precision/a */
-    case 25:		/* VSX Scalar Multiply-Subtract Single-Precision/m */
+    case 49:		/* VSX Scalar Multiply-Subtract Double-Precision */
+    case 57:		/* ditto */
+    case 17:		/* VSX Scalar Multiply-Subtract Single-Precision */
+    case 25:		/* ditto */
     case 48:		/* VSX Scalar Multiply Double-Precision */
     case 16:		/* VSX Scalar Multiply Single-Precision */
-    case 161:		/* VSX Scalar Negative Multiply-Add Double-Precision/a */
-    case 169:		/* VSX Scalar Negative Multiply-Add Double-Precision/m */
-    case 129:		/* VSX Scalar Negative Multiply-Add Single-Precision/a */
-    case 137:		/* VSX Scalar Negative Multiply-Add Single-Precision/m */
-    case 177:		/* VSX Scalar Negative Multiply-Subtract Double-Precision/a */
-    case 185:		/* VSX Scalar Negative Multiply-Subtract Double-Precision/m */
-    case 145:		/* VSX Scalar Negative Multiply-Subtract Single-Precision/a */
-    case 153:		/* VSX Scalar Negative Multiply-Subtract Single-Precision/m */
+    case 161:		/* VSX Scalar Negative Multiply-Add Double-Precision */
+    case 169:		/* ditto */
+    case 129:		/* VSX Scalar Negative Multiply-Add Single-Precision */
+    case 137:		/* ditto */
+    case 177:		/* VSX Scalar Negative Multiply-Subtract Double-Precision */
+    case 185:		/* ditto */
+    case 145:		/* VSX Scalar Negative Multiply-Subtract Single-Precision */
+    case 153:		/* ditto */
     case 40:		/* VSX Scalar Subtract Double-Precision */
     case 8:		/* VSX Scalar Subtract Single-Precision */
     case 61:		/* VSX Scalar Test for software Divide Double-Precision */
@@ -4616,28 +4616,28 @@ ppc_process_record_op60 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 208:		/* VSX Vector Copy Sign Single-Precision */
     case 120:		/* VSX Vector Divide Double-Precision */
     case 88:		/* VSX Vector Divide Single-Precision */
-    case 97:		/* VSX Vector Multiply-Add Double-Precision/a */
-    case 105:		/* VSX Vector Multiply-Add Double-Precision/m */
-    case 65:		/* VSX Vector Multiply-Add Single-Precision/a */
-    case 73:		/* VSX Vector Multiply-Add Single-Precision/m */
+    case 97:		/* VSX Vector Multiply-Add Double-Precision */
+    case 105:		/* ditto */
+    case 65:		/* VSX Vector Multiply-Add Single-Precision */
+    case 73:		/* ditto */
     case 224:		/* VSX Vector Maximum Double-Precision */
     case 192:		/* VSX Vector Maximum Single-Precision */
     case 232:		/* VSX Vector Minimum Double-Precision */
     case 200:		/* VSX Vector Minimum Single-Precision */
-    case 113:		/* VSX Vector Multiply-Subtract Double-Precision/a */
-    case 121:		/* VSX Vector Multiply-Subtract Double-Precision/m */
-    case 81:		/* VSX Vector Multiply-Subtract Single-Precision/a */
-    case 89:		/* VSX Vector Multiply-Subtract Single-Precision/m */
+    case 113:		/* VSX Vector Multiply-Subtract Double-Precision */
+    case 121:		/* ditto */
+    case 81:		/* VSX Vector Multiply-Subtract Single-Precision */
+    case 89:		/* ditto */
     case 112:		/* VSX Vector Multiply Double-Precision */
     case 80:		/* VSX Vector Multiply Single-Precision */
-    case 225:		/* VSX Vector Negative Multiply-Add Double-Precision/a */
-    case 233:		/* VSX Vector Negative Multiply-Add Double-Precision/m */
-    case 193:		/* VSX Vector Negative Multiply-Add Single-Precision/a */
-    case 201:		/* VSX Vector Negative Multiply-Add Single-Precision/m */
-    case 241:		/* VSX Vector Negative Multiply-Subtract Double-Precision/a */
-    case 249:		/* VSX Vector Negative Multiply-Subtract Double-Precision/m */
-    case 209:		/* VSX Vector Negative Multiply-Subtract Single-Precision/a */
-    case 217:		/* VSX Vector Negative Multiply-Subtract Single-Precision/m */
+    case 225:		/* VSX Vector Negative Multiply-Add Double-Precision */
+    case 233:		/* ditto */
+    case 193:		/* VSX Vector Negative Multiply-Add Single-Precision */
+    case 201:		/* ditto */
+    case 241:		/* VSX Vector Negative Multiply-Subtract Double-Precision */
+    case 249:		/* ditto */
+    case 209:		/* VSX Vector Negative Multiply-Subtract Single-Precision */
+    case 217:		/* ditto */
     case 104:		/* VSX Vector Subtract Double-Precision */
     case 72:		/* VSX Vector Subtract Single-Precision */
       record_full_arch_list_add_reg (regcache, tdep->ppc_fpscr_regnum);
@@ -4647,6 +4647,18 @@ ppc_process_record_op60 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 178:		/* VSX Logical NAND */
     case 170:		/* VSX Logical OR with Complement */
     case 162:		/* VSX Logical NOR */
+    case 146:		/* VSX Logical OR */
+    case 154:		/* VSX Logical XOR */
+    case 18:		/* VSX Merge High Word */
+    case 50:		/* VSX Merge Low Word */
+    case 10:		/* VSX Permute Doubleword Immediate (DM=0) */
+    case 10 | 0x20:	/* VSX Permute Doubleword Immediate (DM=1) */
+    case 10 | 0x40:	/* VSX Permute Doubleword Immediate (DM=2) */
+    case 10 | 0x60:	/* VSX Permute Doubleword Immediate (DM=3) */
+    case 2:		/* VSX Shift Left Double by Word Immediate (SHW=0) */
+    case 2 | 0x20:	/* VSX Shift Left Double by Word Immediate (SHW=1) */
+    case 2 | 0x40:	/* VSX Shift Left Double by Word Immediate (SHW=2) */
+    case 2 | 0x60:	/* VSX Shift Left Double by Word Immediate (SHW=3) */
       ppc_record_vsr (regcache, tdep, PPC_XT (insn));
       return 0;
 
@@ -4675,6 +4687,12 @@ ppc_process_record_op60 (struct gdbarch *gdbarch, struct regcache *regcache,
       if (PPC_Rc (insn))
 	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
       record_full_arch_list_add_reg (regcache, tdep->ppc_fpscr_regnum);
+      ppc_record_vsr (regcache, tdep, PPC_XT (insn));
+      return 0;
+    }
+
+  if (((ext >> 3) & 0x3) == 3)	/* VSX Select */
+    {
       ppc_record_vsr (regcache, tdep, PPC_XT (insn));
       return 0;
     }
