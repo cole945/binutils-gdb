@@ -23,6 +23,7 @@
 #include "ppc-tdep.h"
 #include "ppc64-tdep.h"
 #include "elf-bfd.h"
+#include "infrun.h"
 
 /* Macros for matching instructions.  Note that, since all the
    operands are masked off before they're or-ed into the instruction,
@@ -464,35 +465,57 @@ ppc64_skip_trampoline_code (struct frame_info *frame, CORE_ADDR pc)
 				    ARRAY_SIZE (ppc64_standard_linkage8))))
 		     - 1];
   CORE_ADDR target;
+  int i, n = 1;
 
-  if (ppc_insns_match_pattern (frame, pc, ppc64_standard_linkage8, insns))
-    pc = ppc64_standard_linkage4_target (frame, pc, insns);
-  else if (ppc_insns_match_pattern (frame, pc, ppc64_standard_linkage7, insns))
-    pc = ppc64_standard_linkage3_target (frame, pc, insns);
-  else if (ppc_insns_match_pattern (frame, pc, ppc64_standard_linkage6, insns))
-    pc = ppc64_standard_linkage4_target (frame, pc, insns);
-  else if (ppc_insns_match_pattern (frame, pc, ppc64_standard_linkage5, insns)
-	   && (insns[8] != 0 || insns[9] != 0))
-    pc = ppc64_standard_linkage3_target (frame, pc, insns);
-  else if (ppc_insns_match_pattern (frame, pc, ppc64_standard_linkage4, insns)
-	   && (insns[9] != 0 || insns[10] != 0))
-    pc = ppc64_standard_linkage4_target (frame, pc, insns);
-  else if (ppc_insns_match_pattern (frame, pc, ppc64_standard_linkage3, insns)
-	   && (insns[8] != 0 || insns[9] != 0))
-    pc = ppc64_standard_linkage3_target (frame, pc, insns);
-  else if (ppc_insns_match_pattern (frame, pc, ppc64_standard_linkage2, insns)
-	   && (insns[10] != 0 || insns[11] != 0))
-    pc = ppc64_standard_linkage2_target (frame, pc, insns);
-  else if (ppc_insns_match_pattern (frame, pc, ppc64_standard_linkage1, insns))
-    pc = ppc64_standard_linkage1_target (frame, pc, insns);
-  else
-    return 0;
+  /* When reverse-step, we need to check whether we are in the middle
+     of PLT sequence.  */
+  if (execution_direction == EXEC_REVERSE)
+    n = ARRAY_SIZE (insns);
 
-  /* The PLT descriptor will either point to the already resolved target
-     address, or else to a glink stub.  As the latter carry synthetic @plt
-     symbols, find_solib_trampoline_target should be able to resolve them.  */
-  target = find_solib_trampoline_target (frame, pc);
-  return target ? target : pc;
+  for (i = 0; i < n; i++)
+    {
+      if (i < ARRAY_SIZE (ppc64_standard_linkage8)
+	  && ppc_insns_match_pattern (frame, pc, ppc64_standard_linkage8, insns))
+	pc = ppc64_standard_linkage4_target (frame, pc, insns);
+      else if (i < ARRAY_SIZE (ppc64_standard_linkage7)
+	       && ppc_insns_match_pattern (frame, pc, ppc64_standard_linkage7, insns))
+	pc = ppc64_standard_linkage3_target (frame, pc, insns);
+      else if (i < ARRAY_SIZE (ppc64_standard_linkage6)
+	       && ppc_insns_match_pattern (frame, pc, ppc64_standard_linkage6, insns))
+	pc = ppc64_standard_linkage4_target (frame, pc, insns);
+      else if (i < ARRAY_SIZE (ppc64_standard_linkage5)
+	       && ppc_insns_match_pattern (frame, pc, ppc64_standard_linkage5, insns)
+	       && (insns[8] != 0 || insns[9] != 0))
+	pc = ppc64_standard_linkage3_target (frame, pc, insns);
+      else if (i < ARRAY_SIZE (ppc64_standard_linkage4)
+	       && ppc_insns_match_pattern (frame, pc, ppc64_standard_linkage4, insns)
+	       && (insns[9] != 0 || insns[10] != 0))
+	pc = ppc64_standard_linkage4_target (frame, pc, insns);
+      else if (i < ARRAY_SIZE (ppc64_standard_linkage3)
+	       && ppc_insns_match_pattern (frame, pc, ppc64_standard_linkage3, insns)
+	       && (insns[8] != 0 || insns[9] != 0))
+	pc = ppc64_standard_linkage3_target (frame, pc, insns);
+      else if (i < ARRAY_SIZE (ppc64_standard_linkage2)
+	       && ppc_insns_match_pattern (frame, pc, ppc64_standard_linkage2, insns)
+	       && (insns[10] != 0 || insns[11] != 0))
+	pc = ppc64_standard_linkage2_target (frame, pc, insns);
+      else if (i < ARRAY_SIZE (ppc64_standard_linkage1)
+	       && ppc_insns_match_pattern (frame, pc, ppc64_standard_linkage1, insns))
+	pc = ppc64_standard_linkage1_target (frame, pc, insns);
+      else
+	{
+	  pc -= 4;
+	  continue;
+	}
+
+      /* The PLT descriptor will either point to the already resolved target
+	 address, or else to a glink stub.  As the latter carry synthetic @plt
+	 symbols, find_solib_trampoline_target should be able to resolve them.  */
+      target = find_solib_trampoline_target (frame, pc);
+      return target ? target : pc;
+  }
+
+  return 0;
 }
 
 /* Support for convert_from_func_ptr_addr (ARCH, ADDR, TARG) on PPC64

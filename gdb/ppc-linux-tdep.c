@@ -301,23 +301,6 @@ powerpc_linux_in_dynsym_resolve_code (CORE_ADDR pc)
 	  || strcmp (MSYMBOL_LINKAGE_NAME (sym.minsym),
 		     "__glink_PLTresolve") == 0))
     return 1;
-  else if (sym.minsym != NULL && execution_direction == EXEC_REVERSE)
-    {
-      /* When reverse stepping, gdb needs to know whether PC lies in
-	 the dynamic symbol resolve code, so it can keep going until
-	 reaching some user code.
-	 Using insns-match-pattern is not suitable, because we had to
-	 look both ahead and behind to check where we are in the middle
-	 of one of trampline sequences.  */
-#define SUBSTRCMP(sym, stub)  (memcmp (sym + 8, stub, sizeof (stub) - 1) == 0)
-      if (SUBSTRCMP (MSYMBOL_LINKAGE_NAME (sym.minsym), ".plt_call."))
-	return 1;
-      if (SUBSTRCMP (MSYMBOL_LINKAGE_NAME (sym.minsym), ".plt_branch."))
-	return 1;
-      if (SUBSTRCMP (MSYMBOL_LINKAGE_NAME (sym.minsym), ".plt_branch_r2off."))
-	return 1;
-#undef SUBSTRCMP
-    }
 
   return 0;
 }
@@ -327,36 +310,51 @@ powerpc_linux_in_dynsym_resolve_code (CORE_ADDR pc)
 static CORE_ADDR
 ppc_skip_trampoline_code (struct frame_info *frame, CORE_ADDR pc)
 {
+#define MAX(a,b) ((a) > (b) ? (a) : (b))
   unsigned int insnbuf[POWERPC32_PLT_STUB_LEN];
   struct gdbarch *gdbarch = get_frame_arch (frame);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   CORE_ADDR target = 0;
+  int i, n = 1;
 
-  if (ppc_insns_match_pattern (frame, pc, powerpc32_plt_stub, insnbuf))
+  /* When reverse-step, we need to check whether we are in the middle
+     of PLT sequence.  */
+  if (execution_direction == EXEC_REVERSE)
+    n = MAX (ARRAY_SIZE (powerpc32_plt_stub),
+	     ARRAY_SIZE (powerpc32_plt_stub_so));
+
+  for (i = 0; i < n; i++)
     {
-      /* Insn pattern is
-		lis   r11, xxxx
-		lwz   r11, xxxx(r11)
-	 Branch target is in r11.  */
+      if (ppc_insns_match_pattern (frame, pc, powerpc32_plt_stub, insnbuf))
+	{
+	  /* Insn pattern is
+	     lis   r11, xxxx
+	     lwz   r11, xxxx(r11)
+	     Branch target is in r11.  */
 
-      target = (ppc_insn_d_field (insnbuf[0]) << 16)
-	| ppc_insn_d_field (insnbuf[1]);
-      target = read_memory_unsigned_integer (target, 4, byte_order);
+	  target = (ppc_insn_d_field (insnbuf[0]) << 16)
+	    | ppc_insn_d_field (insnbuf[1]);
+	  target = read_memory_unsigned_integer (target, 4, byte_order);
+
+	  return target;
+	}
+      else if (ppc_insns_match_pattern (frame, pc, powerpc32_plt_stub_so, insnbuf))
+	{
+	  /* Insn pattern is
+	     lwz   r11, xxxx(r30)
+	     Branch target is in r11.  */
+
+	  target = get_frame_register_unsigned (frame, tdep->ppc_gp0_regnum + 30)
+	    + ppc_insn_d_field (insnbuf[0]);
+	  target = read_memory_unsigned_integer (target, 4, byte_order);
+
+	  return target;
+	}
+      pc = pc - 4;
     }
 
-  if (ppc_insns_match_pattern (frame, pc, powerpc32_plt_stub_so, insnbuf))
-    {
-      /* Insn pattern is
-		lwz   r11, xxxx(r30)
-	 Branch target is in r11.  */
-
-      target = get_frame_register_unsigned (frame, tdep->ppc_gp0_regnum + 30)
-	       + ppc_insn_d_field (insnbuf[0]);
-      target = read_memory_unsigned_integer (target, 4, byte_order);
-    }
-
-  return target;
+  return 0;
 }
 
 /* Wrappers to handle Linux-only registers.  */
@@ -1753,15 +1751,6 @@ ppc_linux_init_abi (struct gdbarch_info info,
       set_gdbarch_skip_trampoline_code (gdbarch, ppc64_skip_trampoline_code);
       set_solib_svr4_fetch_link_map_offsets
         (gdbarch, svr4_lp64_fetch_link_map_offsets);
-
-      if (powerpc_so_ops.in_dynsym_resolve_code == NULL)
-	{
-	  powerpc_so_ops = svr4_so_ops;
-	  /* Override dynamic resolve function.  */
-	  powerpc_so_ops.in_dynsym_resolve_code =
-	    powerpc_linux_in_dynsym_resolve_code;
-	}
-      set_solib_ops (gdbarch, &powerpc_so_ops);
 
       /* Setting the correct XML syscall filename.  */
       set_xml_syscall_file_name (XML_SYSCALL_FILENAME_PPC64);

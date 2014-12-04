@@ -4738,6 +4738,7 @@ ppc_process_record_op60 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 10:		/* VSX Scalar Reciprocal Square Root Estimate
 			   Single-Precision */
     case 75:		/* VSX Scalar Square Root Double-Precision */
+    case 11:		/* VSX Scalar Square Root Single-Precision */
     case 393:		/* VSX Vector round Double-Precision to
 			   Single-Precision and Convert to
 			   Single-Precision format */
