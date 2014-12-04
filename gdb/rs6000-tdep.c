@@ -4574,8 +4574,6 @@ static int
 ppc_process_record_op60 (struct gdbarch *gdbarch, struct regcache *regcache,
 			   CORE_ADDR addr, uint32_t insn)
 {
-  int ext = PPC_EXTOP (insn);
-
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int ext = PPC_EXTOP (insn);
   int tmp;
@@ -4769,6 +4767,50 @@ ppc_process_record_op60 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 136:		/* VSX Vector truncate Single-Precision to
 			   Integer and Convert to Unsigned Integer Word
 			   Format with Saturate */
+    case 504:		/* VSX Vector Convert and round Signed Integer
+			   Doubleword to Double-Precision format */
+    case 440:		/* VSX Vector Convert and round Signed Integer
+			   Doubleword to Single-Precision format */
+    case 248:		/* VSX Vector Convert Signed Integer Word to
+			   Double-Precision format */
+    case 184:		/* VSX Vector Convert and round Signed Integer
+			   Word to Single-Precision format */
+    case 488:		/* VSX Vector Convert and round Unsigned
+			   Integer Doubleword to Double-Precision format */
+    case 424:		/* VSX Vector Convert and round Unsigned
+			   Integer Doubleword to Single-Precision format */
+    case 232:		/* VSX Vector Convert and round Unsigned
+			   Integer Word to Double-Precision format */
+    case 168:		/* VSX Vector Convert and round Unsigned
+			   Integer Word to Single-Precision format */
+    case 201:		/* VSX Vector Round to Double-Precision
+			   Integer using round to Nearest Away */
+    case 235:		/* VSX Vector Round to Double-Precision
+			   Integer Exact using Current rounding mode */
+    case 249:		/* VSX Vector Round to Double-Precision
+			   Integer using round toward -Infinity */
+    case 233:		/* VSX Vector Round to Double-Precision
+			   Integer using round toward +Infinity */
+    case 217:		/* VSX Vector Round to Double-Precision
+			   Integer using round toward Zero */
+    case 218:		/* VSX Vector Reciprocal Estimate Double-Precision */
+    case 154:		/* VSX Vector Reciprocal Estimate Single-Precision */
+    case 137:		/* VSX Vector Round to Single-Precision Integer
+			   Using Round to Nearest Away */
+    case 171:		/* VSX Vector Round to Single-Precision Integer
+			   Exact Using Current rounding mode */
+    case 185:		/* VSX Vector Round to Single-Precision Integer
+			   Using Round toward -Infinity */
+    case 169:		/* VSX Vector Round to Single-Precision Integer
+			   Using Round toward +Infinity */
+    case 153:		/* VSX Vector Round to Single-Precision Integer
+			   Using round toward Zero */
+    case 202:		/* VSX Vector Reciprocal Square Root Estimate
+			   Double-Precision */
+    case 138:		/* VSX Vector Reciprocal Square Root Estimate
+			   Single-Precision */
+    case 203:		/* VSX Vector Square Root Double-Precision */
+    case 139:		/* VSX Vector Square Root Single-Precision */
       record_full_arch_list_add_reg (regcache, tdep->ppc_fpscr_regnum);
     case 345:		/* VSX Scalar Absolute Value Double-Precision */
     case 267:		/* VSX Scalar Convert Scalar Single-Precision to
@@ -4779,11 +4821,20 @@ ppc_process_record_op60 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 377:		/* VSX Scalar Negate Double-Precision */
     case 473:		/* VSX Vector Absolute Value Double-Precision */
     case 409:		/* VSX Vector Absolute Value Single-Precision */
+    case 489:		/* VSX Vector Negative Absolute Value Double-Precision */
+    case 425:		/* VSX Vector Negative Absolute Value Single-Precision */
+    case 505:		/* VSX Vector Negate Double-Precision */
+    case 441:		/* VSX Vector Negate Single-Precision */
+    case 164:		/* VSX Splat Word */
       ppc_record_vsr (regcache, tdep, PPC_XT (insn));
       return 0;
 
     case 106:		/* VSX Scalar Test for software Square Root
 			   Double-Precision */
+    case 234:		/* VSX Vector Test for software Square Root
+			   Double-Precision */
+    case 170:		/* VSX Vector Test for software Square Root
+			   Single-Precision */
       record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
       return 0;
     }
@@ -4794,7 +4845,7 @@ ppc_process_record_op60 (struct gdbarch *gdbarch, struct regcache *regcache,
       return 0;
     }
 
-  fprintf_unfiltered (gdb_stdlog, "VSX instructions not yet supported. "
+  fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to record "
 		      "%08x at %08lx, 60-%d.\n", insn, addr, ext);
   return -1;
 }
