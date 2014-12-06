@@ -40,6 +40,7 @@
 #include "dwarf2-frame.h"
 #include "target-descriptions.h"
 #include "user-regs.h"
+#include "record-full.h"
 
 #include "libbfd.h"		/* for bfd_default_set_arch_mach */
 #include "coff/internal.h"	/* for libcoff.h */
@@ -3631,6 +3632,583 @@ bfd_uses_spe_extensions (bfd *abfd)
 
   xfree (contents);
   return success;
+}
+
+/* These are macros for parsing instruction fields (I.1.6.28)  */
+
+#define PPC_FIELD(value, from, len) \
+	(((value) >> (32 - (from) - (len))) & ((1 << (len)) - 1))
+#define PPC_SEXT(v, bs) \
+	((((CORE_ADDR) (v) & (((CORE_ADDR) 1 << (bs)) - 1)) \
+	  ^ ((CORE_ADDR) 1 << ((bs) - 1))) \
+	 - ((CORE_ADDR) 1 << ((bs) - 1)))
+#define PPC_OP6(insn)	PPC_FIELD (insn, 0, 6)
+#define PPC_EXTOP(insn)	PPC_FIELD (insn, 21, 10)
+#define PPC_RT(insn)	PPC_FIELD (insn, 6, 5)
+#define PPC_RA(insn)	PPC_FIELD (insn, 11, 5)
+#define PPC_RB(insn)	PPC_FIELD (insn, 16, 5)
+#define PPC_FRT(insn)	PPC_FIELD (insn, 6, 5)
+#define PPC_SPR(insn)	(PPC_FIELD (insn, 11, 5) \
+			| (PPC_FIELD (insn, 16, 5) << 5))
+#define PPC_BF(insn)	PPC_FIELD (insn, 6, 3)
+#define PPC_BO(insn)	PPC_FIELD (insn, 6, 5)
+#define PPC_T(insn)	PPC_FIELD (insn, 6, 5)
+#define PPC_D(insn)	PPC_SEXT (PPC_FIELD (insn, 16, 16), 16)
+#define PPC_DS(insn)	PPC_SEXT (PPC_FIELD (insn, 16, 14), 14)
+#define PPC_BIT(insn,n)	((insn & (1 << (31 - (n)))) ? 1 : 0)
+#define PPC_OE(insn)	PPC_BIT (insn, 21)
+#define PPC_RC(insn)	PPC_BIT (insn, 31)
+#define PPC_LK(insn)	PPC_BIT (insn, 31)
+#define PPC_TX(insn)	PPC_BIT (insn, 31)
+
+/* Record Vector-Scalar Registers.  */
+
+static int
+ppc_record_vsr (struct regcache *regcache, struct gdbarch_tdep *tdep, int vsr,
+		int size)
+{
+  if (vsr < 0 || vsr >= 64)
+    return -1;
+
+  /* vsr0  = vs0h || fp0
+     vsr1  = vs1h || fp1
+     ...
+     vsr32 = vr0
+     ...
+     vsr63 = vr32
+   */
+
+  if (vsr >= 32)
+    {
+      if (tdep->ppc_vr0_regnum >= 0)
+	record_full_arch_list_add_reg (regcache, tdep->ppc_vr0_regnum + vsr);
+    }
+  else
+    {
+      if (tdep->ppc_fp0_regnum >= 0)
+	record_full_arch_list_add_reg (regcache, tdep->ppc_fp0_regnum + vsr);
+      if (size > 8 && tdep->ppc_vsr0_upper_regnum >= 0)
+	record_full_arch_list_add_reg (regcache,
+				       tdep->ppc_vsr0_upper_regnum + vsr);
+    }
+
+  return 0;
+}
+
+/* Parse instructions of primary opcode-31.  */
+
+static int
+ppc64_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
+			   CORE_ADDR addr, uint32_t insn)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  int ext = PPC_EXTOP (insn);
+
+  switch (ext)
+    {
+    case 792:		/* Shift Right Algebraic Word */
+    case 794:		/* Shift Right Algebraic Doubleword */
+    case 824:		/* Shift Right Algebraic Word Immediate */
+    case 826:		/* Shift Right Algebraic Doubleword Immediate ??? */
+    case 827:		/* Shift Right Algebraic Doubleword Immediate ??? */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_gp0_regnum + PPC_RA (insn));
+      /* FALL-THROUGH */
+    case 0:		/* Compare */
+    case 32:		/* Compare logical */
+    case 144:		/* Move to condition register fields */
+      record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
+      break;
+
+    case 122:		/* Population count bytes */
+    case 378:		/* Population count words */
+    case 506:		/* Population count doublewords */
+    case 508:		/* Compare bytes */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_gp0_regnum + PPC_RA (insn));
+      break;
+
+    case 53:		/* Load Doubleword with Update Indexed */
+    case 55:		/* Load Word and Zero with Update Indexed */
+    case 119:		/* Load Byte and Zero with Update Indexed */
+    case 311:		/* Load Halfword and Zero with Update Indexed */
+    case 375:		/* Load Halfword Algebraic with Update Indexed */
+    case 373:		/* Load Word Algebraic with Update Indexed */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_gp0_regnum + PPC_RA (insn));
+    case 20:		/* Load Word And Reserve Indexed */
+    case 21:		/* Load Doubleword Indexed */
+    case 23:		/* Load Word and Zero Indexed */
+    case 84:		/* Load Doubleword And Reserve Indexed */
+    case 87:		/* Load Byte and Zero Indexed */
+    case 279:		/* Load Halfword and Zero Indexed */
+    case 343:		/* Load Halfword Algebraic Indexed */
+    case 341:		/* Load Word Algebraic Indexed */
+    case 534:		/* Load Word Byte-Reverse Indexed */
+    case 790:		/* Load Halfword Byte-Reverse Indexed */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_gp0_regnum + PPC_RT (insn));
+      break;
+
+    case 567:		/* Load Floating-Point Single with Update Indexed */
+    case 631:		/* Load Floating-Point Double with Update Indexed */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_gp0_regnum + PPC_RA (insn));
+    case 535:		/* Load Floating-Point Single Indexed */
+    case 599:		/* Load Floating-Point Double Indexed */
+    case 855:		/* Load Floating-Point as Integer Word Algebraic Indexed */
+    case 887:		/* Load Floating-Point as Integer Word and Zero Indexed */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_fp0_regnum + PPC_FRT (insn));
+      break;
+
+    case 588:		/* Load VSX Scalar Doubleword Indexed */
+      ppc_record_vsr (regcache, tdep, PPC_TX ((insn) << 5) | PPC_T (insn), 8);
+      break;
+    case 524:		/* Load VSX Scalar Single-Precision Indexed */
+    case 76:		/* Load VSX Scalar as Integer Word Algebraic Indexed */
+    case 12:		/* Load VSX Scalar as Integer Word and Zero Indexed */
+    case 844:		/* Load VSX Vector Doubleword*2 Indexed */
+    case 332:		/* Load VSX Vector Doubleword & Splat Indexed */
+    case 780:		/* Load VSX Vector Word*4 Indexed */
+      ppc_record_vsr (regcache, tdep, PPC_TX ((insn) << 5) | PPC_T (insn), 16);
+      break;
+
+    case 19:		/* Move from condition register */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_gp0_regnum + PPC_RT (insn));
+      break;
+
+    case 24:		/* Shift Left Word */
+    case 26:		/* Count Leading Zeros Word */
+    case 27:		/* Shift Left Doubleword */
+    case 28:		/* AND */
+    case 58:		/* Count Leading Zeros Doubleword */
+    case 60:		/* AND with Complement */
+    case 124:		/* NOR */
+    case 284:		/* Equivalent */
+    case 316:		/* XOR */
+    case 476:		/* NAND */
+    case 412:		/* OR with Complement */
+    case 444:		/* OR */
+    case 536:		/* Shift Right Word */
+    case 539:		/* Shift Right Doubleword */
+    case 922:		/* Extend sign halfword */
+    case 986:		/* Extend sign word */
+      if (PPC_RC (insn))
+	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_gp0_regnum + PPC_RA (insn));
+      break;
+
+    case 8:		/* Subtract from carrying */
+    case 8 | 0x200:	/* Subtract from carrying (OE) */
+    case 10:		/* Add carrying */
+    case 10 | 0x200:	/* Add carrying (OE) */
+    case 136:		/* Subtract from extended */
+    case 136 | 0x200:	/* Subtract from extended (OE) */
+    case 138:		/* Add extended */
+    case 138 | 0x200:	/* Add extended (OE) */
+    case 200:		/* Subtract from zero extended */
+    case 200 | 0x200:	/* Subtract from zero extended (OE) */
+    case 202:		/* Add to zero extended */
+    case 202 | 0x200:	/* Add to zero extended (OE) */
+    case 232:		/* Subtract from minus one extended */
+    case 232 | 0x200:	/* Subtract from minus one extended (OE) */
+    case 234:		/* Add to minus one extended */
+    case 234 | 0x200:	/* Add to minus one extended (OE) */
+      /* CA is always altered, but SO/OV are only altered when OE=1.
+	 In any case, XER is always altered.  */
+      record_full_arch_list_add_reg (regcache, tdep->ppc_xer_regnum);
+      if (PPC_RC (insn))
+	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_gp0_regnum + PPC_RT (insn));
+      break;
+
+    case 40:		/* Subtract from */
+    case 40 | 0x200:	/* Subtract from (OE) */
+    case 104:		/* Negate */
+    case 104 | 0x200:	/* Negate (OE) */
+    case 233:		/* Multiply low doubleword */
+    case 233 | 0x200:	/* Multiply low doubleword (OE) */
+    case 235:		/* Multiply low word */
+    case 235 | 0x200:	/* Multiply low word (OE) */
+    case 266:		/* Add */
+    case 266 | 0x200:	/* Add (OE) */
+    case 457:		/* Divide doubleword unsigned */
+    case 457 | 0x200:	/* Divide doubleword unsigned (OE) */
+    case 489:		/* Divide doubleword */
+    case 489 | 0x200:	/* Divide doubleword (OE) */
+      if (PPC_OE (insn))
+	record_full_arch_list_add_reg (regcache, tdep->ppc_xer_regnum);
+      /* FALL-THROUGH */
+    case 9:		/* Multiply high doubleword unsigned */
+    case 9 | 0x200:	/* Multiply high doubleword unsigned (OE-DONTCARE) */
+      if (PPC_RC (insn))
+	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_gp0_regnum + PPC_RT (insn));
+      break;
+
+    case 181:		/* Store Doubleword with Update Indexed */
+    case 183:		/* Store Word with Update Indexed */
+    case 247:		/* Store Byte with Update Indexed */
+    case 439:		/* Store Half Word with Update Indexed */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_gp0_regnum + PPC_RA (insn));
+      /* FALL-THROUGH */
+    case 135:		/* Store Vector Element Byte Indexed */
+    case 167:		/* Store Vector Element Halfword Indexed */
+    case 199:		/* Store Vector Element Word Indexed */
+    case 231:		/* Store Vector Indexed */
+    case 716:		/* Store VSX Scalar Doubleword Indexed */
+    case 140:		/* Store VSX Scalar as Integer Word Indexed */
+    case 652:		/* Store VSX Scalar Single-Precision Indexed */
+    case 972:		/* Store VSX Vector Doubleword*2 Indexed */
+    case 908:		/* Store VSX Vector Word*4 Indexed */
+    case 149:		/* Store Doubleword Indexed */
+    case 151:		/* Store Word Indexed */
+    case 215:		/* Store Byte Indexed */
+    case 407:		/* Store Half Word Indexed */
+	{
+	  ULONGEST addr = 0;
+	  ULONGEST rb;
+	  int size = -1;
+
+	  if (PPC_RA (insn) != 0)
+	    regcache_raw_read_unsigned (regcache,
+					tdep->ppc_gp0_regnum + PPC_RA (insn),
+					&addr);
+	  regcache_raw_read_unsigned (regcache,
+				      tdep->ppc_gp0_regnum + PPC_RB (insn),
+				      &rb);
+
+	  addr += rb;
+
+	  if (ext == 151 || ext == 183 || ext == 199 || ext == 140 || ext == 652)
+	    size = 4;
+	  else if (ext == 149 || ext == 181 || ext == 231 || ext == 716)
+	    size = 8;
+	  else if (ext == 407 || ext == 439 || ext == 167)
+	    size = 2;
+	  else if (ext == 215 || ext == 247 || ext == 135)
+	    size = 1;
+	  else if (ext == 972 || ext == 908)
+	    size = 16;
+	  else
+	    gdb_assert (0);
+
+	  /* Align address for Store Vector instructions.  */
+	  if ((ext & 0x1f) == 0x7)
+	    {
+	      if ((ext & 0x3) < 3)
+		addr = (addr >> (ext & 0x3)) << (ext & 0x3);
+	      else
+		addr = addr & ~0x7ULL;
+	    }
+
+	  record_full_arch_list_add_mem (addr, size);
+
+	  break;
+	}
+
+    case 467:		/* mtspr */
+      switch (PPC_SPR (insn))
+	{
+	case 1:		/* XER */
+	  record_full_arch_list_add_reg (regcache, tdep->ppc_xer_regnum);
+	  break;
+	case 8:		/* LR */
+	  record_full_arch_list_add_reg (regcache, tdep->ppc_lr_regnum);
+	  break;
+	case 9:		/* CTR */
+	  record_full_arch_list_add_reg (regcache, tdep->ppc_ctr_regnum);
+	  break;
+	default:
+	  goto UNKNOWN_OP;
+	}
+      break;
+
+    case 339:		/* mfspr */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_gp0_regnum + PPC_RT (insn));
+      break;
+
+    case 598:		/* Synchronize */
+      /* Do nothing */
+      break;
+
+    case 54:		/* Data Cache Block Store */
+    case 86:		/* Data Cache Block Flush */
+    case 246:		/* Data Cache Block Touch for Store */
+    case 278:		/* Data Cache Block Touch */
+    case 1014:		/* Data Cache Block set to Zero */
+      /* No way to get cache line size.  (AT_DCACHEBSIZE?) */
+      break;
+
+    default:
+UNKNOWN_OP:
+      fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to reverse "
+			  "%08x at %08lx, 31-%d.\n", insn, addr, ext);
+    }
+
+  return 0;
+}
+
+/* Parse instructions of primary opcode-60.  */
+
+static int
+ppc64_process_record_op60 (struct gdbarch *gdbarch, struct regcache *regcache,
+			   CORE_ADDR addr, uint32_t insn)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  int ext = PPC_EXTOP (insn);
+
+  switch (ext)
+    {
+    default:
+      fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to reverse "
+			  "%08x at %08lx, 60-%d.\n", insn, addr, ext);
+    }
+
+  return 0;
+}
+
+/* Parse instructions of primary opcode-63.  */
+
+static int
+ppc64_process_record_op63 (struct gdbarch *gdbarch, struct regcache *regcache,
+			   CORE_ADDR addr, uint32_t insn)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  int ext = PPC_EXTOP (insn);
+
+  switch (ext)
+    {
+    case 72:		/* Floating Move Register */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_fp0_regnum + PPC_FRT (insn));
+      break;
+    default:
+      fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to reverse "
+			  "%08x at %08lx, 63-%d.\n", insn, addr, ext);
+    }
+
+  return 0;
+}
+
+/* Parse the current instruction and record the values of the registers and
+   memory that will be changed in current instruction to "record_arch_list".
+   Return -1 if something wrong.  */
+
+int
+ppc64_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
+		      CORE_ADDR addr)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+  uint32_t insn;
+  int op6;
+
+  insn = read_memory_unsigned_integer (addr, 4, byte_order);
+  op6 = PPC_OP6 (insn);
+
+  switch (op6)
+    {
+    case 2:		/* Trap-if instructions.  */
+    case 3:		/* Trap-if instructions.  */
+      /* Do nothing.  */
+      break;
+
+    case 17:		/* System call instructions.  */
+      if (tdep->syscall_record != NULL)
+	{
+	  if (tdep->syscall_record (regcache) != 0)
+	    return -1;
+	}
+      else
+	{
+	  printf_unfiltered (_("no syscall record support\n"));
+	  return -1;
+	}
+      break;
+
+    case 7:
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_gp0_regnum + PPC_RT (insn));
+      break;
+
+    case 8:
+      record_full_arch_list_add_reg (regcache, tdep->ppc_xer_regnum);
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_gp0_regnum + PPC_RT (insn));
+      break;
+
+    case 10:		/* Comparisons.  */
+    case 11:
+      record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
+      break;
+
+    case 13:		/* Add Immediate Carrying and Record */
+      record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
+      /* FALL-THROUGH */
+    case 12:		/* Add Immediate Carrying */
+      record_full_arch_list_add_reg (regcache, tdep->ppc_xer_regnum);
+      /* FALL-THROUGH */
+    case 14:		/* Add Immediate */
+    case 15:		/* Add Immediate Shifted */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_gp0_regnum + PPC_RT (insn));
+      break;
+
+    case 16:		/* Branch Conditional */
+    case 19:		/* Branch Conditional */
+      if (PPC_BO (insn) & 0x2)
+	record_full_arch_list_add_reg (regcache, tdep->ppc_lr_regnum);
+    case 18:		/* Branch */
+      if (PPC_LK (insn))
+	record_full_arch_list_add_reg (regcache, tdep->ppc_lr_regnum);
+      break;
+
+    case 20:		/* Rotate */
+    case 21:		/* Rotate */
+    case 22:		/* Rotate */
+    case 23:		/* Rotate */
+    case 30:		/* Rotate */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_gp0_regnum + PPC_RA (insn));
+      record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
+      break;
+
+    case 24:		/* OR Immediate */
+    case 25:		/* OR Immediate Shifted */
+    case 26:		/* XOR Immediate */
+    case 27:		/* XOR Immediate Shifted */
+    case 28:		/* AND Immediate */
+    case 29:		/* AND Immediate Shifted */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_gp0_regnum + PPC_RA (insn));
+      break;
+
+    case 31:
+      if (ppc64_process_record_op31 (gdbarch, regcache, addr, insn) != 0)
+	return -1;
+      break;
+
+    case 33:		/* Load Word and Zero with Update */
+    case 35:		/* Load Byte and Zero with Update */
+    case 41:		/* Load Halfword and Zero with Update */
+    case 43:		/* Load Halfword Algebraic with Update */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_gp0_regnum + PPC_RA (insn));
+      /* FALL-THROUGH */
+    case 32:		/* Load Word and Zero */
+    case 34:		/* Load Byte and Zero */
+    case 40:		/* Load Halfword and Zero */
+    case 42:		/* Load Halfword Algebraic */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_gp0_regnum + PPC_RT (insn));
+      break;
+
+    case 49:		/* Load Floating-Point Single with Update */
+    case 51:		/* Load Floating-Point Double with Update */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_gp0_regnum + PPC_RA (insn));
+      /* FALL-THROUGH */
+    case 48:		/* Load Floating-Point Single */
+    case 50:		/* Load Floating-Point Double */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_fp0_regnum + PPC_FRT (insn));
+      break;
+
+    case 37:		/* Store word with Update */
+    case 39:		/* Store byte with Update */
+    case 45:		/* Store Half Word with Update */
+    case 53:		/* Store Floating-Point Single with Update */
+    case 55:		/* Store Floating-Point Double with Update */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_gp0_regnum + PPC_RA (insn));
+      /* FALL-THROUGH */
+    case 36:		/* Store word */
+    case 38:		/* Store byte */
+    case 44:		/* Store Half Word */
+    case 52:		/* Store Floating-Point Single */
+    case 54:		/* Store Floating-Point Double */
+	{
+	  ULONGEST addr = 0;
+	  int size = -1;
+
+	  if (PPC_RA (insn) != 0)
+	    regcache_raw_read_unsigned (regcache,
+					tdep->ppc_gp0_regnum + PPC_RA (insn),
+					&addr);
+	  addr += PPC_D (insn);
+
+	  if (op6 == 36 || op6 == 37 || op6 == 52 || op6 == 53)
+	    size = 4;
+	  else if (op6 == 54 || op6 == 55)
+	    size = 8;
+	  else if (op6 == 44 || op6 == 45)
+	    size = 2;
+	  else if (op6 == 38 || op6 == 39)
+	    size = 1;
+	  else
+	    gdb_assert (0);
+
+	  record_full_arch_list_add_mem (addr, size);
+
+	  break;
+	}
+
+    case 58:		/* Load doubleword */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_gp0_regnum + PPC_RT (insn));
+      if (PPC_BIT (insn, 31))
+	record_full_arch_list_add_reg (regcache,
+				       tdep->ppc_gp0_regnum + PPC_RA (insn));
+      break;
+
+    case 60:
+      if (ppc64_process_record_op60 (gdbarch, regcache, addr, insn) != 0)
+	return -1;
+      break;
+
+    case 62:		/* Store doubleword */
+	{
+	  ULONGEST addr = 0;
+
+	  if (PPC_RA (insn) != 0)
+	    regcache_raw_read_unsigned (regcache,
+					tdep->ppc_gp0_regnum + PPC_RA (insn),
+					&addr);
+	  addr += PPC_DS (insn) << 2;
+	  record_full_arch_list_add_mem (addr, 8);
+
+	  if (PPC_BIT (insn, 31))
+	    record_full_arch_list_add_reg (regcache,
+					   tdep->ppc_gp0_regnum +
+					   PPC_RA (insn));
+
+	  break;
+	}
+
+    case 63:
+      if (ppc64_process_record_op63 (gdbarch, regcache, addr, insn) != 0)
+	return -1;
+      break;
+
+    default:
+UNKNOWN_OP:
+      fprintf_unfiltered (gdb_stdlog, "Warning: Don't know how to reverse "
+			  "%08x at %08lx, %d.\n", insn, addr, op6);
+    }
+
+  if (record_full_arch_list_add_reg (regcache, PPC_PC_REGNUM))
+    return -1;
+  if (record_full_arch_list_add_end ())
+    return -1;
+  return 0;
 }
 
 /* Initialize the current architecture based on INFO.  If possible, re-use an

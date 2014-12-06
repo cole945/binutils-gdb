@@ -49,6 +49,9 @@
 #include "spu-tdep.h"
 #include "xml-syscall.h"
 #include "linux-tdep.h"
+#include "linux-record.h"
+#include "record-full.h"
+#include "infrun.h"
 
 #include "stap-probe.h"
 #include "ax.h"
@@ -298,6 +301,17 @@ powerpc_linux_in_dynsym_resolve_code (CORE_ADDR pc)
 	  || strcmp (MSYMBOL_LINKAGE_NAME (sym.minsym),
 		     "__glink_PLTresolve") == 0))
     return 1;
+  else if (sym.minsym != NULL && execution_direction == EXEC_REVERSE)
+    {
+#define SUBSTRCMP(sym, stub)  (memcmp (sym + 8, stub, sizeof (stub) - 1) == 0)
+      if (SUBSTRCMP (MSYMBOL_LINKAGE_NAME (sym.minsym), ".plt_call."))
+	return 1;
+      if (SUBSTRCMP (MSYMBOL_LINKAGE_NAME (sym.minsym), ".plt_branch."))
+	return 1;
+      if (SUBSTRCMP (MSYMBOL_LINKAGE_NAME (sym.minsym), ".plt_branch_r2off."))
+	return 1;
+#undef SUBSTRCMP
+    }
 
   return 0;
 }
@@ -762,6 +776,106 @@ ppc_linux_get_syscall_number (struct gdbarch *gdbarch,
   do_cleanups (cleanbuf);
 
   return ret;
+}
+
+/* PPC process record-replay */
+
+struct linux_record_tdep ppc_linux_record_tdep;
+
+static enum gdb_syscall
+ppc_canonicalize_syscall (int syscall)
+{
+  if (syscall <= 165)
+    return syscall;
+  else if (syscall >= 167 && syscall <= 190)	/* Skip query_module 166 */
+    return syscall + 1;
+  else if (syscall >= 192 && syscall <= 197)	/* mmap2 */
+    return syscall;
+  else if (syscall == 208)			/* tkill */
+    return gdb_sys_tkill;
+  else if (syscall >= 207 && syscall <= 220)	/* gettid */
+    return syscall + 224 - 207;
+  else if (syscall >= 234 && syscall <= 239)	/* exit_group */
+    return syscall + 252 - 234;
+  else if (syscall >= 240 && syscall <=248)	/* timer_create */
+    return syscall += 259 - 240;
+  else if (syscall >= 250 && syscall <=251)	/* tgkill */
+    return syscall + 270 - 250;
+  else if (syscall == 336)
+    return gdb_sys_recv;
+  else if (syscall == 337)
+    return gdb_sys_recvfrom;
+  else if (syscall == 342)
+    return gdb_sys_recvmsg;
+  return -1;
+}
+
+/* Record all registers but PC register for process-record.  */
+
+static int
+ppc_all_but_pc_registers_record (struct regcache *regcache)
+{
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  int i;
+
+  for (i = 0; i < 32; i++)
+    {
+      if (record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + i))
+        return -1;
+    }
+
+  if (record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum))
+    return -1;
+  if (record_full_arch_list_add_reg (regcache, tdep->ppc_lr_regnum))
+    return -1;
+  if (record_full_arch_list_add_reg (regcache, tdep->ppc_ctr_regnum))
+    return -1;
+  if (record_full_arch_list_add_reg (regcache, tdep->ppc_xer_regnum))
+    return -1;
+
+  return 0;
+}
+
+static int
+ppc_linux_syscall_record (struct regcache *regcache)
+{
+  ULONGEST scnum;
+  enum gdb_syscall syscall_gdb;
+  int ret;
+
+  regcache_raw_read_unsigned (regcache, PPC_R0_REGNUM, &scnum);
+  syscall_gdb = ppc_canonicalize_syscall (scnum);
+
+  if (syscall_gdb < 0)
+    {
+      printf_unfiltered (_("Process record and replay target doesn't "
+                           "support syscall number %d\n"),
+                           (int) scnum);
+      return 0;
+    }
+
+  if (syscall_gdb == gdb_sys_sigreturn
+      || syscall_gdb == gdb_sys_rt_sigreturn)
+   {
+     if (ppc_all_but_pc_registers_record (regcache))
+       return -1;
+     return 0;
+   }
+
+  ret = record_linux_system_call (syscall_gdb, regcache,
+                                  &ppc_linux_record_tdep);
+  if (ret != 0)
+    return ret;
+
+  /* Record the return value of the system call.  */
+  if (record_full_arch_list_add_reg (regcache, PPC_R0_REGNUM + 3))
+    return -1;
+  /* Record LR.  */
+  if (record_full_arch_list_add_reg (regcache, PPC_LR_REGNUM))
+    return -1;
+
+  return 0;
 }
 
 static void
@@ -1345,6 +1459,15 @@ ppc_linux_init_abi (struct gdbarch_info info,
       set_solib_svr4_fetch_link_map_offsets
         (gdbarch, svr4_lp64_fetch_link_map_offsets);
 
+      if (powerpc_so_ops.in_dynsym_resolve_code == NULL)
+	{
+	  powerpc_so_ops = svr4_so_ops;
+	  /* Override dynamic resolve function.  */
+	  powerpc_so_ops.in_dynsym_resolve_code =
+	    powerpc_linux_in_dynsym_resolve_code;
+	}
+      set_solib_ops (gdbarch, &powerpc_so_ops);
+
       /* Setting the correct XML syscall filename.  */
       set_xml_syscall_file_name (XML_SYSCALL_FILENAME_PPC64);
 
@@ -1414,6 +1537,168 @@ ppc_linux_init_abi (struct gdbarch_info info,
     }
 
   set_gdbarch_get_siginfo_type (gdbarch, linux_get_siginfo_type);
+
+  /* Support reverse debugging.  */
+  set_gdbarch_process_record (gdbarch, ppc64_process_record);
+  tdep->syscall_record = ppc_linux_syscall_record;
+
+  /* Initialize the ppc_linux_record_tdep.  */
+  /* These values are the size of the type that will be used in a system
+     call.  They are obtained from Linux Kernel source.  */
+  ppc_linux_record_tdep.size_pointer
+    = gdbarch_ptr_bit (gdbarch) / TARGET_CHAR_BIT;
+  ppc_linux_record_tdep.size__old_kernel_stat = 32;
+  ppc_linux_record_tdep.size_tms = 32;
+  ppc_linux_record_tdep.size_loff_t = 8;
+  ppc_linux_record_tdep.size_flock = 32;
+  ppc_linux_record_tdep.size_oldold_utsname = 45;
+  ppc_linux_record_tdep.size_ustat = 32;
+  ppc_linux_record_tdep.size_old_sigaction = 152;
+  ppc_linux_record_tdep.size_old_sigset_t = 128;
+  ppc_linux_record_tdep.size_rlimit = 16;
+  ppc_linux_record_tdep.size_rusage = 144;
+  ppc_linux_record_tdep.size_timeval = 16;
+  ppc_linux_record_tdep.size_timezone = 8;
+  ppc_linux_record_tdep.size_old_gid_t = 2;
+  ppc_linux_record_tdep.size_old_uid_t = 2;
+  ppc_linux_record_tdep.size_fd_set = 128;
+  ppc_linux_record_tdep.size_dirent = 280;
+  ppc_linux_record_tdep.size_dirent64 = 280;
+  ppc_linux_record_tdep.size_statfs = 120;
+  ppc_linux_record_tdep.size_statfs64 = 120;
+  ppc_linux_record_tdep.size_sockaddr = 16;
+  ppc_linux_record_tdep.size_int
+    = gdbarch_int_bit (gdbarch) / TARGET_CHAR_BIT;
+  ppc_linux_record_tdep.size_long
+    = gdbarch_long_bit (gdbarch) / TARGET_CHAR_BIT;
+  ppc_linux_record_tdep.size_ulong
+    = gdbarch_long_bit (gdbarch) / TARGET_CHAR_BIT;
+  ppc_linux_record_tdep.size_msghdr = 56;
+  ppc_linux_record_tdep.size_itimerval = 32;
+  ppc_linux_record_tdep.size_stat = 144;
+  ppc_linux_record_tdep.size_old_utsname = 325;
+  ppc_linux_record_tdep.size_sysinfo = 112;
+  ppc_linux_record_tdep.size_msqid_ds = 120;
+  ppc_linux_record_tdep.size_shmid_ds = 112;
+  ppc_linux_record_tdep.size_new_utsname = 390;
+  ppc_linux_record_tdep.size_timex = 208;
+  ppc_linux_record_tdep.size_mem_dqinfo = 24;
+  ppc_linux_record_tdep.size_if_dqblk = 72;
+  ppc_linux_record_tdep.size_fs_quota_stat = 80;
+  ppc_linux_record_tdep.size_timespec = 16;
+  ppc_linux_record_tdep.size_pollfd = 8;
+  ppc_linux_record_tdep.size_NFS_FHSIZE = 32;
+  ppc_linux_record_tdep.size_knfsd_fh = 132;
+  ppc_linux_record_tdep.size_TASK_COMM_LEN = 32;
+  ppc_linux_record_tdep.size_sigaction = 152;
+  ppc_linux_record_tdep.size_sigset_t = 128;
+  ppc_linux_record_tdep.size_siginfo_t = 128;
+  ppc_linux_record_tdep.size_cap_user_data_t = 8;
+  ppc_linux_record_tdep.size_stack_t = 24;
+  ppc_linux_record_tdep.size_off_t = 8;
+  ppc_linux_record_tdep.size_stat64 = 144;
+  ppc_linux_record_tdep.size_gid_t = 4;
+  ppc_linux_record_tdep.size_uid_t = 4;
+  ppc_linux_record_tdep.size_PAGE_SIZE = 4096;
+  ppc_linux_record_tdep.size_flock64 = 32;
+  ppc_linux_record_tdep.size_user_desc = 16;
+  ppc_linux_record_tdep.size_io_event = 32;
+  ppc_linux_record_tdep.size_iocb = 64;
+  ppc_linux_record_tdep.size_epoll_event = 12;
+  ppc_linux_record_tdep.size_itimerspec = 32;
+  ppc_linux_record_tdep.size_mq_attr = 64;
+  ppc_linux_record_tdep.size_siginfo = 128;
+  ppc_linux_record_tdep.size_termios = 60;
+  ppc_linux_record_tdep.size_termios2 = 44;
+  ppc_linux_record_tdep.size_pid_t = 4;
+  ppc_linux_record_tdep.size_winsize = 8;
+  ppc_linux_record_tdep.size_serial_struct = 72;
+  ppc_linux_record_tdep.size_serial_icounter_struct = 80;
+  ppc_linux_record_tdep.size_hayes_esp_config = 12;
+  ppc_linux_record_tdep.size_size_t = 8;
+  ppc_linux_record_tdep.size_iovec = 16;
+
+  /* These values are the second argument of system call "sys_fcntl"
+     and "sys_fcntl64".  They are obtained from Linux Kernel source.  */
+  ppc_linux_record_tdep.fcntl_F_GETLK = 5;
+  ppc_linux_record_tdep.fcntl_F_GETLK64 = 12;
+  ppc_linux_record_tdep.fcntl_F_SETLK64 = 13;
+  ppc_linux_record_tdep.fcntl_F_SETLKW64 = 14;
+
+  ppc_linux_record_tdep.arg1 = PPC_R0_REGNUM + 3;
+  ppc_linux_record_tdep.arg2 = PPC_R0_REGNUM + 4;
+  ppc_linux_record_tdep.arg3 = PPC_R0_REGNUM + 5;
+  ppc_linux_record_tdep.arg4 = PPC_R0_REGNUM + 6;
+  ppc_linux_record_tdep.arg5 = PPC_R0_REGNUM + 7;
+  ppc_linux_record_tdep.arg6 = PPC_R0_REGNUM + 8;
+
+  /* These values are the second argument of system call "sys_ioctl".
+     They are obtained from Linux Kernel source.  */
+  ppc_linux_record_tdep.ioctl_TCGETS = 0x5401;
+  ppc_linux_record_tdep.ioctl_TCSETS = 0x5402;
+  ppc_linux_record_tdep.ioctl_TCSETSW = 0x5403;
+  ppc_linux_record_tdep.ioctl_TCSETSF = 0x5404;
+  ppc_linux_record_tdep.ioctl_TCGETA = 0x5405;
+  ppc_linux_record_tdep.ioctl_TCSETA = 0x5406;
+  ppc_linux_record_tdep.ioctl_TCSETAW = 0x5407;
+  ppc_linux_record_tdep.ioctl_TCSETAF = 0x5408;
+  ppc_linux_record_tdep.ioctl_TCSBRK = 0x5409;
+  ppc_linux_record_tdep.ioctl_TCXONC = 0x540A;
+  ppc_linux_record_tdep.ioctl_TCFLSH = 0x540B;
+  ppc_linux_record_tdep.ioctl_TIOCEXCL = 0x540C;
+  ppc_linux_record_tdep.ioctl_TIOCNXCL = 0x540D;
+  ppc_linux_record_tdep.ioctl_TIOCSCTTY = 0x540E;
+  ppc_linux_record_tdep.ioctl_TIOCGPGRP = 0x540F;
+  ppc_linux_record_tdep.ioctl_TIOCSPGRP = 0x5410;
+  ppc_linux_record_tdep.ioctl_TIOCOUTQ = 0x5411;
+  ppc_linux_record_tdep.ioctl_TIOCSTI = 0x5412;
+  ppc_linux_record_tdep.ioctl_TIOCGWINSZ = 0x5413;
+  ppc_linux_record_tdep.ioctl_TIOCSWINSZ = 0x5414;
+  ppc_linux_record_tdep.ioctl_TIOCMGET = 0x5415;
+  ppc_linux_record_tdep.ioctl_TIOCMBIS = 0x5416;
+  ppc_linux_record_tdep.ioctl_TIOCMBIC = 0x5417;
+  ppc_linux_record_tdep.ioctl_TIOCMSET = 0x5418;
+  ppc_linux_record_tdep.ioctl_TIOCGSOFTCAR = 0x5419;
+  ppc_linux_record_tdep.ioctl_TIOCSSOFTCAR = 0x541A;
+  ppc_linux_record_tdep.ioctl_FIONREAD = 0x541B;
+  ppc_linux_record_tdep.ioctl_TIOCINQ = ppc_linux_record_tdep.ioctl_FIONREAD;
+  ppc_linux_record_tdep.ioctl_TIOCLINUX = 0x541C;
+  ppc_linux_record_tdep.ioctl_TIOCCONS = 0x541D;
+  ppc_linux_record_tdep.ioctl_TIOCGSERIAL = 0x541E;
+  ppc_linux_record_tdep.ioctl_TIOCSSERIAL = 0x541F;
+  ppc_linux_record_tdep.ioctl_TIOCPKT = 0x5420;
+  ppc_linux_record_tdep.ioctl_FIONBIO = 0x5421;
+  ppc_linux_record_tdep.ioctl_TIOCNOTTY = 0x5422;
+  ppc_linux_record_tdep.ioctl_TIOCSETD = 0x5423;
+  ppc_linux_record_tdep.ioctl_TIOCGETD = 0x5424;
+  ppc_linux_record_tdep.ioctl_TCSBRKP = 0x5425;
+  ppc_linux_record_tdep.ioctl_TIOCTTYGSTRUCT = 0x5426;
+  ppc_linux_record_tdep.ioctl_TIOCSBRK = 0x5427;
+  ppc_linux_record_tdep.ioctl_TIOCCBRK = 0x5428;
+  ppc_linux_record_tdep.ioctl_TIOCGSID = 0x5429;
+  ppc_linux_record_tdep.ioctl_TCGETS2 = 0x802c542a;
+  ppc_linux_record_tdep.ioctl_TCSETS2 = 0x402c542b;
+  ppc_linux_record_tdep.ioctl_TCSETSW2 = 0x402c542c;
+  ppc_linux_record_tdep.ioctl_TCSETSF2 = 0x402c542d;
+  ppc_linux_record_tdep.ioctl_TIOCGPTN = 0x80045430;
+  ppc_linux_record_tdep.ioctl_TIOCSPTLCK = 0x40045431;
+  ppc_linux_record_tdep.ioctl_FIONCLEX = 0x5450;
+  ppc_linux_record_tdep.ioctl_FIOCLEX = 0x5451;
+  ppc_linux_record_tdep.ioctl_FIOASYNC = 0x5452;
+  ppc_linux_record_tdep.ioctl_TIOCSERCONFIG = 0x5453;
+  ppc_linux_record_tdep.ioctl_TIOCSERGWILD = 0x5454;
+  ppc_linux_record_tdep.ioctl_TIOCSERSWILD = 0x5455;
+  ppc_linux_record_tdep.ioctl_TIOCGLCKTRMIOS = 0x5456;
+  ppc_linux_record_tdep.ioctl_TIOCSLCKTRMIOS = 0x5457;
+  ppc_linux_record_tdep.ioctl_TIOCSERGSTRUCT = 0x5458;
+  ppc_linux_record_tdep.ioctl_TIOCSERGETLSR = 0x5459;
+  ppc_linux_record_tdep.ioctl_TIOCSERGETMULTI = 0x545A;
+  ppc_linux_record_tdep.ioctl_TIOCSERSETMULTI = 0x545B;
+  ppc_linux_record_tdep.ioctl_TIOCMIWAIT = 0x545C;
+  ppc_linux_record_tdep.ioctl_TIOCGICOUNT = 0x545D;
+  ppc_linux_record_tdep.ioctl_TIOCGHAYESESP = 0x545E;
+  ppc_linux_record_tdep.ioctl_TIOCSHAYESESP = 0x545F;
+  ppc_linux_record_tdep.ioctl_FIOQSIZE = 0x5460;
 }
 
 /* Provide a prototype to silence -Wmissing-prototypes.  */
