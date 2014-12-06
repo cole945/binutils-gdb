@@ -840,14 +840,32 @@ ppc_linux_syscall_record (struct regcache *regcache)
   if (syscall_gdb == gdb_sys_sigreturn
       || syscall_gdb == gdb_sys_rt_sigreturn)
    {
-     int i;
+     int i, j;
+     int regsets[] = { tdep->ppc_gp0_regnum,
+		       tdep->ppc_fp0_regnum,
+		       tdep->ppc_vr0_regnum,
+		       tdep->ppc_vsr0_upper_regnum };
 
-     /* Record all but PC registers.  */
-     for (i = 0; i < gdbarch_num_regs (gdbarch); i++)
+     for (j = 0; j < 4; j++)
        {
-	 if (record_full_arch_list_add_reg (regcache, i))
-	   return -1;
+	 if (regsets[j] == -1)
+	   continue;
+	 for (i = 0; i < 32; i++)
+	   {
+	     if (record_full_arch_list_add_reg (regcache, regsets[j] + i))
+	       return -1;
+	   }
        }
+
+     if (record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum))
+       return -1;
+     if (record_full_arch_list_add_reg (regcache, tdep->ppc_ctr_regnum))
+       return -1;
+     if (record_full_arch_list_add_reg (regcache, tdep->ppc_lr_regnum))
+       return -1;
+     if (record_full_arch_list_add_reg (regcache, tdep->ppc_xer_regnum))
+       return -1;
+
      return 0;
    }
 
