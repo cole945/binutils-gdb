@@ -817,31 +817,6 @@ ppc_canonicalize_syscall (int syscall)
   return -1;
 }
 
-/* Record all registers but PC register for process-record.  */
-
-static int
-ppc_all_but_pc_registers_record (struct regcache *regcache)
-{
-  struct gdbarch *gdbarch = get_regcache_arch (regcache);
-  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-  int i;
-
-  for (i = 0; i < 32; i++)
-    {
-      if (record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + i))
-        return -1;
-    }
-
-  if (record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum))
-    return -1;
-  if (record_full_arch_list_add_reg (regcache, tdep->ppc_lr_regnum))
-    return -1;
-  if (record_full_arch_list_add_reg (regcache, tdep->ppc_ctr_regnum))
-    return -1;
-
-  return 0;
-}
-
 static int
 ppc_linux_syscall_record (struct regcache *regcache)
 {
@@ -850,6 +825,7 @@ ppc_linux_syscall_record (struct regcache *regcache)
   ULONGEST scnum;
   enum gdb_syscall syscall_gdb;
   int ret;
+  int i;
 
   regcache_raw_read_unsigned (regcache, tdep->ppc_gp0_regnum, &scnum);
   syscall_gdb = ppc_canonicalize_syscall (scnum);
@@ -857,46 +833,36 @@ ppc_linux_syscall_record (struct regcache *regcache)
   if (syscall_gdb < 0)
     {
       printf_unfiltered (_("Process record and replay target doesn't "
-                           "support syscall number %d\n"),
-                           (int) scnum);
+			   "support syscall number %d\n"), (int) scnum);
       return 0;
     }
 
   if (syscall_gdb == gdb_sys_sigreturn
       || syscall_gdb == gdb_sys_rt_sigreturn)
    {
-     if (ppc_all_but_pc_registers_record (regcache))
-       return -1;
+     int i;
+
+     /* Record all but PC registers.  */
+     for (i = 0; i < gdbarch_num_regs (gdbarch); i++)
+       {
+	 if (record_full_arch_list_add_reg (regcache, i))
+	   return -1;
+       }
      return 0;
    }
 
   ret = record_linux_system_call (syscall_gdb, regcache,
-                                  tdep->ppc_linux_record_tdep);
+				  tdep->ppc_linux_record_tdep);
   if (ret != 0)
     return ret;
 
   /* Record registers clobbered during syscall.  */
+  for (i = 3; i <= 12; i++)
+    {
+      if (record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + i))
+	return -1;
+    }
   if (record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + 0))
-    return -1;
-  if (record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + 3))
-    return -1;
-  if (record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + 4))
-    return -1;
-  if (record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + 5))
-    return -1;
-  if (record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + 6))
-    return -1;
-  if (record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + 7))
-    return -1;
-  if (record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + 8))
-    return -1;
-  if (record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + 9))
-    return -1;
-  if (record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + 10))
-    return -1;
-  if (record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + 11))
-    return -1;
-  if (record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + 12))
     return -1;
   if (record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum))
     return -1;
@@ -909,21 +875,36 @@ ppc_linux_syscall_record (struct regcache *regcache)
 }
 
 static int
-ppc64_linux_record_signal (struct gdbarch *gdbarch,
-                           struct regcache *regcache,
-                           enum gdb_signal signal)
+ppc_linux_record_signal (struct gdbarch *gdbarch, struct regcache *regcache,
+			 enum gdb_signal signal)
 {
-  /* See arch/powerpc/kernel/signal_64.c
+  /* See handle_rt_signal64 in arch/powerpc/kernel/signal_64.c
+	 handle_rt_signal32 in arch/powerpc/kernel/signal_32.c
 	 arch/powerpc/include/asm/ptrace.h
      for details.  */
   const int SIGNAL_FRAMESIZE = 128;
   const int sizeof_rt_sigframe = 1440 * 2 + 8 * 2 + 4 * 6 + 8 + 8 + 128 + 512;
   ULONGEST sp;
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  int i;
 
-  if (ppc_all_but_pc_registers_record (regcache))
+  if (record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + 1))
+    return -1;
+  for (i = 3; i < 6; i++)
+    {
+      if (record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + i))
+	return -1;
+    }
+  if (tdep->wordsize == 8
+      && record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + 12))
     return -1;
 
+  if (record_full_arch_list_add_reg (regcache, tdep->ppc_lr_regnum))
+    return -1;
+  if (record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum))
+    return -1;
+  if (record_full_arch_list_add_reg (regcache, tdep->ppc_ctr_regnum))
+    return -1;
   if (record_full_arch_list_add_reg (regcache, gdbarch_pc_regnum (gdbarch)))
     return -1;
 
@@ -1412,7 +1393,7 @@ static const struct frame_unwind ppu2spu_unwind = {
   ppu2spu_prev_arch,
 };
 
-/* Initialize the linux_record_tdep.  */
+/* Initialize linux_record_tdep if not initialized yet.  */
 
 static void
 ppc_init_linux_record_tdep (struct gdbarch *gdbarch,
@@ -1824,7 +1805,7 @@ ppc_linux_init_abi (struct gdbarch_info info,
 
   /* Support reverse debugging.  */
   set_gdbarch_process_record (gdbarch, ppc_process_record);
-  set_gdbarch_process_record_signal (gdbarch, ppc64_linux_record_signal);
+  set_gdbarch_process_record_signal (gdbarch, ppc_linux_record_signal);
   tdep->ppc_syscall_record = ppc_linux_syscall_record;
   if (tdep->wordsize == 8)
     tdep->ppc_linux_record_tdep = &ppc64_linux_record_tdep;
