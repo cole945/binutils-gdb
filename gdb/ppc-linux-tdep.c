@@ -51,7 +51,6 @@
 #include "linux-tdep.h"
 #include "linux-record.h"
 #include "record-full.h"
-#include "infrun.h"
 
 #include "stap-probe.h"
 #include "ax.h"
@@ -310,51 +309,36 @@ powerpc_linux_in_dynsym_resolve_code (CORE_ADDR pc)
 static CORE_ADDR
 ppc_skip_trampoline_code (struct frame_info *frame, CORE_ADDR pc)
 {
-#define MAX(a,b) ((a) > (b) ? (a) : (b))
   unsigned int insnbuf[POWERPC32_PLT_STUB_LEN];
   struct gdbarch *gdbarch = get_frame_arch (frame);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   CORE_ADDR target = 0;
-  int i, n = 1;
 
-  /* When reverse-step, we need to check whether we are in the middle
-     of PLT sequence.  */
-  if (execution_direction == EXEC_REVERSE)
-    n = MAX (ARRAY_SIZE (powerpc32_plt_stub),
-	     ARRAY_SIZE (powerpc32_plt_stub_so));
-
-  for (i = 0; i < n; i++)
+  if (ppc_insns_match_pattern (frame, pc, powerpc32_plt_stub, insnbuf))
     {
-      if (ppc_insns_match_pattern (frame, pc, powerpc32_plt_stub, insnbuf))
-	{
-	  /* Insn pattern is
-	     lis   r11, xxxx
-	     lwz   r11, xxxx(r11)
-	     Branch target is in r11.  */
+      /* Insn pattern is
+		lis   r11, xxxx
+		lwz   r11, xxxx(r11)
+	 Branch target is in r11.  */
 
-	  target = (ppc_insn_d_field (insnbuf[0]) << 16)
-	    | ppc_insn_d_field (insnbuf[1]);
-	  target = read_memory_unsigned_integer (target, 4, byte_order);
-
-	  return target;
-	}
-      else if (ppc_insns_match_pattern (frame, pc, powerpc32_plt_stub_so, insnbuf))
-	{
-	  /* Insn pattern is
-	     lwz   r11, xxxx(r30)
-	     Branch target is in r11.  */
-
-	  target = get_frame_register_unsigned (frame, tdep->ppc_gp0_regnum + 30)
-	    + ppc_insn_d_field (insnbuf[0]);
-	  target = read_memory_unsigned_integer (target, 4, byte_order);
-
-	  return target;
-	}
-      pc = pc - 4;
+      target = (ppc_insn_d_field (insnbuf[0]) << 16)
+	| ppc_insn_d_field (insnbuf[1]);
+      target = read_memory_unsigned_integer (target, 4, byte_order);
     }
 
-  return 0;
+  if (ppc_insns_match_pattern (frame, pc, powerpc32_plt_stub_so, insnbuf))
+    {
+      /* Insn pattern is
+		lwz   r11, xxxx(r30)
+	 Branch target is in r11.  */
+
+      target = get_frame_register_unsigned (frame, tdep->ppc_gp0_regnum + 30)
+	       + ppc_insn_d_field (insnbuf[0]);
+      target = read_memory_unsigned_integer (target, 4, byte_order);
+    }
+
+  return target;
 }
 
 /* Wrappers to handle Linux-only registers.  */
