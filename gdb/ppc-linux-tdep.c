@@ -906,9 +906,7 @@ ppc_linux_record_signal (struct gdbarch *gdbarch, struct regcache *regcache,
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int i;
 
-  if (record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + 1))
-    return -1;
-  for (i = 3; i < 6; i++)
+  for (i = 3; i <= 6; i++)
     {
       if (record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + i))
 	return -1;
@@ -924,6 +922,8 @@ ppc_linux_record_signal (struct gdbarch *gdbarch, struct regcache *regcache,
   if (record_full_arch_list_add_reg (regcache, tdep->ppc_ctr_regnum))
     return -1;
   if (record_full_arch_list_add_reg (regcache, gdbarch_pc_regnum (gdbarch)))
+    return -1;
+  if (record_full_arch_list_add_reg (regcache, gdbarch_sp_regnum (gdbarch)))
     return -1;
 
   /* Record the change in the stack.
