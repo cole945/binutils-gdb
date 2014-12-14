@@ -4529,17 +4529,20 @@ ppc_process_record_op59 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 770:		/* DFP Round To DFP Short! */
     case 802:		/* DFP Convert From Fixed */
     case 834:		/* DFP Encode BCD To DPD */
+      if (PPC_RC (insn))
+	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
       record_full_arch_list_add_reg (regcache,
 				     tdep->ppc_fp0_regnum + PPC_FRT (insn));
-      /* FALL-THROUGH */
+      record_full_arch_list_add_reg (regcache, tdep->ppc_fpscr_regnum);
+      return 0;
+
     case 130:		/* DFP Compare Ordered */
     case 162:		/* DFP Test Exponent */
     case 194:		/* DFP Test Data Class */
     case 226:		/* DFP Test Data Group */
     case 642:		/* DFP Compare Unordered */
     case 674:		/* DFP Test Significance */
-      if (PPC_RC (insn))
-	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
+      record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
       record_full_arch_list_add_reg (regcache, tdep->ppc_fpscr_regnum);
       return 0;
 
@@ -4883,6 +4886,12 @@ ppc_process_record_op63 (struct gdbarch *gdbarch, struct regcache *regcache,
 	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
       record_full_arch_list_add_reg (regcache, tdep->ppc_fpscr_regnum);
       return 0;
+
+    case 23:		/* Floating Select */
+      record_full_arch_list_add_reg (regcache,
+				     tdep->ppc_fp0_regnum + PPC_FRT (insn));
+      if (PPC_RC (insn))
+	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
     }
 
   switch (ext)
@@ -4900,18 +4909,21 @@ ppc_process_record_op63 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 770:		/* DFP Round To DFP Long Quad */
     case 802:		/* DFP Convert From Fixed Quad */
     case 834:		/* DFP Encode BCD To DPD Quad */
+      if (PPC_RC (insn))
+	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
       tmp = tdep->ppc_fp0_regnum + (PPC_FRT (insn) & ~1);
       record_full_arch_list_add_reg (regcache, tmp);
       record_full_arch_list_add_reg (regcache, tmp + 1);
-      /* FALL-THROUGH */
+      record_full_arch_list_add_reg (regcache, tdep->ppc_fpscr_regnum);
+      return 0;
+
     case 130:		/* DFP Compare Ordered Quad */
     case 162:		/* DFP Test Exponent Quad */
     case 194:		/* DFP Test Data Class Quad */
     case 226:		/* DFP Test Data Group Quad */
     case 642:		/* DFP Compare Unordered Quad */
     case 674:		/* DFP Test Significance Quad */
-      if (PPC_RC (insn))
-	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
+      record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
       record_full_arch_list_add_reg (regcache, tdep->ppc_fpscr_regnum);
       return 0;
 
@@ -4967,6 +4979,7 @@ ppc_process_record_op63 (struct gdbarch *gdbarch, struct regcache *regcache,
       record_full_arch_list_add_reg (regcache, tdep->ppc_fpscr_regnum);
       return 0;
 
+    case 583:		/* Move From FPSCR */
     case 8:		/* Floating Copy Sign */
     case 40:		/* Floating Negate */
     case 72:		/* Floating Move Register */
@@ -4978,11 +4991,6 @@ ppc_process_record_op63 (struct gdbarch *gdbarch, struct regcache *regcache,
 	record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
       return 0;
 
-
-    case 23:		/* Floating Select */
-    case 583:		/* Move From FPSCR */
-      record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
-      /* FALL-THROUGH */
     case 838:		/* Floating Merge Odd Word */
     case 966:		/* Floating Merge Even Word */
       record_full_arch_list_add_reg (regcache,
