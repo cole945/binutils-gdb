@@ -3703,9 +3703,29 @@ ppc_process_record_op4 (struct gdbarch *gdbarch, struct regcache *regcache,
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int ext = PPC_FIELD (insn, 21, 11);
 
-  if ((ext & 0x3f) == 45)
+  switch (ext & 0x3f)
     {
-      /* Vector Permute and Exclusive-OR */
+    case 32:		/* Vector Multiply-High-Add Signed Halfword Saturate */
+    case 33:		/* Vector Multiply-High-Round-Add Signed Halfword Saturate */
+    case 39:		/* Vector Multiply-Sum Unsigned Halfword Saturate */
+    case 41:		/* Vector Multiply-Sum Signed Halfword Saturate */
+      record_full_arch_list_add_reg (regcache, PPC_VSCR_REGNUM);
+      /* FALL-THROUGH */
+    case 42:		/* Vector Select */
+    case 43:		/* Vector Permute */
+    case 44:		/* Vector Shift Left Double by Octet Immediate */
+    case 45:		/* Vector Permute and Exclusive-OR */
+    case 60:		/* Vector Add Extended Unsigned Quadword Modulo */
+    case 61:		/* Vector Add Extended & write Carry Unsigned Quadword */
+    case 62:		/* Vector Subtract Extended Unsigned Quadword Modulo */
+    case 63:		/* Vector Subtract Extended & write Carry Unsigned Quadword */
+    case 34:		/* Vector Multiply-Low-Add Unsigned Halfword Modulo */
+    case 36:		/* Vector Multiply-Sum Unsigned Byte Modulo */
+    case 37:		/* Vector Multiply-Sum Mixed Byte Modulo */
+    case 38:		/* Vector Multiply-Sum Unsigned Halfword Modulo */
+    case 40:		/* Vector Multiply-Sum Signed Halfword Modulo */
+    case 46:		/* Vector Multiply-Add Single-Precision */
+    case 47:		/* Vector Negative Multiply-Subtract Single-Precision */
       record_full_arch_list_add_reg (regcache,
 				     tdep->ppc_vr0_regnum + PPC_VRT (insn));
       return 0;
@@ -3776,10 +3796,7 @@ ppc_process_record_op4 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 1792:		/* Vector Subtract Signed Byte Saturate */
     case 1856:		/* Vector Subtract Signed Halfword Saturate */
     case 1920:		/* Vector Subtract Signed Word Saturate */
-    case 32:		/* Vector Multiply-High-Add Signed Halfword Saturate */
-    case 33:		/* Vector Multiply-High-Round-Add Signed Halfword Saturate */
-    case 39:		/* Vector Multiply-Sum Unsigned Halfword Saturate */
-    case 41:		/* Vector Multiply-Sum Signed Halfword Saturate */
+
     case 1544:		/* Vector Sum across Quarter Unsigned Byte Saturate */
     case 1800:		/* Vector Sum across Quarter Signed Byte Saturate */
     case 1608:		/* Vector Sum across Quarter Signed Halfword Saturate */
@@ -3791,8 +3808,6 @@ ppc_process_record_op4 (struct gdbarch *gdbarch, struct regcache *regcache,
       /* FALL-THROUGH */
     case 12:		/* Vector Merge High Byte */
     case 14:		/* Vector Pack Unsigned Halfword Unsigned Modulo */
-    case 42:		/* Vector Select */
-    case 43:		/* Vector Permute */
     case 76:		/* Vector Merge High Halfword */
     case 78:		/* Vector Pack Unsigned Word Unsigned Modulo */
     case 140:		/* Vector Merge High Word */
@@ -3817,15 +3832,10 @@ ppc_process_record_op4 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 780:		/* Vector Splat Immediate Signed Byte */
     case 844:		/* Vector Splat Immediate Signed Halfword */
     case 908:		/* Vector Splat Immediate Signed Word */
-    case 44:		/* Vector Shift Left Double by Octet Immediate */
     case 452:		/* Vector Shift Left */
     case 708:		/* Vector Shift Right */
     case 1036:		/* Vector Shift Left by Octet */
     case 1100:		/* Vector Shift Right by Octet */
-    case 60:		/* Vector Add Extended Unsigned Quadword Modulo */
-    case 61:		/* Vector Add Extended & write Carry Unsigned Quadword */
-    case 62:		/* Vector Subtract Extended Unsigned Quadword Modulo */
-    case 63:		/* Vector Subtract Extended & write Carry Unsigned Quadword */
     case 0:		/* Vector Add Unsigned Byte Modulo */
     case 64:		/* Vector Add Unsigned Halfword Modulo */
     case 128:		/* Vector Add Unsigned Word Modulo */
@@ -3853,11 +3863,6 @@ ppc_process_record_op4 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 1280:		/* Vector Subtract Unsigned Quadword Modulo */
     case 1344:		/* Vector Subtract & write Carry Unsigned Quadword */
     case 1408:		/* Vector Subtract and Write Carry-Out Unsigned Word */
-    case 34:		/* Vector Multiply-Low-Add Unsigned Halfword Modulo */
-    case 36:		/* Vector Multiply-Sum Unsigned Byte Modulo */
-    case 37:		/* Vector Multiply-Sum Mixed Byte Modulo */
-    case 38:		/* Vector Multiply-Sum Unsigned Halfword Modulo */
-    case 40:		/* Vector Multiply-Sum Signed Halfword Modulo */
     case 1282:		/* Vector Average Signed Byte */
     case 1346:		/* Vector Average Signed Halfword */
     case 1410:		/* Vector Average Signed Word */
@@ -3906,8 +3911,6 @@ ppc_process_record_op4 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 964:		/* Vector Shift Right Algebraic Doubleword */
     case 10:		/* Vector Add Single-Precision */
     case 74:		/* Vector Subtract Single-Precision */
-    case 46:		/* Vector Multiply-Add Single-Precision */
-    case 47:		/* Vector Negative Multiply-Subtract Single-Precision */
     case 1034:		/* Vector Maximum Single-Precision */
     case 1098:		/* Vector Minimum Single-Precision */
     case 842:		/* Vector Convert From Signed Fixed-Point Word */
@@ -4607,11 +4610,8 @@ ppc_process_record_op60 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 153:		/* ditto */
     case 40:		/* VSX Scalar Subtract Double-Precision */
     case 8:		/* VSX Scalar Subtract Single-Precision */
-    case 61:		/* VSX Scalar Test for software Divide Double-Precision */
     case 96:		/* VSX Vector Add Double-Precision */
     case 64:		/* VSX Vector Add Single-Precision */
-    case 240:		/* VSX Vector Copy Sign Double-Precision */
-    case 208:		/* VSX Vector Copy Sign Single-Precision */
     case 120:		/* VSX Vector Divide Double-Precision */
     case 88:		/* VSX Vector Divide Single-Precision */
     case 97:		/* VSX Vector Multiply-Add Double-Precision */
@@ -4639,6 +4639,8 @@ ppc_process_record_op60 (struct gdbarch *gdbarch, struct regcache *regcache,
     case 104:		/* VSX Vector Subtract Double-Precision */
     case 72:		/* VSX Vector Subtract Single-Precision */
       record_full_arch_list_add_reg (regcache, tdep->ppc_fpscr_regnum);
+    case 240:		/* VSX Vector Copy Sign Double-Precision */
+    case 208:		/* VSX Vector Copy Sign Single-Precision */
     case 130:		/* VSX Logical AND */
     case 138:		/* VSX Logical AND with Complement */
     case 186:		/* VSX Logical Equivalence */
@@ -4660,6 +4662,7 @@ ppc_process_record_op60 (struct gdbarch *gdbarch, struct regcache *regcache,
       ppc_record_vsr (regcache, tdep, PPC_XT (insn));
       return 0;
 
+    case 61:		/* VSX Scalar Test for software Divide Double-Precision */
     case 125:		/* VSX Vector Test for software Divide Double-Precision */
     case 93:		/* VSX Vector Test for software Divide Single-Precision */
       record_full_arch_list_add_reg (regcache, tdep->ppc_cr_regnum);
