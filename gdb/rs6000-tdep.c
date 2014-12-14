@@ -5151,8 +5151,6 @@ ppc_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
       break;
 
     case 56:		/* Load Quadword */
-      if (PPC_FIELD (insn, 30, 2) != 0)
-	goto UNKNOWN_OP;
       tmp = tdep->ppc_gp0_regnum + (PPC_RT (insn) & ~1);
       record_full_arch_list_add_reg (regcache, tmp);
       record_full_arch_list_add_reg (regcache, tmp + 1);
