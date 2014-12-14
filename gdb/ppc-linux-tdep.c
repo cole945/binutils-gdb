@@ -785,8 +785,8 @@ ppc_linux_get_syscall_number (struct gdbarch *gdbarch,
 
 /* PPC process record-replay */
 
-struct linux_record_tdep ppc_linux_record_tdep;
-struct linux_record_tdep ppc64_linux_record_tdep;
+static struct linux_record_tdep ppc_linux_record_tdep;
+static struct linux_record_tdep ppc64_linux_record_tdep;
 
 static enum gdb_syscall
 ppc_canonicalize_syscall (int syscall)
@@ -870,8 +870,13 @@ ppc_linux_syscall_record (struct regcache *regcache)
      return 0;
    }
 
-  ret = record_linux_system_call (syscall_gdb, regcache,
-				  tdep->ppc_linux_record_tdep);
+  if (tdep->wordsize == 8)
+    ret = record_linux_system_call (syscall_gdb, regcache,
+				    &ppc64_linux_record_tdep);
+  else
+    ret = record_linux_system_call (syscall_gdb, regcache,
+				    &ppc_linux_record_tdep);
+
   if (ret != 0)
     return ret;
 
@@ -907,14 +912,11 @@ ppc_linux_record_signal (struct gdbarch *gdbarch, struct regcache *regcache,
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int i;
 
-  for (i = 3; i <= 6; i++)
+  for (i = 3; i <= 12; i++)
     {
       if (record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + i))
 	return -1;
     }
-  if (tdep->wordsize == 8
-      && record_full_arch_list_add_reg (regcache, tdep->ppc_gp0_regnum + 12))
-    return -1;
 
   if (record_full_arch_list_add_reg (regcache, tdep->ppc_lr_regnum))
     return -1;
@@ -1415,155 +1417,81 @@ static const struct frame_unwind ppu2spu_unwind = {
 /* Initialize linux_record_tdep if not initialized yet.  */
 
 static void
-ppc_init_linux_record_tdep (struct gdbarch *gdbarch,
-			    struct linux_record_tdep *record_tdep)
+ppc_init_linux_record_tdep (struct linux_record_tdep *record_tdep,
+			    int wordsize)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  /* Simply return if it had been initialized.  */
+  if (record_tdep->size_pointer != 0)
+    return;
 
   /* These values are the size of the type that will be used in a system
      call.  They are obtained from Linux Kernel source.  */
 
-  if (tdep->wordsize == 8 && record_tdep->size_pointer == 0)
-    {
-      record_tdep->size_pointer = gdbarch_ptr_bit (gdbarch) / TARGET_CHAR_BIT;
-      record_tdep->size__old_kernel_stat = 32;
-      record_tdep->size_tms = 32;
-      record_tdep->size_loff_t = 8;
-      record_tdep->size_flock = 32;
-      record_tdep->size_oldold_utsname = 45;
-      record_tdep->size_ustat = 32;
-      record_tdep->size_old_sigaction = 152;
-      record_tdep->size_old_sigset_t = 128;
-      record_tdep->size_rlimit = 16;
-      record_tdep->size_rusage = 144;
-      record_tdep->size_timeval = 16;
-      record_tdep->size_timezone = 8;
-      record_tdep->size_old_gid_t = 4;
-      record_tdep->size_old_uid_t = 4;
-      record_tdep->size_fd_set = 128;
-      record_tdep->size_dirent = 280;
-      record_tdep->size_dirent64 = 280;
-      record_tdep->size_statfs = 120;
-      record_tdep->size_statfs64 = 120;
-      record_tdep->size_sockaddr = 16;
-      record_tdep->size_int = gdbarch_int_bit (gdbarch) / TARGET_CHAR_BIT;
-      record_tdep->size_long = gdbarch_long_bit (gdbarch) / TARGET_CHAR_BIT;
-      record_tdep->size_ulong = gdbarch_long_bit (gdbarch) / TARGET_CHAR_BIT;
-      record_tdep->size_msghdr = 56;
-      record_tdep->size_itimerval = 32;
-      record_tdep->size_stat = 144;
-      record_tdep->size_old_utsname = 325;
-      record_tdep->size_sysinfo = 112;
-      record_tdep->size_msqid_ds = 120;
-      record_tdep->size_shmid_ds = 112;
-      record_tdep->size_new_utsname = 390;
-      record_tdep->size_timex = 208;
-      record_tdep->size_mem_dqinfo = 24;
-      record_tdep->size_if_dqblk = 72;
-      record_tdep->size_fs_quota_stat = 80;
-      record_tdep->size_timespec = 16;
-      record_tdep->size_pollfd = 8;
-      record_tdep->size_NFS_FHSIZE = 32;
-      record_tdep->size_knfsd_fh = 132;
-      record_tdep->size_TASK_COMM_LEN = 32;
-      record_tdep->size_sigaction = 152;
-      record_tdep->size_sigset_t = 128;
-      record_tdep->size_siginfo_t = 128;
-      record_tdep->size_cap_user_data_t = 8;
-      record_tdep->size_stack_t = 24;
-      record_tdep->size_off_t = 8;
-      record_tdep->size_stat64 = 104;
-      record_tdep->size_gid_t = 4;
-      record_tdep->size_uid_t = 4;
-      record_tdep->size_PAGE_SIZE = 0x10000;	/* 64KB */
-      record_tdep->size_flock64 = 32;
-      record_tdep->size_io_event = 32;
-      record_tdep->size_iocb = 64;
-      record_tdep->size_epoll_event = 16;
-      record_tdep->size_itimerspec = 32;
-      record_tdep->size_mq_attr = 64;
-      record_tdep->size_siginfo = 128;
-      record_tdep->size_termios = 44;
-      record_tdep->size_pid_t = 4;
-      record_tdep->size_winsize = 8;
-      record_tdep->size_serial_struct = 72;
-      record_tdep->size_serial_icounter_struct = 80;
-      record_tdep->size_size_t = 8;
-      record_tdep->size_iovec = 16;
-    }
-  else if (tdep->wordsize == 4 && record_tdep->size_pointer == 0)
-    {
-      record_tdep->size_pointer = gdbarch_ptr_bit (gdbarch) / TARGET_CHAR_BIT;
-      record_tdep->size__old_kernel_stat = 32;
-      record_tdep->size_tms = 16;
-      record_tdep->size_loff_t = 8;
-      record_tdep->size_flock = 16;
-      record_tdep->size_oldold_utsname = 45;
-      record_tdep->size_ustat = 20;
-      record_tdep->size_old_sigaction = 152;
-      record_tdep->size_old_sigset_t = 128;
-      record_tdep->size_rlimit = 8;
-      record_tdep->size_rusage = 72;
-      record_tdep->size_timeval = 8;
-      record_tdep->size_timezone = 8;
-      record_tdep->size_old_gid_t = 4;
-      record_tdep->size_old_uid_t = 4;
-      record_tdep->size_fd_set = 128;
-      record_tdep->size_dirent = 268;
-      record_tdep->size_dirent64 = 280;
-      record_tdep->size_statfs = 64;
-      record_tdep->size_statfs64 = 88;
-      record_tdep->size_sockaddr = 16;
-      record_tdep->size_int = gdbarch_int_bit (gdbarch) / TARGET_CHAR_BIT;
-      record_tdep->size_long = gdbarch_long_bit (gdbarch) / TARGET_CHAR_BIT;
-      record_tdep->size_ulong = gdbarch_long_bit (gdbarch) / TARGET_CHAR_BIT;
-      record_tdep->size_msghdr = 28;
-      record_tdep->size_itimerval = 16;
-      record_tdep->size_stat = 88;
-      record_tdep->size_old_utsname = 325;
-      record_tdep->size_sysinfo = 64;
-      record_tdep->size_msqid_ds = 68;
-      record_tdep->size_shmid_ds = 60;
-      record_tdep->size_new_utsname = 390;
-      record_tdep->size_timex = 128;
-      record_tdep->size_mem_dqinfo = 24;
-      record_tdep->size_if_dqblk = 72;
-      record_tdep->size_fs_quota_stat = 80;
-      record_tdep->size_timespec = 8;
-      record_tdep->size_pollfd = 8;
-      record_tdep->size_NFS_FHSIZE = 32;
-      record_tdep->size_knfsd_fh = 132;
-      record_tdep->size_TASK_COMM_LEN = 32;
-      record_tdep->size_sigaction = 140;
-      record_tdep->size_sigset_t = 128;
-      record_tdep->size_siginfo_t = 128;
-      record_tdep->size_cap_user_data_t = 4;
-      record_tdep->size_stack_t = 12;
-      record_tdep->size_off_t = 4;
-      record_tdep->size_stat64 = 104;
-      record_tdep->size_gid_t = 4;
-      record_tdep->size_uid_t = 4;
-      record_tdep->size_PAGE_SIZE = 0x10000;	/* 64KB */
-      record_tdep->size_flock64 = 32;
-      record_tdep->size_io_event = 32;
-      record_tdep->size_iocb = 64;
-      record_tdep->size_epoll_event = 16;
-      record_tdep->size_itimerspec = 16;
-      record_tdep->size_mq_attr = 32;
-      record_tdep->size_siginfo = 128;
-      record_tdep->size_termios = 44;
-      record_tdep->size_pid_t = 4;
-      record_tdep->size_winsize = 8;
-      record_tdep->size_serial_struct = 60;
-      record_tdep->size_serial_icounter_struct = 80;
-      record_tdep->size_size_t = 4;
-      record_tdep->size_iovec = 8;
-    }
-  else
-    {
-      /* RECORD_TDEP had been initialized.  */
-      return;
-    }
+  record_tdep->size_pointer = wordsize;
+  record_tdep->size__old_kernel_stat = 32;
+  record_tdep->size_tms = 32;
+  record_tdep->size_loff_t = 8;
+  record_tdep->size_flock = 32;
+  record_tdep->size_oldold_utsname = 45;
+  record_tdep->size_ustat = 32;
+  record_tdep->size_old_sigaction = 152;
+  record_tdep->size_old_sigset_t = 128;
+  record_tdep->size_rlimit = 16;
+  record_tdep->size_rusage = 144;
+  record_tdep->size_timeval = 16;
+  record_tdep->size_timezone = 8;
+  record_tdep->size_old_gid_t = 4;
+  record_tdep->size_old_uid_t = 4;
+  record_tdep->size_fd_set = 128;
+  record_tdep->size_dirent = 280;
+  record_tdep->size_dirent64 = 280;
+  record_tdep->size_statfs = 120;
+  record_tdep->size_statfs64 = 120;
+  record_tdep->size_sockaddr = 16;
+  record_tdep->size_int = 4;
+  record_tdep->size_long = wordsize;
+  record_tdep->size_ulong = wordsize;
+  record_tdep->size_msghdr = 56;
+  record_tdep->size_itimerval = 32;
+  record_tdep->size_stat = 144;
+  record_tdep->size_old_utsname = 325;
+  record_tdep->size_sysinfo = 112;
+  record_tdep->size_msqid_ds = 120;
+  record_tdep->size_shmid_ds = 112;
+  record_tdep->size_new_utsname = 390;
+  record_tdep->size_timex = 208;
+  record_tdep->size_mem_dqinfo = 24;
+  record_tdep->size_if_dqblk = 72;
+  record_tdep->size_fs_quota_stat = 80;
+  record_tdep->size_timespec = 16;
+  record_tdep->size_pollfd = 8;
+  record_tdep->size_NFS_FHSIZE = 32;
+  record_tdep->size_knfsd_fh = 132;
+  record_tdep->size_TASK_COMM_LEN = 32;
+  record_tdep->size_sigaction = 152;
+  record_tdep->size_sigset_t = 128;
+  record_tdep->size_siginfo_t = 128;
+  record_tdep->size_cap_user_data_t = 8;
+  record_tdep->size_stack_t = 24;
+  record_tdep->size_off_t = 8;
+  record_tdep->size_stat64 = 104;
+  record_tdep->size_gid_t = 4;
+  record_tdep->size_uid_t = 4;
+  record_tdep->size_PAGE_SIZE = 0x10000;	/* 64KB */
+  record_tdep->size_flock64 = 32;
+  record_tdep->size_io_event = 32;
+  record_tdep->size_iocb = 64;
+  record_tdep->size_epoll_event = 16;
+  record_tdep->size_itimerspec = 32;
+  record_tdep->size_mq_attr = 64;
+  record_tdep->size_siginfo = 128;
+  record_tdep->size_termios = 44;
+  record_tdep->size_pid_t = 4;
+  record_tdep->size_winsize = 8;
+  record_tdep->size_serial_struct = 72;
+  record_tdep->size_serial_icounter_struct = 80;
+  record_tdep->size_size_t = 8;
+  record_tdep->size_iovec = 16;
 
   /* These values are the second argument of system call "sys_fcntl"
      and "sys_fcntl64".  They are obtained from Linux Kernel source.  */
@@ -1826,12 +1754,9 @@ ppc_linux_init_abi (struct gdbarch_info info,
   set_gdbarch_process_record (gdbarch, ppc_process_record);
   set_gdbarch_process_record_signal (gdbarch, ppc_linux_record_signal);
   tdep->ppc_syscall_record = ppc_linux_syscall_record;
-  if (tdep->wordsize == 8)
-    tdep->ppc_linux_record_tdep = &ppc64_linux_record_tdep;
-  else if (tdep->wordsize == 4)
-    tdep->ppc_linux_record_tdep = &ppc_linux_record_tdep;
 
-  ppc_init_linux_record_tdep (gdbarch, tdep->ppc_linux_record_tdep);
+  ppc_init_linux_record_tdep (&ppc_linux_record_tdep, 4);
+  ppc_init_linux_record_tdep (&ppc64_linux_record_tdep, 8);
 }
 
 /* Provide a prototype to silence -Wmissing-prototypes.  */

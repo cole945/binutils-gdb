@@ -25,7 +25,6 @@ struct frame_info;
 struct value;
 struct regcache;
 struct type;
-struct linux_record_tdep;
 
 /* From ppc-sysv-tdep.c ...  */
 enum return_value_convention ppc_sysv_abi_return_value (struct gdbarch *gdbarch,
@@ -262,7 +261,6 @@ struct gdbarch_tdep
     struct type *ppc_builtin_type_vec128;
 
     int (*ppc_syscall_record) (struct regcache *regcache);
-    struct linux_record_tdep *ppc_linux_record_tdep;
 };
 
 
