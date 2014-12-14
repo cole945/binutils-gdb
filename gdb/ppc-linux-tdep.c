@@ -51,7 +51,6 @@
 #include "linux-tdep.h"
 #include "linux-record.h"
 #include "record-full.h"
-#include "infrun.h"
 
 #include "stap-probe.h"
 #include "ax.h"
@@ -301,22 +300,6 @@ powerpc_linux_in_dynsym_resolve_code (CORE_ADDR pc)
 	  || strcmp (MSYMBOL_LINKAGE_NAME (sym.minsym),
 		     "__glink_PLTresolve") == 0))
     return 1;
-  else if (execution_direction == EXEC_REVERSE)
-    {
-      int i;
-      struct frame_info *frame = get_current_frame ();
-      struct gdbarch *gdbarch = get_frame_arch (frame);
-      const int plt_stub_len = 4;
-
-      /* Scan backward to chech whether we are in the middle
-	 of PLT stub.  */
-      for (i = 0; i < plt_stub_len; i++)
-	{
-	  if (gdbarch_skip_trampoline_code (gdbarch, frame, pc))
-	    return 1;
-	  pc -= 4;
-	}
-    }
 
   return 0;
 }
@@ -1643,6 +1626,15 @@ ppc_linux_init_abi (struct gdbarch_info info,
       else
 	set_gdbarch_gcore_bfd_target (gdbarch, "elf32-powerpc");
 
+      if (powerpc_so_ops.in_dynsym_resolve_code == NULL)
+	{
+	  powerpc_so_ops = svr4_so_ops;
+	  /* Override dynamic resolve function.  */
+	  powerpc_so_ops.in_dynsym_resolve_code =
+	    powerpc_linux_in_dynsym_resolve_code;
+	}
+      set_solib_ops (gdbarch, &powerpc_so_ops);
+
       set_gdbarch_skip_solib_resolver (gdbarch, glibc_skip_solib_resolver);
     }
   
@@ -1686,15 +1678,6 @@ ppc_linux_init_abi (struct gdbarch_info info,
       else
 	set_gdbarch_gcore_bfd_target (gdbarch, "elf64-powerpc");
     }
-
-  if (powerpc_so_ops.in_dynsym_resolve_code == NULL)
-    {
-      powerpc_so_ops = svr4_so_ops;
-      /* Override dynamic resolve function.  */
-      powerpc_so_ops.in_dynsym_resolve_code =
-	powerpc_linux_in_dynsym_resolve_code;
-    }
-  set_solib_ops (gdbarch, &powerpc_so_ops);
 
   /* PPC32 uses a different prpsinfo32 compared to most other Linux
      archs.  */
