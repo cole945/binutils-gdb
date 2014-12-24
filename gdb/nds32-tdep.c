@@ -1346,6 +1346,7 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int fs0_regnum = -1, fd0_regnum = -1;
+  struct type *func_type = value_type (function);
 
   if (tdep->abi_use_fpr)
     {
@@ -1407,6 +1408,15 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 	 callee stores unnamed arguments in stack,
 	 and then va_arg fetch arguments in stack.
 	 Therefore, we don't have to handle variadic function specially.  */
+
+      if (TYPE_VARARGS (func_type) && tdep->abi_use_fpr
+	  && i >= TYPE_NFIELDS (func_type))
+	{
+	  /* Variadic function is handled differently between ABI2 and ABI2FP+
+	     In ABI2FP+, the caller pushes only named arguments in registers
+	     and pushes all unnamed arguments in stack.  */
+	  goff = foff = REND;
+	}
 
       val = value_contents (args[i]);
 
