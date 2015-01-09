@@ -1167,11 +1167,13 @@ nds32_frame_unwind_cache (struct frame_info *this_frame,
     {
       /* Try to use FP if possible. */
       prev_sp = fp_base - info->fp_offset;
+      info->base = prev_sp;
     }
+  else
+    info->base = next_base;
 
   /* Convert that SP/BASE into real addresses.  */
   info->prev_sp = prev_sp;
-  info->base = next_base;
 
   /* Adjust all the saved registers so that they contain addresses and
      not offsets.  */
