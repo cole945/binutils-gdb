@@ -8387,7 +8387,7 @@ i386_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
      appended to the list first, so that it supercedes the DWARF
      unwinder in function epilogues (where the DWARF unwinder
      currently fails).  */
-  frame_unwind_append_unwinder (gdbarch, &nds32_epilogue_frame_unwind);
+  frame_unwind_append_unwinder (gdbarch, &i386_epilogue_frame_unwind);
 
   /* Hook in the DWARF CFI frame unwinder.  This unwinder is appended
      to the list before the prologue-based unwinders, so that DWARF
