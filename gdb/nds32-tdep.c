@@ -984,11 +984,13 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
     {
       /* Try to use FP if possible. */
       prev_sp = fp_base - cache->fp_offset;
+      cache->base = prev_sp;
     }
+  else
+    cache->base = next_base;
 
   /* Convert that SP/BASE into real addresses.  */
   cache->prev_sp = prev_sp;
-  cache->base = next_base;
 
   /* Adjust all the saved registers so that they contain addresses and
      not offsets.  */
