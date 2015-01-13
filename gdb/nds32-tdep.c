@@ -1344,7 +1344,7 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 {
   const int REND = 6;		/* Max arguments number.  */
   int goff = 0;			/* Current gpr for argument.  */
-  int foff = 0;			/* Currnet gpr for argument.  */
+  int foff = 0;			/* Current fpr for argument.  */
   int soff = 0;			/* Current stack offset.  */
   int i;
   enum type_code typecode;
@@ -1424,7 +1424,7 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 	  if ((align >> 2) > 0)
 	    foff = align_up (foff, align >> 2);
 
-	  if (foff < REND && !soff)
+	  if (foff < REND)
 	    {
 	      if (tdep->abi_use_fpr && fs0_regnum == -1)
 		goto error_no_fpr;
@@ -2971,6 +2971,7 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
       switch (nds32_abi)
 	{
 	case E_NDS_ABI_V2FP:
+	case E_NDS_ABI_V2FP_PLUS:
 	  tdep->abi_use_fpr = TRUE;
 	  /* Fall-through.  */
 	case E_NDS_ABI_V2:
