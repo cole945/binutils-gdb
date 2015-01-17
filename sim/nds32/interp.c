@@ -684,29 +684,21 @@ nds32_decode32_alu1 (sim_cpu *cpu, const uint32_t insn, sim_cia cia)
     case 0x18:			/* sva */
     case 0x19:			/* svs */
       {
-	uint64_t ra_msb = (CCPU_GPR[ra].u >> 31) & 0x1;
-	uint64_t rb_msb;
-	uint64_t result;
+	int c1, c2;
+	unsigned int ua, ub;
+	int sub;
 
-	if ((insn & 0x1f) == 0x18)
-	  {
-	    /* sva */
-	    rb_msb = (CCPU_GPR[rb].u >> 31) & 0x1;
-	    result = (uint64_t) CCPU_GPR[ra].u + (uint64_t) CCPU_GPR[rb].u;
-	  }
-	else
-	  {
-	    /* Subtracting 'ra' and 'rb', so we need to get 2's
-	       complement of 'rb'.  */
-	    rb_msb = ((~CCPU_GPR[rb].u + 1) >> 31) & 0x1;
-	    result = (uint64_t) CCPU_GPR[ra].u + (uint64_t) ~CCPU_GPR[rb].u + 1;
-	  }
+	ua = CCPU_GPR[ra].u;
+	ub = CCPU_GPR[rb].u;
+	sub = N32_SUB5 (insn) == 0x19 ? 1 : 0;
 
-	/* Get the result of the overflow condition.  */
-	if (ra_msb == rb_msb)
-	  CCPU_GPR[rt].u = (((result >> 31) & 0x1) != ra_msb);
-	else
-	  CCPU_GPR[rt].u = 0;
+	if (sub)
+	  ub = ~ub;
+
+	c1 = ((ua & 0x7fffffff) + (ub & 0x7fffffff) + sub) >> 31;
+	c2 = ((ua >> 31) + (ub >> 31) + c1) >> 1;
+
+	CCPU_GPR[rt].u = c1 ^ c2;
       }
       break;
     case 0x1a:			/* cmovz */
