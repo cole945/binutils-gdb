@@ -28,9 +28,6 @@
 
 #include "sim-main.h"
 
-typedef unsigned long long ulongest_t;
-typedef signed long long longest_t;
-
 enum nds32_cpu_regnum
 {
   GPR_TA = 15,
@@ -72,8 +69,8 @@ enum nds32_exceptions
 uint32_t nds32_raise_exception (sim_cpu *cpu, enum nds32_exceptions e, int sig, char *msg, ...);
 
 /* Do not use thsi directly. */
-ulongest_t __nds32_ld (sim_cpu *cpu, SIM_ADDR addr, int size, int aligned_p);
-void __nds32_st (sim_cpu *cpu, SIM_ADDR addr, int size, ulongest_t val, int aligned_p);
+uint64_t  __nds32_ld (sim_cpu *cpu, SIM_ADDR addr, int size, int aligned_p);
+void __nds32_st (sim_cpu *cpu, SIM_ADDR addr, int size, uint64_t  val, int aligned_p);
 /* Use these wrappers. */
 #define nds32_ld_aligned(CPU, ADDR, SIZE)		__nds32_ld (CPU, ADDR, SIZE, 1)
 #define nds32_st_aligned(CPU, ADDR, SIZE, VAL)		__nds32_st (CPU, ADDR, SIZE, VAL, 1)

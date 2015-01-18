@@ -223,16 +223,16 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 	if (CCPU_GPR[0].u)
 	  {
 	    __nds32_st (cpu, CCPU_GPR[0].u, sizeof (target_tv.tv_sec),
-			(ulongest_t) target_tv.tv_sec, 0);
+			(uint64_t) target_tv.tv_sec, 0);
 	    __nds32_st (cpu, CCPU_GPR[0].u + 4, sizeof (target_tv.tv_usec),
-			(ulongest_t) target_tv.tv_usec, 0);
+			(uint64_t) target_tv.tv_usec, 0);
 	  }
 	if (CCPU_GPR[1].u)
 	  {
 	    __nds32_st (cpu, CCPU_GPR[1].u, sizeof (target_tz.tz_minuteswest),
-			(ulongest_t) target_tz.tz_minuteswest, 0);
+			(uint64_t) target_tz.tz_minuteswest, 0);
 	    __nds32_st (cpu, CCPU_GPR[1].u, sizeof (target_tz.tz_dsttime),
-			(ulongest_t) target_tz.tz_dsttime, 0);
+			(uint64_t) target_tz.tz_dsttime, 0);
 	  }
       }
       break;

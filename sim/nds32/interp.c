@@ -53,10 +53,10 @@ static void nds32_set_nia (sim_cpu *cpu, sim_cia nia);
 static sim_cia recent_cia[RECENT_CIA_MASK + 1];
 static int recent_cia_idx = 0;
 
-static ulongest_t
+static uint64_t
 extract_unsigned_integer (unsigned char *addr, int len, int byte_order)
 {
-  ulongest_t retval;
+  uint64_t retval;
   const unsigned char *p;
   const unsigned char *startaddr = addr;
   const unsigned char *endaddr = startaddr + len;
@@ -77,7 +77,7 @@ extract_unsigned_integer (unsigned char *addr, int len, int byte_order)
 
 static void
 store_unsigned_integer (unsigned char *addr, int len,
-			int byte_order, ulongest_t val)
+			int byte_order, uint64_t val)
 {
   unsigned char *p;
   unsigned char *startaddr = addr;
@@ -196,14 +196,14 @@ nds32_bad_op (sim_cpu *cpu, uint32_t cia, uint32_t insn, char *tag)
 
 /* Load an integer in endian specified in PSW.BE flag.  */
 
-ulongest_t
+uint64_t
 __nds32_ld (sim_cpu *cpu, SIM_ADDR addr, int size, int aligned_p)
 {
   int r, order;
-  ulongest_t val = 0;
+  uint64_t val = 0;
   SIM_DESC sd = CPU_STATE (cpu);
 
-  SIM_ASSERT (size <= sizeof (ulongest_t));
+  SIM_ASSERT (size <= sizeof (uint64_t));
 
   if (aligned_p && (addr & (size - 1)) != 0)
     nds32_raise_exception (cpu, EXP_GENERAL, SIM_SIGSEGV,
@@ -227,13 +227,13 @@ __nds32_ld (sim_cpu *cpu, SIM_ADDR addr, int size, int aligned_p)
 /* Store an integer in endian specified in PSW.BE flag.  */
 
 void
-__nds32_st (sim_cpu *cpu, SIM_ADDR addr, int size, ulongest_t val,
+__nds32_st (sim_cpu *cpu, SIM_ADDR addr, int size, uint64_t val,
 	    int aligned_p)
 {
   int r, order;
   SIM_DESC sd = CPU_STATE (cpu);
 
-  SIM_ASSERT (size <= sizeof (ulongest_t));
+  SIM_ASSERT (size <= sizeof (uint64_t));
 
   if (aligned_p && (addr & (size - 1)) != 0)
     nds32_raise_exception (cpu, EXP_GENERAL, SIM_SIGSEGV,
@@ -2175,7 +2175,7 @@ sim_engine_run (SIM_DESC sd, int next_cpu_nr, int nr_cpus, int siggnal)
 static int
 nds32_fetch_register (sim_cpu *cpu, int rn, unsigned char *memory, int length)
 {
-  ulongest_t val = 0;
+  uint64_t val = 0;
 
   /* General purpose registers.  */
   if (rn < 32)
@@ -2240,7 +2240,7 @@ do_fetch:
 static int
 nds32_store_register (sim_cpu *cpu, int rn, unsigned char *memory, int length)
 {
-  ulongest_t val;
+  uint64_t val;
 
   val = extract_unsigned_integer (memory, length,
 				  CCPU_SR_TEST (PSW, PSW_BE)
