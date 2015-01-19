@@ -2489,9 +2489,15 @@ sim_create_inferior (SIM_DESC sd, struct bfd *prog_bfd, char **argv,
 
   /* Set default endian.  */
   if (bfd_big_endian (prog_bfd))
-    CCPU_SR_SET (PSW, PSW_BE);
+    {
+      CCPU_SR_SET (PSW, PSW_BE);
+      STATE_CALLBACK (sd)->target_endian = BFD_ENDIAN_BIG;
+    }
   else
-    CCPU_SR_CLEAR (PSW, PSW_BE);
+    {
+      CCPU_SR_CLEAR (PSW, PSW_BE);
+      STATE_CALLBACK (sd)->target_endian = BFD_ENDIAN_LITTLE;
+    }
 
   STATE_CALLBACK (sd)->syscall_map = cb_nds32_libgloss_syscall_map;
   nds32_init_libgloss (sd, prog_bfd, argv, env);
