@@ -178,35 +178,27 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
 	struct timeval tv;
 	struct timezone tz;
 	struct {
-	  uint32_t tv_sec;
-	  uint32_t tv_usec;
+	  signed_word tv_sec;
+	  signed_word tv_usec;
 	} target_tv;
 	struct {
-	  uint32_t tz_minuteswest;
-	  uint32_t tz_dsttime;
+	  signed_4 tz_minuteswest;
+	  signed_4 tz_dsttime;
 	} target_tz;
 
 	sc.result = gettimeofday (&tv, &tz);
 
-	target_tv.tv_sec = tv.tv_sec;
-	target_tv.tv_usec = tv.tv_usec;
-	target_tz.tz_minuteswest = tz.tz_minuteswest;
-	target_tz.tz_dsttime = tz.tz_dsttime;
+	target_tv.tv_sec = H2T_word (tv.tv_sec);
+	target_tv.tv_usec = H2T_word (tv.tv_usec);
+	target_tz.tz_minuteswest = H2T_4 (tz.tz_minuteswest);
+	target_tz.tz_dsttime = H2T_4 (tz.tz_dsttime);
 
 	if (CCPU_GPR[0].u)
-	  {
-	    __nds32_st (cpu, CCPU_GPR[0].u, sizeof (target_tv.tv_sec),
-			(uint64_t) target_tv.tv_sec, 0);
-	    __nds32_st (cpu, CCPU_GPR[0].u + 4, sizeof (target_tv.tv_usec),
-			(uint64_t) target_tv.tv_usec, 0);
-	  }
+	  sim_write (sd, CCPU_GPR[0].u, (const unsigned char *) &target_tv,
+		     sizeof (target_tv));
 	if (CCPU_GPR[1].u)
-	  {
-	    __nds32_st (cpu, CCPU_GPR[1].u, sizeof (target_tz.tz_minuteswest),
-			(uint64_t) target_tz.tz_minuteswest, 0);
-	    __nds32_st (cpu, CCPU_GPR[1].u, sizeof (target_tz.tz_dsttime),
-			(uint64_t) target_tz.tz_dsttime, 0);
-	  }
+	  sim_write (sd, CCPU_GPR[1].u, (const unsigned char *) &target_tz,
+		     sizeof (target_tz));
       }
       break;
 #endif
