@@ -560,6 +560,12 @@ load_imm (unsigned char *buf, int reg, uint64_t imm)
 }
 
 static int
+ppc_supports_tracepoints (void)
+{
+  return 1;
+}
+
+static int
 ppc_install_fast_tracepoint_jump_pad (CORE_ADDR tpoint, CORE_ADDR tpaddr,
 				      CORE_ADDR collector,
 				      CORE_ADDR lockaddr,
@@ -872,7 +878,11 @@ struct linux_target_ops the_low_target = {
   NULL, /* linux_new_thread */
   NULL, /* linux_prepare_to_resume */
   NULL, /* linux_process_qsupported */
-  NULL, /* supports_tracepoints */
+#ifdef __powerpc64__
+  ppc_supports_tracepoints,
+#else
+  NULL,
+#endif
   NULL, /* get_thread_area */
 #ifdef __powerpc64__
   ppc_install_fast_tracepoint_jump_pad,
