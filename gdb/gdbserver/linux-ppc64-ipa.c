@@ -70,14 +70,20 @@ supply_fast_tracepoint_registers (struct regcache *regcache,
   int i;
 
   for (i = 0; i < PPC64_NUM_FT_COLLECT_GREGS; i++)
-    supply_register (regcache, i,
-		     ((char *) buf) + ppc64_ft_collect_regmap[i]);
+    {
+      if (ppc64_ft_collect_regmap[i] == -1)
+	continue;
+      supply_register (regcache, i,
+		       ((char *) buf) + ppc64_ft_collect_regmap[i]);
+    }
 }
 
 ULONGEST __attribute__ ((visibility("default"), used))
 gdb_agent_get_raw_reg (const unsigned char *raw_regs, int regnum)
 {
   if (regnum >= PPC64_NUM_FT_COLLECT_GREGS)
+    return 0;
+  if (ppc64_ft_collect_regmap[regnum] == -1)
     return 0;
 
   return *(ULONGEST *) (raw_regs + ppc64_ft_collect_regmap[regnum]);
