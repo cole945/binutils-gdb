@@ -154,46 +154,19 @@ nds32_syscall (sim_cpu *cpu, int swid, sim_cia cia)
       break;
 
     /*
-     * System calls used by libgloss and Linux.
+     * System calls used by libgloss.
      */
 
-    case CB_SYS_exit_group:
     case CB_SYS_exit:
       sim_engine_halt (CPU_STATE (cpu), cpu, NULL, cia,
 		       sim_exited, CCPU_GPR[0].s);
       break;
-
-    case CB_SYS_llseek:
-      {
-	unsigned int fd = CCPU_GPR[0].u;
-	unsigned long offhi = CCPU_GPR[1].u;
-	unsigned long offlo = CCPU_GPR[2].u;
-	unsigned int whence = CCPU_GPR[4].u;
-	uint64_t roff;
-
-	sc.func = swid;
-	sc.arg1 = fd;
-	sc.arg2 = offlo;
-	sc.arg3 = whence;
-
-	SIM_ASSERT (offhi == 0);
-
-	sc.func = TARGET_LINUX_SYS_lseek;
-	cb_syscall (cb, &sc);
-	roff = sc.result;
-
-	/* Copy the result only if user really passes other then NULL.  */
-	if (sc.result != -1 && CCPU_GPR[3].u)
-	  sim_write (sd, CCPU_GPR[3].u, (const unsigned char *) &roff,
-		     sizeof (roff));
-      }
 
     case CB_SYS_getpid:
       sc.result = getpid ();
       break;
 
     case CB_SYS_stat:
-    case CB_SYS_lstat:
     case CB_SYS_fstat:
       cb->stat_map = cb_libgloss_stat_map_32;
       cb_syscall (cb, &sc);
