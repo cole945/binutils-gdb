@@ -512,6 +512,176 @@ ppc_breakpoint_at (CORE_ADDR where)
   return 0;
 }
 
+#ifdef __powerpc64__
+static int
+write_insn (unsigned char *buf, uint32_t insn)
+{
+  buf[0] = (insn >> 24) & 0xff;
+  buf[1] = (insn >> 16) & 0xff;
+  buf[2] = (insn >> 8) & 0xff;
+  buf[3] = insn & 0xff;
+  return 4;
+}
+
+static int
+store_reg (unsigned char *buf, int reg, int base, int offset)
+{
+  uint32_t insn = 0xf8000000; /* std r0, 0(r1) */
+
+  insn |= (reg << 21) | (base << 16) | (offset & 0xfffc);
+  return write_insn (buf, insn);
+}
+
+static int
+load_reg (unsigned char *buf, int reg, int base, int offset)
+{
+  uint32_t insn = 0xe8000000; /* std r0, 0(r1) */
+
+  insn |= (reg << 21) | (base << 16) | (offset & 0xfffc);
+  return write_insn (buf, insn);
+}
+
+static int
+load_imm (unsigned char *buf, int reg, uint64_t imm)
+{
+  /* lis    reg, <imm[63:48]>
+     ori    reg, reg, <imm[48:32]>
+     rldicr reg, reg, 32, 31
+     oris   reg, reg, <imm[31:16]>
+     ori    reg, reg, <imm[15:0]> */
+  write_insn (buf + 0, 0x3c000000 | (reg << 21) | ((imm >> 48) & 0xffff));
+  reg = (reg << 5) | reg;	/* Combine RS | RA */
+  write_insn (buf + 4, 0x60000000 | (reg << 16) | ((imm >> 32) & 0xffff));
+  write_insn (buf + 8, 0x780007c6 | reg << 16);
+  write_insn (buf + 12, 0x64000000 | (reg << 16) | ((imm >> 16) & 0xffff));
+  write_insn (buf + 16, 0x60000000 | (reg << 16) | (imm & 0xffff));
+
+  return 5 * 4;
+}
+
+static int
+ppc_install_fast_tracepoint_jump_pad (CORE_ADDR tpoint, CORE_ADDR tpaddr,
+				      CORE_ADDR collector,
+				      CORE_ADDR lockaddr,
+				      ULONGEST orig_size,
+				      CORE_ADDR *jump_entry,
+				      CORE_ADDR *trampoline,
+				      ULONGEST *trampoline_size,
+				      unsigned char *jjump_pad_insn,
+				      ULONGEST *jjump_pad_insn_size,
+				      CORE_ADDR *adjusted_insn_addr,
+				      CORE_ADDR *adjusted_insn_addr_end,
+				      char *err)
+{
+  unsigned char buf[512];
+  int i, j, offset;
+  CORE_ADDR buildaddr = *jump_entry;
+  int frame_size = (((36 * 8) + 48 + 8 * 8) + 1) & ~0xf;
+
+  /* Save registers.
+     High	CTR   -8(sp)
+		LR
+		XER
+		CR
+		R31
+		R29
+		...
+		R1   -280(sp)
+     Low	R0   -288(sp) */
+
+  i = 0;
+  for (j = 0; j < 32; j++)
+    i += store_reg (buf + i, j, 1, (-8 * 36 + j * 8));
+
+  /* Save CR, XER, LR, and CTR.  */
+  i += write_insn (buf + i, 0x7c600026);	/* mfcr   r3 */
+  i += write_insn (buf + i, 0x7c8102a6);	/* mfxer  r4 */
+  i += write_insn (buf + i, 0x7ca802a6);	/* mflr   r5 */
+  i += write_insn (buf + i, 0x7cc902a6);	/* mfctr  r6 */
+  i += store_reg (buf + i, 3, 1, -32);		/* std    r3, -32(r1) */
+  i += store_reg (buf + i, 4, 1, -24);		/* std    r4, -24(r1) */
+  i += store_reg (buf + i, 5, 1, -16);		/* std    r5, -16(r1) */
+  i += store_reg (buf + i, 6, 1, 8);		/* std    r6, -8(r1) */
+
+  /* Adjust stack pointer.  */
+						/* subi   r1,r1,FRAME_SIZE */
+  i += write_insn (buf + i, 0x38210000 | (-frame_size & 0xffff));
+
+  /* Setup arguments to collector.  */
+  i += write_insn (buf + i, 0x38810000 | (frame_size - 8 * 36));
+  i += load_imm (buf + i, 3, tpoint);
+
+  /* Call to collector.  */
+  i += load_imm (buf + i, 9, collector);
+  i += load_reg (buf + i, 10, 9, 0);
+  i += load_reg (buf + i, 2, 9, 8);
+  i += load_reg (buf + i, 11, 9, 16);
+  i += write_insn (buf + i, 0x7d4903a6);	/* mtctr  r10 */
+  i += write_insn (buf + i, 0x4e800421);	/* bctrl */
+
+  /* Restore stack and registers.  */
+						/* addi   r1,r1,FRAME_SIZE */
+  i += write_insn (buf + i, 0x38210000 | (frame_size & 0xffff));
+  i += load_reg (buf + i, 3, 1, -32);		/* ld    r3, -32(r1) */
+  i += load_reg (buf + i, 4, 1, -24);		/* ld    r4, -24(r1) */
+  i += load_reg (buf + i, 5, 1, -16);		/* ld    r5, -16(r1) */
+  i += load_reg (buf + i, 6, 1, 8);		/* ld    r6, -8(r1) */
+  i += write_insn (buf + i, 0x7c6ff120);	/* mtcr   r3 */
+  i += write_insn (buf + i, 0x7c8103a6);	/* mtxer  r4 */
+  i += write_insn (buf + i, 0x7ca803a6);	/* mtlr   r5 */
+  i += write_insn (buf + i, 0x7cc903a6);	/* mtctr  r6 */
+  for (j = 0; j < 32; j++)
+    i += load_reg (buf + i, j, 1, (-8 * 36 + j * 8));
+
+  /* Remember the address for inserting original instruction.
+     Patch the instruction later.  */
+  *adjusted_insn_addr = buildaddr + i;
+  i += 4;
+
+  /* Finally, write a jump back to the program.  */
+  offset = (tpaddr + 4) - (buildaddr + i);
+  if (offset >= (1 << 26) || offset < -(1 << 26))
+    {
+      sprintf (err, "E.Jump back from jump pad too far from tracepoint "
+		    "(offset 0x%x > 26-bit).", offset);
+      return 1;
+    }
+  /* b <tpaddr+4> */
+  i += write_insn (buf + i, 0x48000000 | (offset & 0x3fffffc));
+  write_inferior_memory (buildaddr, buf, i);
+
+  /* Now, insert the original instruction to execute in the jump pad.  */
+  *adjusted_insn_addr_end = *adjusted_insn_addr;
+  relocate_instruction (adjusted_insn_addr_end, tpaddr);
+  /* Verify the relocation size.  */
+  if (*adjusted_insn_addr_end - *adjusted_insn_addr != 4)
+    {
+      sprintf (err, "E.Unexpected instruction length "
+		    "when relocate instruction. %d != 4",
+		    (int) (*adjusted_insn_addr_end - *adjusted_insn_addr));
+      return 1;
+    }
+
+  /* The jump pad is now built.  Wire in a jump to our jump pad.  This
+     is always done last (by our caller actually), so that we can
+     install fast tracepoints with threads running.  This relies on
+     the agent's atomic write support.  */
+  offset = buildaddr - tpaddr;
+  if (offset >= (1 << 26) || offset < -(1 << 26))
+    {
+      sprintf (err, "E.Jump back from jump pad too far from tracepoint "
+		    "(offset 0x%x > 26-bit).", offset);
+      return 1;
+    }
+  write_insn (jjump_pad_insn, 0x48000000 | (offset & 0x3fffffc));
+  *jjump_pad_insn_size = 4;
+
+  *jump_entry = buildaddr + i;
+
+  return 0;
+}
+#endif
+
 /* Provide only a fill function for the general register set.  ps_lgetregs
    will use this for NPTL support.  */
 
@@ -687,16 +857,31 @@ struct linux_target_ops the_low_target = {
   ppc_set_pc,
   (const unsigned char *) &ppc_breakpoint,
   ppc_breakpoint_len,
-  NULL,
-  0,
+  NULL, /* breakpoint_reinsert_addr */
+  0, /* decr_pc_after_break */
   ppc_breakpoint_at,
   NULL, /* supports_z_point_type */
-  NULL,
-  NULL,
-  NULL,
-  NULL,
+  NULL, /* insert_point */
+  NULL, /* remove_point */
+  NULL, /* stopped_by_watchpoint */
+  NULL, /* stopped_data_address */
   ppc_collect_ptrace_register,
   ppc_supply_ptrace_register,
+  NULL, /* siginfo_fixup */
+  NULL, /* linux_new_process */
+  NULL, /* linux_new_thread */
+  NULL, /* linux_prepare_to_resume */
+  NULL, /* linux_process_qsupported */
+  NULL, /* supports_tracepoints */
+  NULL, /* get_thread_area */
+#ifdef __powerpc64__
+  ppc_install_fast_tracepoint_jump_pad,
+#else
+  NULL,
+#endif
+  NULL, /* emit_ops */
+  NULL, /* get_min_fast_tracepoint_insn_len */
+  NULL, /* supports_range_stepping */
 };
 
 void
