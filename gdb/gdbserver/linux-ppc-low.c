@@ -512,6 +512,43 @@ ppc_breakpoint_at (CORE_ADDR where)
   return 0;
 }
 
+static int
+ppc_insert_point (enum raw_bkpt_type type, CORE_ADDR addr,
+		  int size, struct raw_breakpoint *bp)
+{
+  switch (type)
+    {
+    case raw_bkpt_type_sw:
+      return insert_memory_breakpoint (bp);
+
+    case raw_bkpt_type_hw:
+    case raw_bkpt_type_write_wp:
+    case raw_bkpt_type_access_wp:
+    default:
+      /* Unsupported.  */
+      return 1;
+    }
+}
+
+static int
+ppc_remove_point (enum raw_bkpt_type type, CORE_ADDR addr,
+		  int size, struct raw_breakpoint *bp)
+{
+  switch (type)
+    {
+    case raw_bkpt_type_sw:
+      return remove_memory_breakpoint (bp);
+
+    case raw_bkpt_type_hw:
+    case raw_bkpt_type_write_wp:
+    case raw_bkpt_type_access_wp:
+    default:
+      /* Unsupported.  */
+      return 1;
+    }
+}
+
+
 #ifdef __powerpc64__
 static int
 write_insn (unsigned char *buf, uint32_t insn)
@@ -867,8 +904,8 @@ struct linux_target_ops the_low_target = {
   0, /* decr_pc_after_break */
   ppc_breakpoint_at,
   NULL, /* supports_z_point_type */
-  NULL, /* insert_point */
-  NULL, /* remove_point */
+  ppc_insert_point,
+  ppc_remove_point,
   NULL, /* stopped_by_watchpoint */
   NULL, /* stopped_data_address */
   ppc_collect_ptrace_register,
