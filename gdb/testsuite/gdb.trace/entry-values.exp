@@ -42,7 +42,7 @@ if { [istarget "arm*-*-*"] || [istarget "aarch64*-*-*"] } {
 } elseif { [istarget "s390*-*-*"] } {
     set call_insn "brasl"
 } elseif { [istarget "powerpc*-*-*"] } {
-    set call_insn "bl"
+    set call_insn {bl\y}
 } elseif { [istarget "mips*-*-*"] } {
     # Skip the delay slot after the instruction used to make a call
     # (which can be a jump or a branch) if it has one.
@@ -218,6 +218,8 @@ if [is_amd64_regs_target] {
     set spreg "\$rsp"
 } elseif [is_x86_like_target] {
     set spreg "\$esp"
+} elseif [istarget "powerpc*-*-*"] {
+    set spreg "\$r1"
 } else {
     set spreg "\$sp"
 }

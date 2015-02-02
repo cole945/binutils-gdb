@@ -83,6 +83,9 @@
 #include "features/rs6000/powerpc-e500.c"
 #include "features/rs6000/rs6000.c"
 
+#include "ax.h"
+#include "ax-gdb.h"
+
 /* Determine if regnum is an SPE pseudo-register.  */
 #define IS_SPE_PSEUDOREG(tdep, regnum) ((tdep)->ppc_ev0_regnum >= 0 \
     && (regnum) >= (tdep)->ppc_ev0_regnum \
@@ -964,6 +967,50 @@ rs6000_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *bp_addr,
     return big_breakpoint;
   else
     return little_breakpoint;
+}
+
+/* Return true if ADDR is a valid address for tracepoint.  Set *ISZIE
+   to the number of bytes the target should copy elsewhere for the
+   tracepoint.  */
+
+static int
+ppc_fast_tracepoint_valid_at (struct gdbarch *gdbarch,
+			      CORE_ADDR addr, char **msg)
+{
+  CORE_ADDR base, pagesz;
+  const int SCRATCH_BUFFER_NPAGES = 20;
+  int isValid = 1;
+
+  /* If we can figure out where is the jump-pad, check whether
+     the address for tracepoint is too far away.  Otherwise,
+     assume it is valid.  */
+  if (target_auxv_search (&current_target, AT_PHDR, &base) > 0
+      && target_auxv_search (&current_target, AT_PAGESZ, &pagesz) > 0)
+    {
+      /* The jump-pad is supposed to be mapped here.
+	 See gdbserver/linux-ppc-ipa.c and gdbserver/tracepoint.c.  */
+      long dist;
+      CORE_ADDR jpad_base
+	= (base & ~(pagesz - 1)) - SCRATCH_BUFFER_NPAGES * pagesz;
+
+      dist = jpad_base - addr;
+      if (dist >= (1 << 25) || dist < -(1 << 25))
+	isValid = 0;
+    }
+
+  if (isValid)
+    {
+      if (msg)
+	*msg = NULL;
+    }
+  else
+    {
+      if (msg)
+	*msg = xstrdup (_("The address is too far for "
+			  "inserting fast tracepoint."));
+    }
+
+  return isValid;
 }
 
 /* Instruction masks for displaced stepping.  */
@@ -3755,6 +3802,8 @@ bfd_uses_spe_extensions (bfd *abfd)
 #define PPC_LK(insn)	PPC_BIT (insn, 31)
 #define PPC_TX(insn)	PPC_BIT (insn, 31)
 #define PPC_LEV(insn)	PPC_FIELD (insn, 20, 7)
+#define PPC_LI(insn)	(PPC_SEXT (PPC_FIELD (insn, 6, 24), 24) << 2)
+#define PPC_BD(insn)	(PPC_SEXT (PPC_FIELD (insn, 16, 14), 14) << 2)
 
 #define PPC_XT(insn)	((PPC_TX (insn) << 5) | PPC_T (insn))
 #define PPC_XER_NB(xer)	(xer & 0x7f)
@@ -5408,6 +5457,68 @@ UNKNOWN_OP:
   return 0;
 }
 
+/* Implement gdbarch_gen_return_address.  Generate a bytecode expression
+   to get the value of the saved PC.  SCOPE is the address we want to
+   get return address for.  SCOPE maybe in the middle of a function.  */
+
+static void
+ppc_gen_return_address (struct gdbarch *gdbarch,
+			struct agent_expr *ax, struct axs_value *value,
+			CORE_ADDR scope)
+{
+  struct rs6000_framedata frame;
+  CORE_ADDR func_addr;
+
+  /* Try to find the start of the function and analyze the prologue.  */
+  if (find_pc_partial_function (scope, NULL, &func_addr, NULL))
+    {
+      skip_prologue (gdbarch, func_addr, scope, &frame);
+
+      if (frame.lr_offset == 0)
+	{
+	  value->type = register_type (gdbarch, PPC_LR_REGNUM);
+	  value->kind = axs_lvalue_register;
+	  value->u.reg = PPC_LR_REGNUM;
+	  return;
+	}
+    }
+  else
+    {
+      /* If we don't know where the function starts, we cannot analyze it.
+	 Assuming it's not a leaf function, not frameless, and LR is
+	 saved at back-chain +16 (or +4 for 32-bit ABI).  */
+
+      frame.frameless = 0;
+#ifdef __powerpc64__
+      frame.lr_offset = 16;
+#else
+      frame.lr_offset = 4;
+#endif
+    }
+
+  /* if (frameless)
+       load 16(SP)
+     else
+       BC = 0(SP)
+       load 16(BC) */
+
+  ax_reg (ax, gdbarch_sp_regnum (gdbarch));
+
+  /* Load back-chain.  */
+  if (!frame.frameless)
+    {
+      if (register_size (gdbarch, PPC_LR_REGNUM) == 8)
+	ax_simple (ax, aop_ref64);
+      else
+	ax_simple (ax, aop_ref32);
+    }
+
+  ax_const_l (ax, frame.lr_offset);
+  ax_simple (ax, aop_add);
+  value->type = register_type (gdbarch, PPC_LR_REGNUM);
+  value->kind = axs_lvalue_memory;
+}
+
 /* Initialize the current architecture based on INFO.  If possible, re-use an
    architecture from ARCHES, which is a list of architectures already created
    during this debugging session.
@@ -5968,6 +6079,7 @@ rs6000_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   set_gdbarch_inner_than (gdbarch, core_addr_lessthan);
   set_gdbarch_breakpoint_from_pc (gdbarch, rs6000_breakpoint_from_pc);
+  set_gdbarch_fast_tracepoint_valid_at (gdbarch, ppc_fast_tracepoint_valid_at);
 
   /* The value of symbols of type N_SO and N_FUN maybe null when
      it shouldn't be.  */
@@ -6004,6 +6116,8 @@ rs6000_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 					   simple_displaced_step_free_closure);
   set_gdbarch_displaced_step_location (gdbarch,
 				       displaced_step_at_entry_point);
+
+  set_gdbarch_gen_return_address (gdbarch, ppc_gen_return_address);
 
   set_gdbarch_max_insn_length (gdbarch, PPC_INSN_SIZE);
 

@@ -49,6 +49,8 @@ if [is_amd64_regs_target] {
     set fpreg "\$ebp"
 } elseif [is_aarch64_target] {
     set fpreg "\$x29"
+} elseif [istarget "powerpc*-*-*"] {
+    set fpreg "\$r31"
 } else {
     set fpreg "\$fp"
 }

@@ -37,6 +37,8 @@ thread_function(void *arg)
        SYMBOL(set_point1) ":\n"
 #if (defined __x86_64__ || defined __i386__)
        "    call " SYMBOL(func) "\n"
+#elif (defined __powerpc64__ || defined __powerpc__)
+       "    nop\n"
 #endif
        );
 }
