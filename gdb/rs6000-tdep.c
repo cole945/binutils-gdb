@@ -3139,6 +3139,7 @@ struct rs6000_frame_cache
 static struct rs6000_frame_cache *
 rs6000_frame_cache (struct frame_info *this_frame, void **this_cache)
 {
+  volatile struct gdb_exception ex;
   struct rs6000_frame_cache *cache;
   struct gdbarch *gdbarch = get_frame_arch (this_frame);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
@@ -3153,7 +3154,14 @@ rs6000_frame_cache (struct frame_info *this_frame, void **this_cache)
   (*this_cache) = cache;
   cache->saved_regs = trad_frame_alloc_saved_regs (this_frame);
 
-  func = get_frame_func (this_frame);
+  TRY_CATCH (ex, RETURN_MASK_ERROR)
+    {
+      func = get_frame_func (this_frame);
+    }
+  if (ex.reason < 0 && ex.error != NOT_AVAILABLE_ERROR)
+    throw_exception (ex);
+  return (*this_cache);
+
   pc = get_frame_pc (this_frame);
   skip_prologue (gdbarch, func, pc, &fdata);
 
@@ -3323,6 +3331,11 @@ rs6000_frame_this_id (struct frame_info *this_frame, void **this_cache,
 {
   struct rs6000_frame_cache *info = rs6000_frame_cache (this_frame,
 							this_cache);
+  if (info->base == 0 && info->initial_sp == 0)
+    {
+      (*this_id) = frame_id_build_unavailable_stack (0);
+      return;
+    }
   /* This marks the outermost frame.  */
   if (info->base == 0)
     return;
