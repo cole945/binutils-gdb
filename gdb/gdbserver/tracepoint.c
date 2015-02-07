@@ -7383,7 +7383,8 @@ initialize_tracepoint (void)
 
     /* Allocate scratch buffer aligned on a page boundary, at a low
        address (close to the main executable's code).  */
-    for (addr = pagesize; addr != 0; addr += pagesize)
+    addr = 0xE000000 & ~pagesize;
+    for (; addr != 0; addr += pagesize)
       {
 	gdb_jump_pad_buffer = mmap ((void *) addr, pagesize * SCRATCH_BUFFER_NPAGES,
 				    PROT_READ | PROT_WRITE | PROT_EXEC,
