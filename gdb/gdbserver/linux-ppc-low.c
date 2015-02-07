@@ -568,10 +568,21 @@ ppc_remove_point (enum raw_bkpt_type type, CORE_ADDR addr,
 static int
 write_insn (unsigned char *buf, uint32_t insn)
 {
-  buf[0] = (insn >> 24) & 0xff;
-  buf[1] = (insn >> 16) & 0xff;
-  buf[2] = (insn >> 8) & 0xff;
-  buf[3] = insn & 0xff;
+  if (__BYTE_ORDER == __LITTLE_ENDIAN)
+    {
+      buf[3] = (insn >> 24) & 0xff;
+      buf[2] = (insn >> 16) & 0xff;
+      buf[1] = (insn >> 8) & 0xff;
+      buf[0] = insn & 0xff;
+    }
+  else
+    {
+      buf[0] = (insn >> 24) & 0xff;
+      buf[1] = (insn >> 16) & 0xff;
+      buf[2] = (insn >> 8) & 0xff;
+      buf[3] = insn & 0xff;
+    }
+
   return 4;
 }
 
