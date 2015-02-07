@@ -738,6 +738,12 @@ ppc_install_fast_tracepoint_jump_pad (CORE_ADDR tpoint, CORE_ADDR tpaddr,
 
   return 0;
 }
+
+static int
+ppc_get_min_fast_tracepoint_insn_len ()
+{
+  return 4;
+}
 #endif
 
 /* Provide only a fill function for the general register set.  ps_lgetregs
@@ -942,7 +948,7 @@ struct linux_target_ops the_low_target = {
   NULL,
 #endif
   NULL, /* emit_ops */
-  NULL, /* get_min_fast_tracepoint_insn_len */
+  ppc_get_min_fast_tracepoint_insn_len,
   NULL, /* supports_range_stepping */
 };
 
