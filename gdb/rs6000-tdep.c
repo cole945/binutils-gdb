@@ -966,6 +966,17 @@ rs6000_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *bp_addr,
     return little_breakpoint;
 }
 
+static int
+ppc_fast_tracepoint_valid_at (struct gdbarch *gdbarch,
+			       CORE_ADDR addr, int *isize, char **msg)
+{
+  if (isize)
+    *isize = gdbarch_max_insn_length (gdbarch);
+  if (msg)
+    *msg = NULL;
+  return 1;
+}
+
 /* Instruction masks for displaced stepping.  */
 #define BRANCH_MASK 0xfc000000
 #define BP_MASK 0xFC0007FE
@@ -5929,6 +5940,7 @@ rs6000_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   set_gdbarch_inner_than (gdbarch, core_addr_lessthan);
   set_gdbarch_breakpoint_from_pc (gdbarch, rs6000_breakpoint_from_pc);
+  set_gdbarch_fast_tracepoint_valid_at (gdbarch, ppc_fast_tracepoint_valid_at);
 
   /* The value of symbols of type N_SO and N_FUN maybe null when
      it shouldn't be.  */
