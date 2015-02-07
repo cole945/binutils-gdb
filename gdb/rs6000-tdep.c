@@ -3692,6 +3692,7 @@ bfd_uses_spe_extensions (bfd *abfd)
 #define PPC_LK(insn)	PPC_BIT (insn, 31)
 #define PPC_TX(insn)	PPC_BIT (insn, 31)
 #define PPC_LEV(insn)	PPC_FIELD (insn, 20, 7)
+#define PPC_LI(insn)	(PPC_SEXT (PPC_FIELD (insn, 6, 24), 26) << 2)
 
 #define PPC_XT(insn)	((PPC_TX (insn) << 5) | PPC_T (insn))
 #define PPC_XER_NB(xer)	(xer & 0x7f)
@@ -5345,6 +5346,29 @@ UNKNOWN_OP:
   return 0;
 }
 
+static void
+ppc_relocate_instruction (struct gdbarch *gdbarch,
+			  CORE_ADDR *to, CORE_ADDR oldloc)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+  uint32_t insn;
+  int op6;
+
+  insn = read_memory_unsigned_integer (oldloc, 4, byte_order);
+  op6 = PPC_OP6 (insn);
+  if (op6 == 18)
+    {
+       int rel = PPC_LI (insn);
+       int newrel = (oldloc - *to) + rel;
+
+       insn = (insn & ~0x3fffffc) | newrel;
+    }
+
+  write_memory_unsigned_integer (*to, 4, byte_order, insn);
+  *to += 4;
+}
+
 /* Initialize the current architecture based on INFO.  If possible, re-use an
    architecture from ARCHES, which is a list of architectures already created
    during this debugging session.
@@ -5941,6 +5965,8 @@ rs6000_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 					   simple_displaced_step_free_closure);
   set_gdbarch_displaced_step_location (gdbarch,
 				       displaced_step_at_entry_point);
+
+  set_gdbarch_relocate_instruction (gdbarch, ppc_relocate_instruction);
 
   set_gdbarch_max_insn_length (gdbarch, PPC_INSN_SIZE);
 
