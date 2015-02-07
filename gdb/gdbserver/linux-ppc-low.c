@@ -513,6 +513,21 @@ ppc_breakpoint_at (CORE_ADDR where)
 }
 
 static int
+ppc_supports_z_point_type (char z_type)
+{
+  switch (z_type)
+    {
+    case Z_PACKET_SW_BP:
+      return 1;
+    case Z_PACKET_HW_BP:
+    case Z_PACKET_WRITE_WP:
+    case Z_PACKET_ACCESS_WP:
+    default:
+      return 0;
+    }
+}
+
+static int
 ppc_insert_point (enum raw_bkpt_type type, CORE_ADDR addr,
 		  int size, struct raw_breakpoint *bp)
 {
@@ -903,7 +918,7 @@ struct linux_target_ops the_low_target = {
   NULL, /* breakpoint_reinsert_addr */
   0, /* decr_pc_after_break */
   ppc_breakpoint_at,
-  NULL, /* supports_z_point_type */
+  ppc_supports_z_point_type, /* supports_z_point_type */
   ppc_insert_point,
   ppc_remove_point,
   NULL, /* stopped_by_watchpoint */
