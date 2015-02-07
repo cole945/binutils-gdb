@@ -681,11 +681,9 @@ ppc_install_fast_tracepoint_jump_pad (CORE_ADDR tpoint, CORE_ADDR tpaddr,
   i += load_imm (buf + i, 3, tpoint);
 
   /* Call to collector.  */
-  i += load_imm (buf + i, 9, collector);
-  i += load_reg (buf + i, 10, 9, 0);
-  i += load_reg (buf + i, 2, 9, 8);
-  i += load_reg (buf + i, 11, 9, 16);
-  i += write_insn (buf + i, 0x7d4903a6);	/* mtctr  r10 */
+  /* Must be called by r12 for caller to calculate TOC address. */
+  i += load_imm (buf + i, 12, collector);
+  i += write_insn (buf + i, 0x7c0903a6 | (12 << 21));	/* mtctr  r12 */
   i += write_insn (buf + i, 0x4e800421);	/* bctrl */
 
   /* Restore stack and registers.  */
