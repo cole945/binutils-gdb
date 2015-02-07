@@ -736,7 +736,7 @@ ppc_install_fast_tracepoint_jump_pad (CORE_ADDR tpoint, CORE_ADDR tpaddr,
      install fast tracepoints with threads running.  This relies on
      the agent's atomic write support.  */
   offset = buildaddr - tpaddr;
-  if (offset >= (1 << 26) || offset < -(1 << 26))
+  if (offset >= (1 << 25) || offset < -(1 << 25))
     {
       sprintf (err, "E.Jump back from jump pad too far from tracepoint "
 		    "(offset 0x%x > 26-bit).", offset);
