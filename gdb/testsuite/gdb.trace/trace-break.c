@@ -42,7 +42,7 @@ marker (void)
 #if (defined __x86_64__ || defined __i386__)
        "    call " SYMBOL(func) "\n"
 #elif defined __PPC64__
-       "    mr 3, 3\n"
+       "    nop\n"
 #endif
        );
 
@@ -51,7 +51,7 @@ marker (void)
 #if (defined __x86_64__ || defined __i386__)
        "    call " SYMBOL(func) "\n"
 #elif defined __PPC64__
-       "    mr 3, 3\n"
+       "    nop\n"
 #endif
        );
 }
