@@ -24,6 +24,7 @@
 #include <asm/ptrace.h>
 
 #include "nat/ppc-linux.h"
+#include "ax.h"
 
 static unsigned long ppc_hwcap;
 
@@ -753,6 +754,280 @@ ppc_get_min_fast_tracepoint_insn_len ()
 {
   return 4;
 }
+
+static void
+ppc_emit_prologue (void)
+{
+}
+
+
+static void
+ppc_emit_epilogue (void)
+{
+}
+
+static void
+ppc_emit_add (void)
+{
+}
+
+static void
+ppc_emit_sub (void)
+{
+}
+
+static void
+ppc_emit_mul (void)
+{
+  emit_error = 1;
+}
+
+static void
+ppc_emit_lsh (void)
+{
+  emit_error = 1;
+}
+
+static void
+ppc_emit_rsh_signed (void)
+{
+  emit_error = 1;
+}
+
+static void
+ppc_emit_rsh_unsigned (void)
+{
+  emit_error = 1;
+}
+
+static void
+ppc_emit_ext (int arg)
+{
+  switch (arg)
+    {
+    case 8:
+      break;
+    case 16:
+      break;
+    case 32:
+      break;
+    default:
+      emit_error = 1;
+    }
+}
+
+static void
+ppc_emit_log_not (void)
+{
+}
+
+static void
+ppc_emit_bit_and (void)
+{
+}
+
+static void
+ppc_emit_bit_or (void)
+{
+}
+
+static void
+ppc_emit_bit_xor (void)
+{
+}
+
+static void
+ppc_emit_bit_not (void)
+{
+}
+
+static void
+ppc_emit_equal (void)
+{
+}
+
+static void
+ppc_emit_less_signed (void)
+{
+}
+
+static void
+ppc_emit_less_unsigned (void)
+{
+}
+
+static void
+ppc_emit_ref (int size)
+{
+  switch (size)
+    {
+    case 1:
+      break;
+    case 2:
+      break;
+    case 4:
+      break;
+    case 8:
+      break;
+    }
+}
+
+static void
+ppc_emit_if_goto (int *offset_p, int *size_p)
+{
+}
+
+static void
+ppc_emit_goto (int *offset_p, int *size_p)
+{
+}
+
+static void
+ppc_write_goto_address (CORE_ADDR from, CORE_ADDR to, int size)
+{
+}
+
+static void
+ppc_emit_const (LONGEST num)
+{
+}
+
+static void
+ppc_emit_call (CORE_ADDR fn)
+{
+}
+
+static void
+ppc_emit_reg (int reg)
+{
+}
+
+static void
+ppc_emit_pop (void)
+{
+}
+
+static void
+ppc_emit_stack_flush (void)
+{
+}
+
+static void
+ppc_emit_zero_ext (int arg)
+{
+  switch (arg)
+    {
+    case 8:
+      break;
+    case 16:
+      break;
+    case 32:
+      break;
+    default:
+      emit_error = 1;
+    }
+}
+
+static void
+ppc_emit_swap (void)
+{
+}
+
+static void
+ppc_emit_stack_adjust (int n)
+{
+}
+
+/* FN's prototype is `LONGEST(*fn)(int)'.  */
+
+static void
+ppc_emit_int_call_1 (CORE_ADDR fn, int arg1)
+{
+}
+
+/* FN's prototype is `void(*fn)(int,LONGEST)'.  */
+
+static void
+ppc_emit_void_call_2 (CORE_ADDR fn, int arg1)
+{
+}
+
+void
+ppc_emit_eq_goto (int *offset_p, int *size_p)
+{
+}
+
+void
+ppc_emit_ne_goto (int *offset_p, int *size_p)
+{
+}
+
+void
+ppc_emit_lt_goto (int *offset_p, int *size_p)
+{
+}
+
+void
+ppc_emit_le_goto (int *offset_p, int *size_p)
+{
+}
+
+void
+ppc_emit_gt_goto (int *offset_p, int *size_p)
+{
+}
+
+void
+ppc_emit_ge_goto (int *offset_p, int *size_p)
+{
+}
+
+struct emit_ops ppc_emit_ops_vector =
+  {
+    ppc_emit_prologue,
+    ppc_emit_epilogue,
+    ppc_emit_add,
+    ppc_emit_sub,
+    ppc_emit_mul,
+    ppc_emit_lsh,
+    ppc_emit_rsh_signed,
+    ppc_emit_rsh_unsigned,
+    ppc_emit_ext,
+    ppc_emit_log_not,
+    ppc_emit_bit_and,
+    ppc_emit_bit_or,
+    ppc_emit_bit_xor,
+    ppc_emit_bit_not,
+    ppc_emit_equal,
+    ppc_emit_less_signed,
+    ppc_emit_less_unsigned,
+    ppc_emit_ref,
+    ppc_emit_if_goto,
+    ppc_emit_goto,
+    ppc_write_goto_address,
+    ppc_emit_const,
+    ppc_emit_call,
+    ppc_emit_reg,
+    ppc_emit_pop,
+    ppc_emit_stack_flush,
+    ppc_emit_zero_ext,
+    ppc_emit_swap,
+    ppc_emit_stack_adjust,
+    ppc_emit_int_call_1,
+    ppc_emit_void_call_2,
+    ppc_emit_eq_goto,
+    ppc_emit_ne_goto,
+    ppc_emit_lt_goto,
+    ppc_emit_le_goto,
+    ppc_emit_gt_goto,
+    ppc_emit_ge_goto
+  };
+
+static struct emit_ops *
+ppc_emit_ops (void)
+{
+  return &ppc_emit_ops_vector;
+}
 #endif
 
 /* Provide only a fill function for the general register set.  ps_lgetregs
@@ -953,10 +1228,11 @@ struct linux_target_ops the_low_target = {
   NULL, /* get_thread_area */
 #ifdef __powerpc64__
   ppc_install_fast_tracepoint_jump_pad,
+  ppc_emit_ops,
 #else
-  NULL,
-#endif
+  NULL, /* install_fast_tracepoint_jump_pad */
   NULL, /* emit_ops */
+#endif
   ppc_get_min_fast_tracepoint_insn_len,
   NULL, /* supports_range_stepping */
 };
