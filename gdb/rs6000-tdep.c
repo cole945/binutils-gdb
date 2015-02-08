@@ -3703,7 +3703,7 @@ bfd_uses_spe_extensions (bfd *abfd)
 #define PPC_LK(insn)	PPC_BIT (insn, 31)
 #define PPC_TX(insn)	PPC_BIT (insn, 31)
 #define PPC_LEV(insn)	PPC_FIELD (insn, 20, 7)
-#define PPC_LI(insn)	(PPC_SEXT (PPC_FIELD (insn, 6, 24), 26) << 2)
+#define PPC_LI(insn)	(PPC_SEXT (PPC_FIELD (insn, 6, 24), 24) << 2)
 
 #define PPC_XT(insn)	((PPC_TX (insn) << 5) | PPC_T (insn))
 #define PPC_XER_NB(xer)	(xer & 0x7f)
