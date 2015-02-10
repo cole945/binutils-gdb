@@ -588,22 +588,57 @@ gen_raw (unsigned char *buf, uint32_t insn)
 }
 
 static int
-gen_std (unsigned char *buf, int reg, int base, int offset)
+gen_ds_form (unsigned char *buf, int op6, int rst, int ra, int ds, int sub2)
 {
-  uint32_t insn = 0xf8000000; /* std r0, 0(r1) */
+  uint32_t insn = op6 << 26;
 
-  insn |= (reg << 21) | (base << 16) | (offset & 0xfffc);
+  insn |= (rst << 21) | (ra << 16) | (ds & 0xfffc) | (sub2 & 0x3);
   return gen_raw (buf, insn);
 }
+
+#define GEN_STD(buf, rs, ra, offset)	gen_ds_form (buf, 62, rs, ra, offset, 0)
+#define GEN_STDU(buf, rs, ra, offset)	gen_ds_form (buf, 62, rs, ra, offset, 1)
+#define GEN_LD(buf, rt, ra, offset)	gen_ds_form (buf, 58, rt, ra, offset, 0)
+#define GEN_LDU(buf, rt, ra, offset)	gen_ds_form (buf, 58, rt, ra, offset, 1)
 
 static int
-gen_ld (unsigned char *buf, int reg, int base, int offset)
+gen_d_form (unsigned char *buf, int op6, int rt, int ra, int si)
 {
-  uint32_t insn = 0xe8000000; /* std r0, 0(r1) */
+  uint32_t insn = op6 << 26;
 
-  insn |= (reg << 21) | (base << 16) | (offset & 0xfffc);
+  insn |= (rt << 21) | (ra << 16) | (si & 0xffff);
   return gen_raw (buf, insn);
 }
+
+#define GEN_ADDI(buf, rt, ra, si)	gen_d_form (buf, 14, rt, ra, si)
+#define GEN_ADDIS(buf, rt, ra, si)	gen_d_form (buf, 15, rt, ra, si)
+#define GEN_LIS(buf, rt, si)		GEN_ADDIS (buf, rt, 0, si)
+#define GEN_ORI(buf, rt, ra, si)	gen_d_form (buf, 24, rt, ra, si)
+#define GEN_ORIS(buf, rt, ra, si)	gen_d_form (buf, 25, rt, ra, si)
+
+static int
+gen_xfx_form (unsigned char *buf, int op6, int rst, int ri, int subop, int b1)
+{
+  uint32_t insn = op6 << 26;
+
+  insn |= (rst << 21) | (ri << 11) | (subop << 1) | b1;
+  return gen_raw (buf, insn);
+}
+
+#define GEN_MFSPR(buf, rt, spr)		gen_xfx_form (buf, 31, rt, spr, 339, 0)
+#define GEN_MTSPR(buf, rt, spr)		gen_xfx_form (buf, 31, rt, spr, 467, 0)
+
+static int
+gen_x_form (unsigned char *buf, int op6, int rt, int ra, int rb,
+	    int subop, int rc)
+{
+  uint32_t insn = op6 << 26;
+
+  insn |= (rt << 21) | (ra << 16) | (rb << 11) | (subop << 1) | rc;
+  return gen_raw (buf, insn);
+}
+
+#define GEN_MR(buf, rt, ra)		gen_x_form (buf, 31, rt, ra, ra, 444, 0)
 
 static int
 gen_limm64 (unsigned char *buf, int reg, uint64_t imm)
@@ -613,12 +648,11 @@ gen_limm64 (unsigned char *buf, int reg, uint64_t imm)
      rldicr reg, reg, 32, 31
      oris   reg, reg, <imm[31:16]>
      ori    reg, reg, <imm[15:0]> */
-  gen_raw (buf + 0, 0x3c000000 | (reg << 21) | ((imm >> 48) & 0xffff));
-  reg = (reg << 5) | reg;	/* Combine RS | RA */
-  gen_raw (buf + 4, 0x60000000 | (reg << 16) | ((imm >> 32) & 0xffff));
-  gen_raw (buf + 8, 0x780007c6 | reg << 16);
-  gen_raw (buf + 12, 0x64000000 | (reg << 16) | ((imm >> 16) & 0xffff));
-  gen_raw (buf + 16, 0x60000000 | (reg << 16) | (imm & 0xffff));
+  GEN_LIS (buf + 0, reg, ((imm >> 48) & 0xffff));
+  GEN_ORI (buf + 4, reg, reg, ((imm >> 32) & 0xffff));
+  gen_raw (buf + 8, 0x780007c6 | (reg << 21) | (reg << 16));
+  GEN_ORIS (buf + 12, reg, reg, ((imm >> 16) & 0xffff));
+  GEN_ORI (buf + 16, reg, reg, (imm & 0xffff));
 
   return 5 * 4;
 }
@@ -631,12 +665,9 @@ gen_call (unsigned char *buf, CORE_ADDR fn)
 
   if (__BYTE_ORDER == __BIG_ENDIAN)
     {
-      /* ld 2, 8(12)
-	 ld 11, 16(12)
-	 ld 12, 0(12) */
-      i += gen_ld (buf + i, 2, 12, 8);
-      i += gen_ld (buf + i, 11, 12, 16);
-      i += gen_ld (buf + i, 12, 12, 0);
+      i += GEN_LD (buf + i, 2, 12, 8);		/* ld 2, 8(12) */
+      i += GEN_LD (buf + i, 11, 12, 16);	/* ld 11, 16(12) */
+      i += GEN_LD (buf + i, 12, 12, 0);		/* ld 12, 0(12) */
     }
 
   /* Must be called by r12 for caller to calculate TOC address. */
@@ -668,7 +699,7 @@ ppc_install_fast_tracepoint_jump_pad (CORE_ADDR tpoint, CORE_ADDR tpaddr,
   unsigned char buf[512];
   int i, j, offset;
   CORE_ADDR buildaddr = *jump_entry;
-  const int frame_size = (((36 * 8) + 48 + 8 * 8) + 0xf) & ~0xf;
+  const int frame_size = (((36 * 8) + 112) + 0xf) & ~0xf;
 
   /* Save registers.
      High	CTR   -8(sp)
@@ -683,42 +714,43 @@ ppc_install_fast_tracepoint_jump_pad (CORE_ADDR tpoint, CORE_ADDR tpaddr,
 
   i = 0;
   for (j = 0; j < 32; j++)
-    i += gen_std (buf + i, j, 1, (-8 * 36 + j * 8));
+    i += GEN_STD (buf + i, j, 1, (-8 * 36 + j * 8));
 
   /* Save CR, XER, LR, and CTR.  */
   i += gen_raw (buf + i, 0x7c600026);		/* mfcr   r3 */
-  i += gen_raw (buf + i, 0x7c8102a6);		/* mfxer  r4 */
-  i += gen_raw (buf + i, 0x7ca802a6);		/* mflr   r5 */
-  i += gen_raw (buf + i, 0x7cc902a6);		/* mfctr  r6 */
-  i += gen_std (buf + i, 3, 1, -32);		/* std    r3, -32(r1) */
-  i += gen_std (buf + i, 4, 1, -24);		/* std    r4, -24(r1) */
-  i += gen_std (buf + i, 5, 1, -16);		/* std    r5, -16(r1) */
-  i += gen_std (buf + i, 6, 1, 8);		/* std    r6, -8(r1) */
+  i += GEN_MFSPR (buf + i, 4, 1);		/* mfxer  r4 */
+  i += GEN_MFSPR (buf + i, 5, 8);		/* mflr   r5 */
+  i += GEN_MFSPR (buf + i, 6, 9);		/* mfctr  r6 */
+  i += GEN_STD (buf + i, 3, 1, -32);		/* std    r3, -32(r1) */
+  i += GEN_STD (buf + i, 4, 1, -24);		/* std    r4, -24(r1) */
+  i += GEN_STD (buf + i, 5, 1, -16);		/* std    r5, -16(r1) */
+  i += GEN_STD (buf + i, 6, 1, 8);		/* std    r6, -8(r1) */
 
   /* Adjust stack pointer.  */
-						/* subi   r1,r1,FRAME_SIZE */
-  i += gen_raw (buf + i, 0x38210000 | (-frame_size & 0xffff));
+  i += GEN_ADDI (buf + i, 1, 1, -frame_size);	/* subi   r1,r1,FRAME_SIZE */
 
   /* Setup arguments to collector.  */
-  i += gen_raw (buf + i, 0x38810000 | (frame_size - 8 * 36));
+
+  /* Set r4 to collected registers.  */
+  i += GEN_ADDI (buf + i, 4, 1, frame_size - 8 * 36);
+  /* Set r3 to TPOINT.  */
   i += gen_limm64 (buf + i, 3, tpoint);
 
   /* Call to collector.  */
   i += gen_call (buf + i, collector);
 
   /* Restore stack and registers.  */
-						/* addi   r1,r1,FRAME_SIZE */
-  i += gen_raw (buf + i, 0x38210000 | (frame_size & 0xffff));
-  i += gen_ld (buf + i, 3, 1, -32);		/* ld    r3, -32(r1) */
-  i += gen_ld (buf + i, 4, 1, -24);		/* ld    r4, -24(r1) */
-  i += gen_ld (buf + i, 5, 1, -16);		/* ld    r5, -16(r1) */
-  i += gen_ld (buf + i, 6, 1, 8);		/* ld    r6, -8(r1) */
+  i += GEN_ADDI (buf + i, 1, 1, frame_size);	/* addi   r1,r1,FRAME_SIZE */
+  i += GEN_LD (buf + i, 3, 1, -32);		/* ld    r3, -32(r1) */
+  i += GEN_LD (buf + i, 4, 1, -24);		/* ld    r4, -24(r1) */
+  i += GEN_LD (buf + i, 5, 1, -16);		/* ld    r5, -16(r1) */
+  i += GEN_LD (buf + i, 6, 1, 8);		/* ld    r6, -8(r1) */
   i += gen_raw (buf + i, 0x7c6ff120);		/* mtcr   r3 */
-  i += gen_raw (buf + i, 0x7c8103a6);		/* mtxer  r4 */
-  i += gen_raw (buf + i, 0x7ca803a6);		/* mtlr   r5 */
-  i += gen_raw (buf + i, 0x7cc903a6);		/* mtctr  r6 */
+  i += GEN_MTSPR (buf + i, 4, 1);		/* mtxer  r4 */
+  i += GEN_MTSPR (buf + i, 5, 8);		/* mtlr   r5 */
+  i += GEN_MTSPR (buf + i, 6, 9);		/* mtctr  r6 */
   for (j = 0; j < 32; j++)
-    i += gen_ld (buf + i, j, 1, (-8 * 36 + j * 8));
+    i += GEN_LD (buf + i, j, 1, (-8 * 36 + j * 8));
 
   /* Remember the address for inserting original instruction.
      Patch the instruction later.  */
@@ -760,6 +792,7 @@ ppc_install_fast_tracepoint_jump_pad (CORE_ADDR tpoint, CORE_ADDR tpaddr,
 		    "(offset 0x%x > 26-bit).", offset);
       return 1;
     }
+  /* b <jentry> */
   gen_raw (jjump_pad_insn, 0x48000000 | (offset & 0x3fffffc));
   *jjump_pad_insn_size = 4;
 
@@ -790,6 +823,9 @@ ppc_emit_prologue (void)
 	 It should point to next-empty, so we can use LDU for pop.
      r3  is cache of TOP value.  */
 
+  unsigned char buf[8 * 4];
+  int i = 0;
+
   /* mflr	r0
      std	r0, 16(r1)
      std	r31, -8(r1)
@@ -798,6 +834,14 @@ ppc_emit_prologue (void)
      li		r3, 0
      stdu	r1, -(frame_size)(r1)
      mr		r31, r1 */
+  i += GEN_MFSPR (buf, 0, 8);
+  i += GEN_STD (buf + i, 0, 1, 16);
+  i += GEN_STD (buf + i, 31, 1, -8);
+  i += GEN_STD (buf + i, 30, 1, -16);
+  i += GEN_ADDI (buf + i, 30, 1, -24);
+  i += gen_raw (buf + i, 0x38600000);
+  i += GEN_STDU (buf + i, 1, 1, -bytecode_frame_size);
+  i += GEN_MR (buf + i, 31, 1);
 }
 
 
