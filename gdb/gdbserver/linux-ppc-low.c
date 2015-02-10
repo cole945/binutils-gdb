@@ -758,84 +758,82 @@ ppc_get_min_fast_tracepoint_insn_len ()
 static void
 ppc_emit_prologue (void)
 {
-  const int frame_size = 112 + 32 + 64;
+  const int frame_size = 112 + 16 + 64;
 
   /* r31 is the frame-base for restoring stack-pointer.
      r30 is the stack-pointer for bytecode machine.
-     r29 is top value.  */
+     r3  is cache of TOP value.  */
 
-  mflr	r0
-  std	r0, 16(r1)
-  std	r31, -8(r1)
-  std	r30, -16(r1)
-  std	r29, -24(r1)
-  addi	r30, r1, -32
-  li	r29, 0
-  stdu	r1, -(frame_size)(r1)
-  mr    r31, r1
+  /* mflr	r0
+     std	r0, 16(r1)
+     std	r31, -8(r1)
+     std	r30, -16(r1)
+     addi	r30, r1, -16
+     li		r3, 0
+     stdu	r1, -(frame_size)(r1)
+     mr		r31, r1 */
 }
 
 
 static void
 ppc_emit_epilogue (void)
 {
-  const int frame_size = 112 + 32 + 64;
+  const int frame_size = 112 + 16 + 64;
 
-  add	r1, r31, frame_size
-  ld	r0, 16(r1)
-  ld	r31, -8(r1)
-  ld	r30, -16(r1)
-  ld	r29, -16(r1)
-  mtlr	r0
-  blr
+  /* add	r1, r31, frame_size
+     ld		r0, 16(r1)
+     ld		r31, -8(r1)
+     ld		r30, -16(r1)
+     mtlr	r0
+     blr */
 }
 
 static void
 ppc_emit_add (void)
 {
-  ld	r3, 0(r30)
-  add	r29, r3, r29
-  addi	r30, r30, 8
+  /* ld		r4, 0(r30)
+     add	r3, r4, r3
+     addi	r30, r30, 8 */
 }
 
 static void
 ppc_emit_sub (void)
 {
-  ld	r3, 0(r30)
-  sub	r29, r3, r29
-  addi	r30, r30, 8
+  /* ld		r4, 0(r30)
+     sub	r3, r4, r3
+     addi	r30, r30, 8 */
 }
 
 static void
 ppc_emit_mul (void)
 {
-  ld	r3, 0(r30)
-  mulld	r29, r3, r29
-  addi	r30, r30, 8
+  /* ld		r4, 0(r30)
+     mulld	r3, r4, r3
+     addi	r30, r30, 8 */
 }
 
 static void
 ppc_emit_lsh (void)
 {
-  ld	r3, 0(r30)
-  sld	r29, r3, r29
-  addi	r30, r30, 8
+  /* ld		r4, 0(r30)
+     sld	r3, r4, r3
+     addi	r30, r30, 8 */
 }
 
 static void
 ppc_emit_rsh_signed (void)
 {
-  ld	r3, 0(r30)
-  srad	r29, r3, r29
-  addi	r30, r30, 8
+  /* ld		r4, 0(r30)
+     srad	r3, r4, r3
+     addi	r30, r30, 8 */
 }
 
 static void
 ppc_emit_rsh_unsigned (void)
 {
-  ld	r3, 0(r30)
-  srd	r29, r3, r29
-  addi	r30, r30, 8
+  /* ld		r4, 0(r30)
+     srd	r3, r4, r3
+     addi	r30, r30, 8 */
 }
 
 static void
@@ -844,13 +842,13 @@ ppc_emit_ext (int arg)
   switch (arg)
     {
     case 8:
-	extsb	r29, r29
+      /* extsb	r3, r3 */
       break;
     case 16:
-	extsh	r29, r29
+      /* extsh	r3, r3 */
       break;
     case 32:
-	extsw	r29, r29
+      /* extsw	r3, r3 */
       break;
     default:
       emit_error = 1;
@@ -863,13 +861,13 @@ ppc_emit_zero_ext (int arg)
   switch (arg)
     {
     case 8:
-	rldicl 3,3,0,56
+      /* rldicl 3,3,0,56 */
       break;
     case 16:
-	rldicl 3,3,0,38
+      /* rldicl 3,3,0,38 */
       break;
     case 32:
-	rldicl 3,3,0,32
+      /* rldicl 3,3,0,32 */
       break;
     default:
       emit_error = 1;
@@ -879,52 +877,62 @@ ppc_emit_zero_ext (int arg)
 static void
 ppc_emit_log_not (void)
 {
-	cntlzd 29,29
-	srdi 29,29,6
+  /* cntlzd 29,29
+     srdi 29,29,6 */
 }
 
 static void
 ppc_emit_bit_and (void)
 {
-  ld	r3, 0(r30)
-  and	r29, r3, r29
-  addi	r30, r30, 8
+  /* ld		r3, 0(r30)
+     and	r29, r3, r29
+     addi	r30, r30, 8 */
 }
 
 static void
 ppc_emit_bit_or (void)
 {
-  ld	r3, 0(r30)
-  or	r29, r3, r29
-  addi	r30, r30, 8
+  /* ld		r3, 0(r30)
+     or		r29, r3, r29
+     addi	r30, r30, 8 */
 }
 
 static void
 ppc_emit_bit_xor (void)
 {
-  ld	r3, 0(r30)
-  xor	r29, r3, r29
-  addi	r30, r30, 8
+  /* ld		r3, 0(r30)
+     xor	r29, r3, r29
+     addi	r30, r30, 8 */
 }
 
 static void
 ppc_emit_bit_not (void)
 {
+  /* nor	r29, r29, r29 */
 }
 
 static void
 ppc_emit_equal (void)
 {
+  /* xor     r3,r3,r4
+     cntlzd  r3,r3
+     rldicl  r3,r3,58,6 */
 }
 
 static void
 ppc_emit_less_signed (void)
 {
+  /* cmpd    cr7,r3,r4
+     mfocrf  r3,1
+     rlwinm  r3,r3,29,31,31 */
 }
 
 static void
 ppc_emit_less_unsigned (void)
 {
+  /* cmpld    cr7,r3,r4
+     mfocrf  r3,1
+     rlwinm  r3,r3,29,31,31 */
 }
 
 static void
@@ -933,12 +941,16 @@ ppc_emit_ref (int size)
   switch (size)
     {
     case 1:
+      /* lbz 3,0(3) */
       break;
     case 2:
+      /* lha 9,0(4) */
       break;
     case 4:
+      /* lwz 10,0(5) */
       break;
     case 8:
+      /* ld 3,0(6) */
       break;
     }
 }
@@ -981,16 +993,22 @@ ppc_emit_pop (void)
 static void
 ppc_emit_stack_flush (void)
 {
+  /* ld		r3, 0(r30)
+     addi	r30, r30, 8 */
 }
 
 static void
 ppc_emit_swap (void)
 {
+  /* ld		r4, 0(r30)
+     std	r3, 0(r30)
+     mr		r3, r4 */
 }
 
 static void
 ppc_emit_stack_adjust (int n)
 {
+  /* addi	r30, r30, (n << 3) */
 }
 
 /* FN's prototype is `LONGEST(*fn)(int)'.  */
