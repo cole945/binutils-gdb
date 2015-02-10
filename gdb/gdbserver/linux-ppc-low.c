@@ -594,13 +594,9 @@ get_i32 (unsigned char *buf)
   uint32_t r;
 
   if (__BYTE_ORDER == __LITTLE_ENDIAN)
-    {
-      r = (buf[0] << 24) | (buf[1] << 16) | (buf[2] << 8) | buf[3];
-    }
+    r = (buf[3] << 24) | (buf[2] << 16) | (buf[1] << 8) | buf[0];
   else
-    {
-      r = (buf[3] << 24) | (buf[2] << 16) | (buf[1] << 8) | buf[0];
-    }
+    r = (buf[0] << 24) | (buf[1] << 16) | (buf[2] << 8) | buf[3];
 
   return r;
 }
@@ -652,16 +648,16 @@ gen_xfx_form (unsigned char *buf, int op6, int rst, int ri, int subop, int b1)
                       467, 0)
 
 static int
-gen_x_form (unsigned char *buf, int op6, int rt, int ra, int rb,
+gen_x_form (unsigned char *buf, int op6, int rs, int ra, int rb,
 	    int subop, int rc)
 {
   uint32_t insn = op6 << 26;
 
-  insn |= (rt << 21) | (ra << 16) | (rb << 11) | (subop << 1) | rc;
+  insn |= (rs << 21) | (ra << 16) | (rb << 11) | (subop << 1) | rc;
   return put_i32 (buf, insn);
 }
 
-#define GEN_MR(buf, rt, ra)		gen_x_form (buf, 31, rt, ra, ra, 444, 0)
+#define GEN_MR(buf, rt, ra)		gen_x_form (buf, 31, ra, rt, ra, 444, 0)
 
 static int
 gen_xo_form (unsigned char *buf, int op6, int rt, int ra, int rb, int oe,
@@ -887,8 +883,8 @@ ppc_emit_epilogue (void)
 					/* add	r1, r31, frame_size */
   i += GEN_ADDI (buf, 1, 31, bytecode_framesize);
   i += GEN_LD (buf + i, 0, 1, 16);	/* ld	r0, 16(r1) */
-  i += GEN_LD (buf + i, 0, 31, -8);	/* ld	r31, -8(r1) */
-  i += GEN_LD (buf + i, 0, 30, -16);	/* ld	r30, -16(r1) */
+  i += GEN_LD (buf + i, 31, 1, -8);	/* ld	r31, -8(r1) */
+  i += GEN_LD (buf + i, 30, 1, -16);	/* ld	r30, -16(r1) */
   i += GEN_MTSPR (buf + i, 0, 8);	/* mtlr	r0 */
   i += put_i32 (buf + i, 0x4e800020);	/* blr */
 
@@ -1455,12 +1451,12 @@ struct emit_ops ppc_emit_ops_vector =
     ppc_emit_stack_adjust,
     ppc_emit_int_call_1,
     ppc_emit_void_call_2,
-    ppc_emit_eq_goto,
-    ppc_emit_ne_goto,
-    ppc_emit_lt_goto,
-    ppc_emit_le_goto,
-    ppc_emit_gt_goto,
-    ppc_emit_ge_goto
+    NULL, //ppc_emit_eq_goto,
+    NULL, //ppc_emit_ne_goto,
+    NULL, //ppc_emit_lt_goto,
+    NULL, //ppc_emit_le_goto,
+    NULL, //ppc_emit_gt_goto,
+    NULL, //ppc_emit_ge_goto
   };
 
 static struct emit_ops *
