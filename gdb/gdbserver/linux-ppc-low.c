@@ -606,7 +606,7 @@ gen_ld (unsigned char *buf, int reg, int base, int offset)
 }
 
 static int
-gen_limm32 (unsigned char *buf, int reg, uint64_t imm)
+gen_limm64 (unsigned char *buf, int reg, uint64_t imm)
 {
   /* lis    reg, <imm[63:48]>
      ori    reg, reg, <imm[48:32]>
@@ -627,7 +627,7 @@ static int
 gen_call (unsigned char *buf, CORE_ADDR fn)
 {
   int i = 0;
-  i += gen_limm32 (buf + i, 12, fn);
+  i += gen_limm64 (buf + i, 12, fn);
 
   if (__BYTE_ORDER == __BIG_ENDIAN)
     {
@@ -701,7 +701,7 @@ ppc_install_fast_tracepoint_jump_pad (CORE_ADDR tpoint, CORE_ADDR tpaddr,
 
   /* Setup arguments to collector.  */
   i += gen_raw (buf + i, 0x38810000 | (frame_size - 8 * 36));
-  i += gen_limm32 (buf + i, 3, tpoint);
+  i += gen_limm64 (buf + i, 3, tpoint);
 
   /* Call to collector.  */
   i += gen_call (buf + i, collector);
@@ -774,20 +774,27 @@ ppc_get_min_fast_tracepoint_insn_len ()
   return 4;
 }
 
+enum
+{
+  /* basic stack frame
+     + room for callee saved registers
+     + initial bytecode execution stack  */
+  bytecode_frame_size = (48 + 8 * 8) + (2 * 8) + 64,
+};
+
 static void
 ppc_emit_prologue (void)
 {
-  const int frame_size = 112 + 16 + 64;
-
   /* r31 is the frame-base for restoring stack-pointer.
      r30 is the stack-pointer for bytecode machine.
+	 It should point to next-empty, so we can use LDU for pop.
      r3  is cache of TOP value.  */
 
   /* mflr	r0
      std	r0, 16(r1)
      std	r31, -8(r1)
      std	r30, -16(r1)
-     addi	r30, r1, -16
+     addi	r30, r1, -24
      li		r3, 0
      stdu	r1, -(frame_size)(r1)
      mr		r31, r1 */
@@ -797,8 +804,6 @@ ppc_emit_prologue (void)
 static void
 ppc_emit_epilogue (void)
 {
-  const int frame_size = 112 + 16 + 64;
-
   /* add	r1, r31, frame_size
      ld		r0, 16(r1)
      ld		r31, -8(r1)
@@ -810,49 +815,43 @@ ppc_emit_epilogue (void)
 static void
 ppc_emit_add (void)
 {
-  /* ld		r4, 0(r30)
-     add	r3, r4, r3
-     addi	r30, r30, 8 */
+  /* ldu	r4, 8(r30)
+     add	r3, r4, r3 */
 }
 
 static void
 ppc_emit_sub (void)
 {
-  /* ld		r4, 0(r30)
-     sub	r3, r4, r3
-     addi	r30, r30, 8 */
+  /* ldu	r4, 0(r30)
+     sub	r3, r4, r3 */
 }
 
 static void
 ppc_emit_mul (void)
 {
-  /* ld		r4, 0(r30)
-     mulld	r3, r4, r3
-     addi	r30, r30, 8 */
+  /* ldu	r4, 0(r30)
+     mulld	r3, r4, r3 */
 }
 
 static void
 ppc_emit_lsh (void)
 {
-  /* ld		r4, 0(r30)
-     sld	r3, r4, r3
-     addi	r30, r30, 8 */
+  /* ldu	r4, 0(r30)
+     sld	r3, r4, r3 */
 }
 
 static void
 ppc_emit_rsh_signed (void)
 {
-  /* ld		r4, 0(r30)
-     srad	r3, r4, r3
-     addi	r30, r30, 8 */
+  /* ldu	r4, 0(r30)
+     srad	r3, r4, r3 */
 }
 
 static void
 ppc_emit_rsh_unsigned (void)
 {
-  /* ld		r4, 0(r30)
-     srd	r3, r4, r3
-     addi	r30, r30, 8 */
+  /* ldu	r4, 0(r30)
+     srd	r3, r4, r3 */
 }
 
 static void
@@ -903,25 +902,22 @@ ppc_emit_log_not (void)
 static void
 ppc_emit_bit_and (void)
 {
-  /* ld		r3, 0(r30)
-     and	r29, r3, r29
-     addi	r30, r30, 8 */
+  /* ldu	r3, 0(r30)
+     and	r29, r3, r29 */
 }
 
 static void
 ppc_emit_bit_or (void)
 {
-  /* ld		r3, 0(r30)
-     or		r29, r3, r29
-     addi	r30, r30, 8 */
+  /* ldu	r3, 0(r30)
+     or		r29, r3, r29 */
 }
 
 static void
 ppc_emit_bit_xor (void)
 {
-  /* ld		r3, 0(r30)
-     xor	r29, r3, r29
-     addi	r30, r30, 8 */
+  /* ldu	r3, 0(r30)
+     xor	r29, r3, r29 */
 }
 
 static void
@@ -977,11 +973,16 @@ ppc_emit_ref (int size)
 static void
 ppc_emit_if_goto (int *offset_p, int *size_p)
 {
+  /* mr		r4, r3
+     ldu	r3, 8(r30)
+     cmpdi	cf7, r4, 0
+     beq	7, .Label */
 }
 
 static void
 ppc_emit_goto (int *offset_p, int *size_p)
 {
+  /* b		.Label */
 }
 
 static void
@@ -992,28 +993,59 @@ ppc_write_goto_address (CORE_ADDR from, CORE_ADDR to, int size)
 static void
 ppc_emit_const (LONGEST num)
 {
+  if ((num >> 8) == 0)
+    {
+      /* li	3, num[7:0] */
+    }
+  else if ((num >> 16) == 0)
+    {
+      /* li	3, 0
+	 ori	3, 3, num[15:0] */
+    }
+  else if ((num >> 32) == 0)
+    {
+      /* lis	3, num[31:16]
+	 ori	3,3, num[15:0]
+	 rldicl	3,3,0,32 */
+    }
+  else
+    {
+      /* gen_limm64 (..., 3, num); */
+    }
 }
 
 static void
 ppc_emit_call (CORE_ADDR fn)
 {
+  /* gen_call (fn); */
 }
 
 static void
 ppc_emit_reg (int reg)
 {
+  /* mr		r3, reg */
+  ppc_emit_call (get_raw_reg_func_addr ());
 }
 
 static void
 ppc_emit_pop (void)
 {
+  /* ldu	r3, 8(r30) */
 }
 
 static void
 ppc_emit_stack_flush (void)
 {
-  /* ld		r3, 0(r30)
-     addi	r30, r30, 8 */
+  /* Make bytecode stack is big enought.  Expand as need.  */
+
+  /* add	r4, r30, -(112 + 8)
+     cmpd	cf7, r4, r1
+     bgt	1f
+     ld		r4, 0(r1)
+     add	r1, r1 -64
+     st		r4, 0(r1)
+  1: st		r3, 0(r30)
+     addi	r30, r30, -8 */
 }
 
 static void
@@ -1035,6 +1067,9 @@ ppc_emit_stack_adjust (int n)
 static void
 ppc_emit_int_call_1 (CORE_ADDR fn, int arg1)
 {
+  /* Setup argument.  arg1 is a 16-bit value.  */
+  /* mr	r3, arg1 */
+  /* gen_call (fn) */
 }
 
 /* FN's prototype is `void(*fn)(int,LONGEST)'.  */
@@ -1042,6 +1077,16 @@ ppc_emit_int_call_1 (CORE_ADDR fn, int arg1)
 static void
 ppc_emit_void_call_2 (CORE_ADDR fn, int arg1)
 {
+  /* Save TOP */
+  /* st		r3, bytecode_frame_size+24(r31) */
+
+  /* Setup argument.  arg1 is a 16-bit value.  */
+  /* mr		r3, arg1
+     mr		r4, r29
+     gen_call (fn) */
+
+  /* Restore TOP */
+  /* ld		r3, bytecode_frame_size+24(r31) */
 }
 
 void
