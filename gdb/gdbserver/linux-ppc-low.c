@@ -644,8 +644,12 @@ gen_xfx_form (unsigned char *buf, int op6, int rst, int ri, int subop, int b1)
   return put_i32 (buf, insn);
 }
 
-#define GEN_MFSPR(buf, rt, spr)		gen_xfx_form (buf, 31, rt, spr, 339, 0)
-#define GEN_MTSPR(buf, rt, spr)		gen_xfx_form (buf, 31, rt, spr, 467, 0)
+#define GEN_MFSPR(buf, rt, spr) \
+        gen_xfx_form (buf, 31, rt, ((spr & 0x1f) << 5) | ((spr >> 5) & 0x1f), \
+                      339, 0)
+#define GEN_MTSPR(buf, rt, spr) \
+        gen_xfx_form (buf, 31, rt, ((spr & 0x1f) << 5) | ((spr >> 5) & 0x1f), \
+                      467, 0)
 
 static int
 gen_x_form (unsigned char *buf, int op6, int rt, int ra, int rb,
