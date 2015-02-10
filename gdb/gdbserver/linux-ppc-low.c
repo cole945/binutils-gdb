@@ -567,7 +567,7 @@ ppc_remove_point (enum raw_bkpt_type type, CORE_ADDR addr,
 
 #ifdef __powerpc64__
 static int
-write_insn (unsigned char *buf, uint32_t insn)
+gen_raw (unsigned char *buf, uint32_t insn)
 {
   if (__BYTE_ORDER == __LITTLE_ENDIAN)
     {
@@ -588,39 +588,61 @@ write_insn (unsigned char *buf, uint32_t insn)
 }
 
 static int
-store_reg (unsigned char *buf, int reg, int base, int offset)
+gen_std (unsigned char *buf, int reg, int base, int offset)
 {
   uint32_t insn = 0xf8000000; /* std r0, 0(r1) */
 
   insn |= (reg << 21) | (base << 16) | (offset & 0xfffc);
-  return write_insn (buf, insn);
+  return gen_raw (buf, insn);
 }
 
 static int
-load_reg (unsigned char *buf, int reg, int base, int offset)
+gen_ld (unsigned char *buf, int reg, int base, int offset)
 {
   uint32_t insn = 0xe8000000; /* std r0, 0(r1) */
 
   insn |= (reg << 21) | (base << 16) | (offset & 0xfffc);
-  return write_insn (buf, insn);
+  return gen_raw (buf, insn);
 }
 
 static int
-load_imm (unsigned char *buf, int reg, uint64_t imm)
+gen_limm32 (unsigned char *buf, int reg, uint64_t imm)
 {
   /* lis    reg, <imm[63:48]>
      ori    reg, reg, <imm[48:32]>
      rldicr reg, reg, 32, 31
      oris   reg, reg, <imm[31:16]>
      ori    reg, reg, <imm[15:0]> */
-  write_insn (buf + 0, 0x3c000000 | (reg << 21) | ((imm >> 48) & 0xffff));
+  gen_raw (buf + 0, 0x3c000000 | (reg << 21) | ((imm >> 48) & 0xffff));
   reg = (reg << 5) | reg;	/* Combine RS | RA */
-  write_insn (buf + 4, 0x60000000 | (reg << 16) | ((imm >> 32) & 0xffff));
-  write_insn (buf + 8, 0x780007c6 | reg << 16);
-  write_insn (buf + 12, 0x64000000 | (reg << 16) | ((imm >> 16) & 0xffff));
-  write_insn (buf + 16, 0x60000000 | (reg << 16) | (imm & 0xffff));
+  gen_raw (buf + 4, 0x60000000 | (reg << 16) | ((imm >> 32) & 0xffff));
+  gen_raw (buf + 8, 0x780007c6 | reg << 16);
+  gen_raw (buf + 12, 0x64000000 | (reg << 16) | ((imm >> 16) & 0xffff));
+  gen_raw (buf + 16, 0x60000000 | (reg << 16) | (imm & 0xffff));
 
   return 5 * 4;
+}
+
+static int
+gen_call (unsigned char *buf, CORE_ADDR fn)
+{
+  int i = 0;
+  i += gen_limm32 (buf + i, 12, fn);
+
+  if (__BYTE_ORDER == __BIG_ENDIAN)
+    {
+      /* ld 2, 8(12)
+	 ld 11, 16(12)
+	 ld 12, 0(12) */
+      i += gen_ld (buf + i, 2, 12, 8);
+      i += gen_ld (buf + i, 11, 12, 16);
+      i += gen_ld (buf + i, 12, 12, 0);
+    }
+
+  /* Must be called by r12 for caller to calculate TOC address. */
+  i += gen_raw (buf + i, 0x7c0903a6 | (12 << 21));	/* mtctr r12 */
+  i += gen_raw (buf + i, 0x4e800421);			/* bctrl */
+  return i;
 }
 
 static int
@@ -661,45 +683,42 @@ ppc_install_fast_tracepoint_jump_pad (CORE_ADDR tpoint, CORE_ADDR tpaddr,
 
   i = 0;
   for (j = 0; j < 32; j++)
-    i += store_reg (buf + i, j, 1, (-8 * 36 + j * 8));
+    i += gen_std (buf + i, j, 1, (-8 * 36 + j * 8));
 
   /* Save CR, XER, LR, and CTR.  */
-  i += write_insn (buf + i, 0x7c600026);	/* mfcr   r3 */
-  i += write_insn (buf + i, 0x7c8102a6);	/* mfxer  r4 */
-  i += write_insn (buf + i, 0x7ca802a6);	/* mflr   r5 */
-  i += write_insn (buf + i, 0x7cc902a6);	/* mfctr  r6 */
-  i += store_reg (buf + i, 3, 1, -32);		/* std    r3, -32(r1) */
-  i += store_reg (buf + i, 4, 1, -24);		/* std    r4, -24(r1) */
-  i += store_reg (buf + i, 5, 1, -16);		/* std    r5, -16(r1) */
-  i += store_reg (buf + i, 6, 1, 8);		/* std    r6, -8(r1) */
+  i += gen_raw (buf + i, 0x7c600026);		/* mfcr   r3 */
+  i += gen_raw (buf + i, 0x7c8102a6);		/* mfxer  r4 */
+  i += gen_raw (buf + i, 0x7ca802a6);		/* mflr   r5 */
+  i += gen_raw (buf + i, 0x7cc902a6);		/* mfctr  r6 */
+  i += gen_std (buf + i, 3, 1, -32);		/* std    r3, -32(r1) */
+  i += gen_std (buf + i, 4, 1, -24);		/* std    r4, -24(r1) */
+  i += gen_std (buf + i, 5, 1, -16);		/* std    r5, -16(r1) */
+  i += gen_std (buf + i, 6, 1, 8);		/* std    r6, -8(r1) */
 
   /* Adjust stack pointer.  */
 						/* subi   r1,r1,FRAME_SIZE */
-  i += write_insn (buf + i, 0x38210000 | (-frame_size & 0xffff));
+  i += gen_raw (buf + i, 0x38210000 | (-frame_size & 0xffff));
 
   /* Setup arguments to collector.  */
-  i += write_insn (buf + i, 0x38810000 | (frame_size - 8 * 36));
-  i += load_imm (buf + i, 3, tpoint);
+  i += gen_raw (buf + i, 0x38810000 | (frame_size - 8 * 36));
+  i += gen_limm32 (buf + i, 3, tpoint);
 
   /* Call to collector.  */
-  /* Must be called by r12 for caller to calculate TOC address. */
-  i += load_imm (buf + i, 12, collector);
-  i += write_insn (buf + i, 0x7c0903a6 | (12 << 21));	/* mtctr  r12 */
-  i += write_insn (buf + i, 0x4e800421);	/* bctrl */
+  i += gen_call (buf + i, collector);
 
   /* Restore stack and registers.  */
 						/* addi   r1,r1,FRAME_SIZE */
-  i += write_insn (buf + i, 0x38210000 | (frame_size & 0xffff));
-  i += load_reg (buf + i, 3, 1, -32);		/* ld    r3, -32(r1) */
-  i += load_reg (buf + i, 4, 1, -24);		/* ld    r4, -24(r1) */
-  i += load_reg (buf + i, 5, 1, -16);		/* ld    r5, -16(r1) */
-  i += load_reg (buf + i, 6, 1, 8);		/* ld    r6, -8(r1) */
-  i += write_insn (buf + i, 0x7c6ff120);	/* mtcr   r3 */
-  i += write_insn (buf + i, 0x7c8103a6);	/* mtxer  r4 */
-  i += write_insn (buf + i, 0x7ca803a6);	/* mtlr   r5 */
-  i += write_insn (buf + i, 0x7cc903a6);	/* mtctr  r6 */
+  i += gen_raw (buf + i, 0x38210000 | (frame_size & 0xffff));
+  i += gen_ld (buf + i, 3, 1, -32);		/* ld    r3, -32(r1) */
+  i += gen_ld (buf + i, 4, 1, -24);		/* ld    r4, -24(r1) */
+  i += gen_ld (buf + i, 5, 1, -16);		/* ld    r5, -16(r1) */
+  i += gen_ld (buf + i, 6, 1, 8);		/* ld    r6, -8(r1) */
+  i += gen_raw (buf + i, 0x7c6ff120);		/* mtcr   r3 */
+  i += gen_raw (buf + i, 0x7c8103a6);		/* mtxer  r4 */
+  i += gen_raw (buf + i, 0x7ca803a6);		/* mtlr   r5 */
+  i += gen_raw (buf + i, 0x7cc903a6);		/* mtctr  r6 */
   for (j = 0; j < 32; j++)
-    i += load_reg (buf + i, j, 1, (-8 * 36 + j * 8));
+    i += gen_ld (buf + i, j, 1, (-8 * 36 + j * 8));
 
   /* Remember the address for inserting original instruction.
      Patch the instruction later.  */
@@ -715,7 +734,7 @@ ppc_install_fast_tracepoint_jump_pad (CORE_ADDR tpoint, CORE_ADDR tpaddr,
       return 1;
     }
   /* b <tpaddr+4> */
-  i += write_insn (buf + i, 0x48000000 | (offset & 0x3fffffc));
+  i += gen_raw (buf + i, 0x48000000 | (offset & 0x3fffffc));
   write_inferior_memory (buildaddr, buf, i);
 
   /* Now, insert the original instruction to execute in the jump pad.  */
@@ -741,7 +760,7 @@ ppc_install_fast_tracepoint_jump_pad (CORE_ADDR tpoint, CORE_ADDR tpaddr,
 		    "(offset 0x%x > 26-bit).", offset);
       return 1;
     }
-  write_insn (jjump_pad_insn, 0x48000000 | (offset & 0x3fffffc));
+  gen_raw (jjump_pad_insn, 0x48000000 | (offset & 0x3fffffc));
   *jjump_pad_insn_size = 4;
 
   *jump_entry = buildaddr + i;
