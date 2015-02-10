@@ -25,6 +25,7 @@
 
 #include "nat/ppc-linux.h"
 #include "ax.h"
+#include "tracepoint.h"
 
 static unsigned long ppc_hwcap;
 
@@ -567,7 +568,7 @@ ppc_remove_point (enum raw_bkpt_type type, CORE_ADDR addr,
 
 #ifdef __powerpc64__
 static int
-gen_raw (unsigned char *buf, uint32_t insn)
+put_i32 (unsigned char *buf, uint32_t insn)
 {
   if (__BYTE_ORDER == __LITTLE_ENDIAN)
     {
@@ -587,13 +588,30 @@ gen_raw (unsigned char *buf, uint32_t insn)
   return 4;
 }
 
+static uint32_t
+get_i32 (unsigned char *buf)
+{
+  uint32_t r;
+
+  if (__BYTE_ORDER == __LITTLE_ENDIAN)
+    {
+      r = (buf[0] << 24) | (buf[1] << 16) | (buf[2] << 8) | buf[3];
+    }
+  else
+    {
+      r = (buf[3] << 24) | (buf[2] << 16) | (buf[1] << 8) | buf[0];
+    }
+
+  return r;
+}
+
 static int
 gen_ds_form (unsigned char *buf, int op6, int rst, int ra, int ds, int sub2)
 {
   uint32_t insn = op6 << 26;
 
   insn |= (rst << 21) | (ra << 16) | (ds & 0xfffc) | (sub2 & 0x3);
-  return gen_raw (buf, insn);
+  return put_i32 (buf, insn);
 }
 
 #define GEN_STD(buf, rs, ra, offset)	gen_ds_form (buf, 62, rs, ra, offset, 0)
@@ -607,11 +625,12 @@ gen_d_form (unsigned char *buf, int op6, int rt, int ra, int si)
   uint32_t insn = op6 << 26;
 
   insn |= (rt << 21) | (ra << 16) | (si & 0xffff);
-  return gen_raw (buf, insn);
+  return put_i32 (buf, insn);
 }
 
 #define GEN_ADDI(buf, rt, ra, si)	gen_d_form (buf, 14, rt, ra, si)
 #define GEN_ADDIS(buf, rt, ra, si)	gen_d_form (buf, 15, rt, ra, si)
+#define GEN_LI(buf, rt, si)		GEN_ADDI (buf, rt, 0, si)
 #define GEN_LIS(buf, rt, si)		GEN_ADDIS (buf, rt, 0, si)
 #define GEN_ORI(buf, rt, ra, si)	gen_d_form (buf, 24, rt, ra, si)
 #define GEN_ORIS(buf, rt, ra, si)	gen_d_form (buf, 25, rt, ra, si)
@@ -622,7 +641,7 @@ gen_xfx_form (unsigned char *buf, int op6, int rst, int ri, int subop, int b1)
   uint32_t insn = op6 << 26;
 
   insn |= (rst << 21) | (ri << 11) | (subop << 1) | b1;
-  return gen_raw (buf, insn);
+  return put_i32 (buf, insn);
 }
 
 #define GEN_MFSPR(buf, rt, spr)		gen_xfx_form (buf, 31, rt, spr, 339, 0)
@@ -635,10 +654,24 @@ gen_x_form (unsigned char *buf, int op6, int rt, int ra, int rb,
   uint32_t insn = op6 << 26;
 
   insn |= (rt << 21) | (ra << 16) | (rb << 11) | (subop << 1) | rc;
-  return gen_raw (buf, insn);
+  return put_i32 (buf, insn);
 }
 
 #define GEN_MR(buf, rt, ra)		gen_x_form (buf, 31, rt, ra, ra, 444, 0)
+
+static int
+gen_xo_form (unsigned char *buf, int op6, int rt, int ra, int rb, int oe,
+	     int subop, int rc)
+{
+  uint32_t insn = op6 << 26;
+
+  insn |= (rt << 21) | (ra << 16) | (rb << 11) | (oe << 10) | (subop << 1) | rc;
+  return put_i32 (buf, insn);
+}
+
+#define GEN_ADD(buf, rt, ra, rb)   gen_xo_form (buf, 31, rt, ra, rb, 0, 266, 0)
+#define GEN_SUBF(buf, rt, ra, rb)  gen_xo_form (buf, 31, rt, ra, rb, 0, 40, 0)
+#define GEN_SUB(buf, rt, ra, rb)   GEN_SUBF (buf, rt, rb, ra)
 
 static int
 gen_limm64 (unsigned char *buf, int reg, uint64_t imm)
@@ -650,7 +683,7 @@ gen_limm64 (unsigned char *buf, int reg, uint64_t imm)
      ori    reg, reg, <imm[15:0]> */
   GEN_LIS (buf + 0, reg, ((imm >> 48) & 0xffff));
   GEN_ORI (buf + 4, reg, reg, ((imm >> 32) & 0xffff));
-  gen_raw (buf + 8, 0x780007c6 | (reg << 21) | (reg << 16));
+  put_i32 (buf + 8, 0x780007c6 | (reg << 21) | (reg << 16));
   GEN_ORIS (buf + 12, reg, reg, ((imm >> 16) & 0xffff));
   GEN_ORI (buf + 16, reg, reg, (imm & 0xffff));
 
@@ -671,8 +704,8 @@ gen_call (unsigned char *buf, CORE_ADDR fn)
     }
 
   /* Must be called by r12 for caller to calculate TOC address. */
-  i += gen_raw (buf + i, 0x7c0903a6 | (12 << 21));	/* mtctr r12 */
-  i += gen_raw (buf + i, 0x4e800421);			/* bctrl */
+  i += put_i32 (buf + i, 0x7c0903a6 | (12 << 21));	/* mtctr r12 */
+  i += put_i32 (buf + i, 0x4e800421);			/* bctrl */
   return i;
 }
 
@@ -717,7 +750,7 @@ ppc_install_fast_tracepoint_jump_pad (CORE_ADDR tpoint, CORE_ADDR tpaddr,
     i += GEN_STD (buf + i, j, 1, (-8 * 36 + j * 8));
 
   /* Save CR, XER, LR, and CTR.  */
-  i += gen_raw (buf + i, 0x7c600026);		/* mfcr   r3 */
+  i += put_i32 (buf + i, 0x7c600026);		/* mfcr   r3 */
   i += GEN_MFSPR (buf + i, 4, 1);		/* mfxer  r4 */
   i += GEN_MFSPR (buf + i, 5, 8);		/* mflr   r5 */
   i += GEN_MFSPR (buf + i, 6, 9);		/* mfctr  r6 */
@@ -745,7 +778,7 @@ ppc_install_fast_tracepoint_jump_pad (CORE_ADDR tpoint, CORE_ADDR tpaddr,
   i += GEN_LD (buf + i, 4, 1, -24);		/* ld    r4, -24(r1) */
   i += GEN_LD (buf + i, 5, 1, -16);		/* ld    r5, -16(r1) */
   i += GEN_LD (buf + i, 6, 1, 8);		/* ld    r6, -8(r1) */
-  i += gen_raw (buf + i, 0x7c6ff120);		/* mtcr   r3 */
+  i += put_i32 (buf + i, 0x7c6ff120);		/* mtcr   r3 */
   i += GEN_MTSPR (buf + i, 4, 1);		/* mtxer  r4 */
   i += GEN_MTSPR (buf + i, 5, 8);		/* mtlr   r5 */
   i += GEN_MTSPR (buf + i, 6, 9);		/* mtctr  r6 */
@@ -766,7 +799,7 @@ ppc_install_fast_tracepoint_jump_pad (CORE_ADDR tpoint, CORE_ADDR tpaddr,
       return 1;
     }
   /* b <tpaddr+4> */
-  i += gen_raw (buf + i, 0x48000000 | (offset & 0x3fffffc));
+  i += put_i32 (buf + i, 0x48000000 | (offset & 0x3fffffc));
   write_inferior_memory (buildaddr, buf, i);
 
   /* Now, insert the original instruction to execute in the jump pad.  */
@@ -793,7 +826,7 @@ ppc_install_fast_tracepoint_jump_pad (CORE_ADDR tpoint, CORE_ADDR tpaddr,
       return 1;
     }
   /* b <jentry> */
-  gen_raw (jjump_pad_insn, 0x48000000 | (offset & 0x3fffffc));
+  put_i32 (jjump_pad_insn, 0x48000000 | (offset & 0x3fffffc));
   *jjump_pad_insn_size = 4;
 
   *jump_entry = buildaddr + i;
@@ -812,7 +845,7 @@ enum
   /* basic stack frame
      + room for callee saved registers
      + initial bytecode execution stack  */
-  bytecode_frame_size = (48 + 8 * 8) + (2 * 8) + 64,
+  bytecode_framesize = (48 + 8 * 8) + (2 * 8) + 64,
 };
 
 static void
@@ -826,284 +859,497 @@ ppc_emit_prologue (void)
   unsigned char buf[8 * 4];
   int i = 0;
 
-  /* mflr	r0
-     std	r0, 16(r1)
-     std	r31, -8(r1)
-     std	r30, -16(r1)
-     addi	r30, r1, -24
-     li		r3, 0
-     stdu	r1, -(frame_size)(r1)
-     mr		r31, r1 */
-  i += GEN_MFSPR (buf, 0, 8);
-  i += GEN_STD (buf + i, 0, 1, 16);
-  i += GEN_STD (buf + i, 31, 1, -8);
-  i += GEN_STD (buf + i, 30, 1, -16);
-  i += GEN_ADDI (buf + i, 30, 1, -24);
-  i += gen_raw (buf + i, 0x38600000);
-  i += GEN_STDU (buf + i, 1, 1, -bytecode_frame_size);
-  i += GEN_MR (buf + i, 31, 1);
+  i += GEN_MFSPR (buf, 0, 8);		/* mflr	r0 */
+  i += GEN_STD (buf + i, 0, 1, 16);	/* std	r0, 16(r1) */
+  i += GEN_STD (buf + i, 31, 1, -8);	/* std	r31, -8(r1) */
+  i += GEN_STD (buf + i, 30, 1, -16);	/* std	r30, -16(r1) */
+  i += GEN_ADDI (buf + i, 30, 1, -24);	/* addi	r30, r1, -24 */
+  i += GEN_LI (buf + i, 3, 0);		/* li		r3, 0 */
+					/* stdu	r1, -(frame_size)(r1) */
+  i += GEN_STDU (buf + i, 1, 1, -bytecode_framesize);
+  i += GEN_MR (buf + i, 31, 1);		/* mr	r31, r1 */
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 
 static void
 ppc_emit_epilogue (void)
 {
-  /* add	r1, r31, frame_size
-     ld		r0, 16(r1)
-     ld		r31, -8(r1)
-     ld		r30, -16(r1)
-     mtlr	r0
-     blr */
+  unsigned char buf[6 * 4];
+  int i = 0;
+
+					/* add	r1, r31, frame_size */
+  i += GEN_ADDI (buf, 1, 31, bytecode_framesize);
+  i += GEN_LD (buf + i, 0, 1, 16);	/* ld	r0, 16(r1) */
+  i += GEN_LD (buf + i, 0, 31, -8);	/* ld	r31, -8(r1) */
+  i += GEN_LD (buf + i, 0, 30, -16);	/* ld	r30, -16(r1) */
+  i += GEN_MTSPR (buf + i, 0, 8);	/* mtlr	r0 */
+  i += put_i32 (buf + i, 0x4e800020);	/* blr */
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 static void
 ppc_emit_add (void)
 {
-  /* ldu	r4, 8(r30)
-     add	r3, r4, r3 */
+  unsigned char buf[2 * 4];
+  int i = 0;
+
+  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
+  i += GEN_ADD (buf + i, 3, 4, 3);	/* add	r3, r4, r3 */
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 static void
 ppc_emit_sub (void)
 {
-  /* ldu	r4, 0(r30)
-     sub	r3, r4, r3 */
+  unsigned char buf[2 * 4];
+  int i = 0;
+
+  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
+  i += GEN_SUB (buf + i, 3, 4, 3);	/* sub	r3, r4, r3 */
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 static void
 ppc_emit_mul (void)
 {
-  /* ldu	r4, 0(r30)
-     mulld	r3, r4, r3 */
+  unsigned char buf[2 * 4];
+  int i = 0;
+
+  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu    r4, 8(r30) */
+  i += put_i32 (buf + i, 0x7c6419d2);	/* mulld  r3, r4, r3 */
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 static void
 ppc_emit_lsh (void)
 {
-  /* ldu	r4, 0(r30)
-     sld	r3, r4, r3 */
+  unsigned char buf[2 * 4];
+  int i = 0;
+
+  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
+  i += put_i32 (buf + i, 0x7c831836);	/* sld	r3, r4, r3 */
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 static void
 ppc_emit_rsh_signed (void)
 {
-  /* ldu	r4, 0(r30)
-     srad	r3, r4, r3 */
+  unsigned char buf[2 * 4];
+  int i = 0;
+
+  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
+  i += put_i32 (buf + i, 0x7c831e34);	/* srad	r3, r4, r3 */
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 static void
 ppc_emit_rsh_unsigned (void)
 {
-  /* ldu	r4, 0(r30)
-     srd	r3, r4, r3 */
+  unsigned char buf[2 * 4];
+  int i = 0;
+
+  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
+  i += put_i32 (buf + i, 0x7c831c36);	/* srd	r3, r4, r3 */
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 static void
 ppc_emit_ext (int arg)
 {
+  unsigned char buf[4];
+  int i = 0;
+
   switch (arg)
     {
     case 8:
-      /* extsb	r3, r3 */
+      i += put_i32 (buf, 0x7c630774);	/* extsb  r3, r3 */
       break;
     case 16:
-      /* extsh	r3, r3 */
+      i += put_i32 (buf, 0x7c630734);	/* extsh  r3, r3 */
       break;
     case 32:
-      /* extsw	r3, r3 */
+      i += put_i32 (buf, 0x7c6307b4);	/* extsw  r3, r3 */
       break;
     default:
       emit_error = 1;
     }
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 static void
 ppc_emit_zero_ext (int arg)
 {
+  unsigned char buf[4];
+  int i = 0;
+
   switch (arg)
     {
     case 8:
-      /* rldicl 3,3,0,56 */
+      i += put_i32 (buf, 0x78630620);	/* rldicl 3,3,0,56 */
       break;
     case 16:
-      /* rldicl 3,3,0,38 */
+      i += put_i32 (buf, 0x786301a0);	/* rldicl 3,3,0,38 */
       break;
     case 32:
-      /* rldicl 3,3,0,32 */
+      i += put_i32 (buf, 0x78630020);	/* rldicl 3,3,0,32 */
       break;
     default:
       emit_error = 1;
     }
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 static void
 ppc_emit_log_not (void)
 {
-  /* cntlzd 29,29
-     srdi 29,29,6 */
+  unsigned char buf[2 * 4];
+  int i = 0;
+
+  i += put_i32 (buf + i, 0x7c630074);	/* cntlzd r3, r3 */
+  i += put_i32 (buf + i, 0x7863d182);	/* srdi   r3, r3, 6 */
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 static void
 ppc_emit_bit_and (void)
 {
-  /* ldu	r3, 0(r30)
-     and	r29, r3, r29 */
+  unsigned char buf[2 * 4];
+  int i = 0;
+
+  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
+  i += put_i32 (buf + i, 0x7c831838);	/* and	r3, r4, r3 */
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 static void
 ppc_emit_bit_or (void)
 {
-  /* ldu	r3, 0(r30)
-     or		r29, r3, r29 */
+  unsigned char buf[2 * 4];
+  int i = 0;
+
+  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
+  i += put_i32 (buf + i, 0x7c831b78);	/* or	r3, r4, r3 */
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 static void
 ppc_emit_bit_xor (void)
 {
-  /* ldu	r3, 0(r30)
-     xor	r29, r3, r29 */
+  unsigned char buf[2 * 4];
+  int i = 0;
+
+  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
+  i += put_i32 (buf + i, 0x7c831a78);	/* xor	r3, r4, r3 */
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 static void
 ppc_emit_bit_not (void)
 {
-  /* nor	r29, r29, r29 */
+  unsigned char buf[4];
+  int i = 0;
+
+  i += put_i32 (buf, 0x7c6318f8);	/* nor	r3, r3, r3 */
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 static void
 ppc_emit_equal (void)
 {
-  /* xor     r3,r3,r4
-     cntlzd  r3,r3
-     rldicl  r3,r3,58,6 */
+  unsigned char buf[3 * 4];
+  int i = 0;
+
+  i += put_i32 (buf + i, 0x7c632278);	/* xor     r3,r3,r4 */
+  i += put_i32 (buf + i, 0x7c630074);	/* cntlzd  r3,r3 */
+  i += put_i32 (buf + i, 0x7863d182);	/* rldicl  r3,r3,58,6 */
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 static void
 ppc_emit_less_signed (void)
 {
-  /* cmpd    cr7,r3,r4
-     mfocrf  r3,1
-     rlwinm  r3,r3,29,31,31 */
+  unsigned char buf[3 * 4];
+  int i = 0;
+
+  i += put_i32 (buf + i, 0x7fa32000);	/* cmpd    cr7,r3,r4 */
+  i += put_i32 (buf + i, 0x7c701026);	/* mfocrf  r3,1 */
+  i += put_i32 (buf + i, 0x5463effe);	/* rlwinm  r3,r3,29,31,31 */
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 static void
 ppc_emit_less_unsigned (void)
 {
-  /* cmpld    cr7,r3,r4
-     mfocrf  r3,1
-     rlwinm  r3,r3,29,31,31 */
+  unsigned char buf[3 * 4];
+  int i = 0;
+
+  i += put_i32 (buf + i, 0x7fa32040);	/* cmpld    cr7,r3,r4 */
+  i += put_i32 (buf + i, 0x7c701026);	/* mfocrf  r3,1 */
+  i += put_i32 (buf + i, 0x5463effe);	/* rlwinm  r3,r3,29,31,31 */
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 static void
 ppc_emit_ref (int size)
 {
+  unsigned char buf[4];
+  int i = 0;
+
   switch (size)
     {
     case 1:
-      /* lbz 3,0(3) */
+      i += put_i32 (buf + i, 0x88630000);	/* lbz 3,0(3) */
       break;
     case 2:
-      /* lha 9,0(4) */
+      i += put_i32 (buf + i, 0xa0630000);	/* lha 3,0(3) */
       break;
     case 4:
-      /* lwz 10,0(5) */
+      i += put_i32 (buf + i, 0x80630000);	/* lwz 3,0(3) */
       break;
     case 8:
-      /* ld 3,0(6) */
+      i += put_i32 (buf + i, 0xe8630000);	/* ld 3,0(3) */
       break;
     }
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 static void
 ppc_emit_if_goto (int *offset_p, int *size_p)
 {
-  /* mr		r4, r3
-     ldu	r3, 8(r30)
-     cmpdi	cf7, r4, 0
-     beq	7, .Label */
+  unsigned char buf[4 * 4];
+  int i = 0;
+
+  i += GEN_MR (buf + i, 4, 3);		/* mr    r4, r3 */
+  i += GEN_LDU (buf + i, 3, 30, 8);	/* ldu   r3, 8(r30) */
+  i += put_i32 (buf + i, 0x2fa40000);	/* cmpdi cr7, r4, 0 */
+  i += put_i32 (buf + i, 0x419e0000);	/* beq   cr7, <addr14> */
+
+  if (offset_p)
+    *offset_p = 12;
+  if (size_p)
+    *size_p = 14;
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 static void
 ppc_emit_goto (int *offset_p, int *size_p)
 {
-  /* b		.Label */
+  unsigned char buf[4];
+  int i = 0;
+
+  i += put_i32 (buf, 0x48000000);	/* b    <addr24> */
+
+  if (offset_p)
+    *offset_p = 0;
+  if (size_p)
+    *size_p = 24;
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 static void
 ppc_write_goto_address (CORE_ADDR from, CORE_ADDR to, int size)
 {
+  int rel = to - from;
+  uint32_t insn;
+  int op6;
+  unsigned char buf[4];
+
+  read_inferior_memory (from, buf, 4);
+  insn = get_i32 (buf);
+  op6 = (insn >> 26) & 0x3f;
+
+  switch (size)
+    {
+    case 14:
+      if (op6 != 16)
+	emit_error = 1;
+      insn |= (rel & 0xfffc);
+      break;
+    case 24:
+      if (op6 != 18)
+	emit_error = 1;
+      insn |= (rel & 0x3fffffc);
+      break;
+    }
+
+  put_i32 (buf, insn);
+  write_inferior_memory (from, buf, 4);
 }
 
 static void
 ppc_emit_const (LONGEST num)
 {
+  unsigned char buf[5 * 4];
+  int i = 0;
+
   if ((num >> 8) == 0)
     {
       /* li	3, num[7:0] */
+      i += GEN_LI (buf + i, 3, num);
     }
   else if ((num >> 16) == 0)
     {
       /* li	3, 0
 	 ori	3, 3, num[15:0] */
+      i += GEN_LI (buf + i, 3, 0);
+      i += GEN_ORI (buf + i, 3, 3, num);
     }
   else if ((num >> 32) == 0)
     {
       /* lis	3, num[31:16]
 	 ori	3,3, num[15:0]
 	 rldicl	3,3,0,32 */
+      i += GEN_LIS (buf + i, 3, (num >> 16) & 0xffff);
+      i += GEN_ORI (buf + i, 3, 3, num & 0xffff);
+      i += put_i32 (buf + i, 0x78630020);
     }
   else
     {
-      /* gen_limm64 (..., 3, num); */
+      i += gen_limm64 (buf + i, 3, num);
     }
-}
 
-static void
-ppc_emit_call (CORE_ADDR fn)
-{
-  /* gen_call (fn); */
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 static void
 ppc_emit_reg (int reg)
 {
-  /* mr		r3, reg */
-  ppc_emit_call (get_raw_reg_func_addr ());
+  unsigned char buf[8 * 8];
+  int i = 0;
+
+  i += GEN_MR (buf, 3, reg);	/* mr	r3, reg */
+  i += gen_call (buf, get_raw_reg_func_addr ());
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 static void
 ppc_emit_pop (void)
 {
-  /* ldu	r3, 8(r30) */
+  unsigned char buf[4];
+  int i = 0;
+
+  i += GEN_LDU (buf, 3, 30, 8);	/* ldu	r3, 8(r30) */
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 static void
 ppc_emit_stack_flush (void)
 {
+  unsigned char buf[8 * 4];
+  int i = 0;
+
   /* Make bytecode stack is big enought.  Expand as need.  */
 
-  /* add	r4, r30, -(112 + 8)
-     cmpd	cf7, r4, r1
+  /* addi	r4, r30, -(112 + 8)
+     cmpd	cr7, r4, r1
      bgt	1f
-     ld		r4, 0(r1)
-     add	r1, r1 -64
-     st		r4, 0(r1)
+   / ld		r4, 0(r1)
+   | addi	r1, r1, -64
+   | st		r4, 0(r1)
   1: st		r3, 0(r30)
      addi	r30, r30, -8 */
+
+  i += GEN_ADDI (buf + i, 4, 30, -(112 + 8));
+  i += put_i32 (buf + i, 0x7fa40800);
+  i += put_i32 (buf + i, 0x41810010);
+  {
+    /* Expand stack.  */
+    i += GEN_LD (buf + i, 4, 1, 0);
+    i += GEN_ADDI (buf + i, 1, 1, -64);
+    i += GEN_STD (buf + i, 4, 1, 0);
+  }
+  /* Push TOP in stack.  */
+  i += GEN_STD (buf + i, 3, 30, 0);
+  i += put_i32 (buf + i, 0x3bdefff8);
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 static void
 ppc_emit_swap (void)
 {
-  /* ld		r4, 0(r30)
-     std	r3, 0(r30)
-     mr		r3, r4 */
+  unsigned char buf[3 * 4];
+  int i = 0;
+
+  i += GEN_LD (buf + i, 4, 30, 0);	/* ld	r4, 0(r30) */
+  i += GEN_STD (buf + i, 3, 30, 0);	/* std	r3, 0(r30) */
+  i += GEN_MR (buf + i, 3, 4);		/* mr	r3, r4 */
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 static void
 ppc_emit_stack_adjust (int n)
 {
-  /* addi	r30, r30, (n << 3) */
+  unsigned char buf[4];
+  int i = 0;
+
+  i += GEN_ADDI (buf, 30, 30, n << 3);	/* addi	r30, r30, (n << 3) */
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
+}
+
+static void
+ppc_emit_call (CORE_ADDR fn)
+{
+  unsigned char buf[8 * 4];
+  int i = 0;
+
+  i += gen_call (buf + i, fn);		/* gen_call (fn) */
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 /* FN's prototype is `LONGEST(*fn)(int)'.  */
@@ -1111,9 +1357,15 @@ ppc_emit_stack_adjust (int n)
 static void
 ppc_emit_int_call_1 (CORE_ADDR fn, int arg1)
 {
+  unsigned char buf[8 * 4];
+  int i = 0;
+
   /* Setup argument.  arg1 is a 16-bit value.  */
-  /* mr	r3, arg1 */
-  /* gen_call (fn) */
+  i += GEN_LI (buf, 3, arg1);		/* li	r3, arg1 */
+  i += gen_call (buf + i, fn);		/* gen_call (fn) */
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 /* FN's prototype is `void(*fn)(int,LONGEST)'.  */
@@ -1121,16 +1373,19 @@ ppc_emit_int_call_1 (CORE_ADDR fn, int arg1)
 static void
 ppc_emit_void_call_2 (CORE_ADDR fn, int arg1)
 {
+  unsigned char buf[12 * 4];
+  int i = 0;
+
   /* Save TOP */
-  /* st		r3, bytecode_frame_size+24(r31) */
+  i += GEN_STD (buf, 3, 31, bytecode_framesize + 24);
 
   /* Setup argument.  arg1 is a 16-bit value.  */
-  /* mr		r3, arg1
-     mr		r4, r29
-     gen_call (fn) */
+  i += GEN_MR (buf + i, 3, 4);		/* mr	r4, r3 */
+  i += GEN_LI (buf + i, 3, arg1);	/* li	r3, arg1 */
+  i += gen_call (buf + i, fn);		/* gen_call (fn) */
 
   /* Restore TOP */
-  /* ld		r3, bytecode_frame_size+24(r31) */
+  i += GEN_LD (buf, 3, 31, bytecode_framesize + 24);
 }
 
 void
