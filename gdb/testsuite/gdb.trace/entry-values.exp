@@ -218,6 +218,8 @@ if [is_amd64_regs_target] {
     set spreg "\$rsp"
 } elseif [is_x86_like_target] {
     set spreg "\$esp"
+} elseif [istarget "powerpc*-*-*"] {
+    set spreg "\$r1"
 } else {
     set spreg "\$sp"
 }
