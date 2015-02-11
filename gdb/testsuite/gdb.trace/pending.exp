@@ -441,6 +441,8 @@ proc pending_tracepoint_with_action_resolved { trace_type } \
 	set pcreg "rip"
     } elseif [is_x86_like_target] {
 	set pcreg "eip"
+    } elseif [istarget "powerpc*-*-*"] {
+	set pcreg "pc"
     }
 
     gdb_trace_setactions "set action for pending tracepoint" "" \
