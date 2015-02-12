@@ -52,6 +52,7 @@ if [is_amd64_regs_target] {
 } elseif [istarget "powerpc*-*-*"] {
     set fpreg "r31"
     set spreg "r1"
+    set pcreg "pc"
 }
 
 # Set breakpoint and tracepoint at the same address.
