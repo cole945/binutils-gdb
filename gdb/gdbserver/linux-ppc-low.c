@@ -694,18 +694,22 @@ static int
 gen_call (unsigned char *buf, CORE_ADDR fn)
 {
   int i = 0;
+
+#if !defined (_CALL_ELF) || _CALL_ELF == 1
   i += gen_limm64 (buf + i, 12, fn);
-
-  if (__BYTE_ORDER == __BIG_ENDIAN)
-    {
-      i += GEN_LD (buf + i, 2, 12, 8);		/* ld 2, 8(12) */
-      i += GEN_LD (buf + i, 11, 12, 16);	/* ld 11, 16(12) */
-      i += GEN_LD (buf + i, 12, 12, 0);		/* ld 12, 0(12) */
-    }
-
+  i += GEN_LD (buf + i, 9, 12, 0);			/* ld r9, 0(r12) */
+  i += GEN_LD (buf + i, 2, 12, 8);			/* ld r2, 8(r12) */
+  i += put_i32 (buf + i, 0x7c0903a6 | (9 << 21));	/* mtctr r9 */
+  i += GEN_LD (buf + i, 11, 12, 16);			/* ld r11, 16(r12) */
+  i += put_i32 (buf + i, 0x4e800421);			/* bctrl */
+#elif _CALL_ELF == 2
   /* Must be called by r12 for caller to calculate TOC address. */
+  i += gen_limm64 (buf + i, 12, fn);
   i += put_i32 (buf + i, 0x7c0903a6 | (12 << 21));	/* mtctr r12 */
   i += put_i32 (buf + i, 0x4e800421);			/* bctrl */
+#else
+  #error "Unknown _CALL_ELF.  Don't know how to call."
+#endif
   return i;
 }
 
