@@ -26,11 +26,12 @@ void init_registers_powerpc_64l (void);
 extern const struct target_desc *tdesc_powerpc_64l;
 
 /* fast tracepoints collect registers.  */
-#define FT_CR_R0	0
-#define FT_CR_CR	32
-#define FT_CR_LR	34
-#define FT_CR_CTR	35
-#define FT_CR_XER	33
+#define FT_CR_PC	0
+#define FT_CR_R0	1
+#define FT_CR_CR	33
+#define FT_CR_XER	34
+#define FT_CR_LR	35
+#define FT_CR_CTR	36
 
 static const int ppc64_ft_collect_regmap[] = {
   /* GPRs */
@@ -50,7 +51,7 @@ static const int ppc64_ft_collect_regmap[] = {
   -1, -1, -1, -1, -1, -1, -1, -1,
   -1, -1, -1, -1, -1, -1, -1, -1,
   -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, /* PC */
+  FT_CR_PC, /* PC */
   -1, /* MSR */
   FT_CR_CR, /* CR */
   FT_CR_LR, /* LR */

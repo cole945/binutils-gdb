@@ -736,22 +736,27 @@ ppc_install_fast_tracepoint_jump_pad (CORE_ADDR tpoint, CORE_ADDR tpaddr,
   unsigned char buf[512];
   int i, j, offset;
   CORE_ADDR buildaddr = *jump_entry;
-  const int frame_size = (((36 * 8) + 112) + 0xf) & ~0xf;
+  const int frame_size = (((37 * 8) + 112) + 0xf) & ~0xf;
 
   /* Save registers.
      High	CTR   -8(sp)
-		LR
+		LR   -16(sp)
 		XER
 		CR
 		R31
 		R29
 		...
-		R1   -280(sp)
-     Low	R0   -288(sp) */
+		R1
+		R0
+     Low	PC<tpaddr> */
 
   i = 0;
   for (j = 0; j < 32; j++)
     i += GEN_STD (buf + i, j, 1, (-8 * 36 + j * 8));
+
+  /* Save PC<tpaddr>  */
+  i += gen_limm64 (buf + i, 3, tpaddr);
+  i += GEN_STD (buf + i, 3, 1, (-8 * 37));
 
   /* Save CR, XER, LR, and CTR.  */
   i += put_i32 (buf + i, 0x7c600026);		/* mfcr   r3 */
@@ -761,7 +766,7 @@ ppc_install_fast_tracepoint_jump_pad (CORE_ADDR tpoint, CORE_ADDR tpaddr,
   i += GEN_STD (buf + i, 3, 1, -32);		/* std    r3, -32(r1) */
   i += GEN_STD (buf + i, 4, 1, -24);		/* std    r4, -24(r1) */
   i += GEN_STD (buf + i, 5, 1, -16);		/* std    r5, -16(r1) */
-  i += GEN_STD (buf + i, 6, 1, 8);		/* std    r6, -8(r1) */
+  i += GEN_STD (buf + i, 6, 1, -8);		/* std    r6, -8(r1) */
 
   /* Adjust stack pointer.  */
   i += GEN_ADDI (buf + i, 1, 1, -frame_size);	/* subi   r1,r1,FRAME_SIZE */
@@ -769,7 +774,7 @@ ppc_install_fast_tracepoint_jump_pad (CORE_ADDR tpoint, CORE_ADDR tpaddr,
   /* Setup arguments to collector.  */
 
   /* Set r4 to collected registers.  */
-  i += GEN_ADDI (buf + i, 4, 1, frame_size - 8 * 36);
+  i += GEN_ADDI (buf + i, 4, 1, frame_size - 8 * 37);
   /* Set r3 to TPOINT.  */
   i += gen_limm64 (buf + i, 3, tpoint);
 
@@ -781,7 +786,7 @@ ppc_install_fast_tracepoint_jump_pad (CORE_ADDR tpoint, CORE_ADDR tpaddr,
   i += GEN_LD (buf + i, 3, 1, -32);		/* ld    r3, -32(r1) */
   i += GEN_LD (buf + i, 4, 1, -24);		/* ld    r4, -24(r1) */
   i += GEN_LD (buf + i, 5, 1, -16);		/* ld    r5, -16(r1) */
-  i += GEN_LD (buf + i, 6, 1, 8);		/* ld    r6, -8(r1) */
+  i += GEN_LD (buf + i, 6, 1, -8);		/* ld    r6, -8(r1) */
   i += put_i32 (buf + i, 0x7c6ff120);		/* mtcr   r3 */
   i += GEN_MTSPR (buf + i, 4, 1);		/* mtxer  r4 */
   i += GEN_MTSPR (buf + i, 5, 8);		/* mtlr   r5 */
