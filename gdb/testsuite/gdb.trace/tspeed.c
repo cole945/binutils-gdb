@@ -163,8 +163,8 @@ trace_speed_test (void)
 
   if (idelta > mindelta
       /* Total test time should be between 2 and 5 seconds.  */
-      && (total1 + total2) > (2 * 1000000)
-      && (total1 + total2) < (5 * 1000000)) 
+      && (total1 + total2) > (3 * 100000)
+      && (total1 + total2) < (5 * 100000))
     {
       nsdelta = (((unsigned long long) idelta) * 1000) / iters;
       printf ("Second loop took %d ns longer per iter than first\n", nsdelta);

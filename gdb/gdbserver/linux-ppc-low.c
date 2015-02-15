@@ -1096,9 +1096,10 @@ ppc_emit_bit_not (void)
 static void
 ppc_emit_equal (void)
 {
-  unsigned char buf[3 * 4];
+  unsigned char buf[4 * 4];
   int i = 0;
 
+  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu     r4, 8(r30) */
   i += put_i32 (buf + i, 0x7c632278);	/* xor     r3,r3,r4 */
   i += put_i32 (buf + i, 0x7c630074);	/* cntlzd  r3,r3 */
   i += put_i32 (buf + i, 0x7863d182);	/* rldicl  r3,r3,58,6 */
@@ -1110,9 +1111,10 @@ ppc_emit_equal (void)
 static void
 ppc_emit_less_signed (void)
 {
-  unsigned char buf[3 * 4];
+  unsigned char buf[4 * 4];
   int i = 0;
 
+  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu     r4, 8(r30) */
   i += put_i32 (buf + i, 0x7fa32000);	/* cmpd    cr7,r3,r4 */
   i += put_i32 (buf + i, 0x7c701026);	/* mfocrf  r3,1 */
   i += put_i32 (buf + i, 0x5463effe);	/* rlwinm  r3,r3,29,31,31 */
@@ -1124,9 +1126,10 @@ ppc_emit_less_signed (void)
 static void
 ppc_emit_less_unsigned (void)
 {
-  unsigned char buf[3 * 4];
+  unsigned char buf[4 * 4];
   int i = 0;
 
+  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu     r4, 8(r30) */
   i += put_i32 (buf + i, 0x7fa32040);	/* cmpld    cr7,r3,r4 */
   i += put_i32 (buf + i, 0x7c701026);	/* mfocrf  r3,1 */
   i += put_i32 (buf + i, 0x5463effe);	/* rlwinm  r3,r3,29,31,31 */
@@ -1170,7 +1173,7 @@ ppc_emit_if_goto (int *offset_p, int *size_p)
   i += GEN_MR (buf + i, 4, 3);		/* mr    r4, r3 */
   i += GEN_LDU (buf + i, 3, 30, 8);	/* ldu   r3, 8(r30) */
   i += put_i32 (buf + i, 0x2fa40000);	/* cmpdi cr7, r4, 0 */
-  i += put_i32 (buf + i, 0x419e0000);	/* beq   cr7, <addr14> */
+  i += put_i32 (buf + i, 0x409e0000);	/* bne   cr7, <addr14> */
 
   if (offset_p)
     *offset_p = 12;
@@ -1395,36 +1398,135 @@ ppc_emit_void_call_2 (CORE_ADDR fn, int arg1)
 
   /* Restore TOP */
   i += GEN_LD (buf, 3, 31, bytecode_framesize + 24);
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 void
 ppc_emit_eq_goto (int *offset_p, int *size_p)
 {
+  unsigned char buf[4 * 4];
+  int i = 0;
+
+  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
+  i += put_i32 (buf + i, 0x7fa32000);	/* cmpd	cr7, r3, r4 */
+  i += put_i32 (buf + i, 0x419e0000);	/* beq	cr7, <addr14> */
+  /* Cache top.  */
+  i += GEN_LDU (buf + i, 3, 30, 8);	/* ldu	r3, 8(r30) */
+
+  if (offset_p)
+    *offset_p = 8;
+  if (size_p)
+    *size_p = 14;
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 void
 ppc_emit_ne_goto (int *offset_p, int *size_p)
 {
+  unsigned char buf[4 * 4];
+  int i = 0;
+
+  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
+  i += put_i32 (buf + i, 0x7fa32000);	/* cmpd	cr7, r3, r4 */
+  i += put_i32 (buf + i, 0x409e0000);	/* bne	cr7, <addr14> */
+  /* Cache top.  */
+  i += GEN_LDU (buf + i, 3, 30, 8);	/* ldu	r3, 8(r30) */
+
+  if (offset_p)
+    *offset_p = 8;
+  if (size_p)
+    *size_p = 14;
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 void
 ppc_emit_lt_goto (int *offset_p, int *size_p)
 {
+  unsigned char buf[4 * 4];
+  int i = 0;
+
+  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
+  i += put_i32 (buf + i, 0x7fa32000);	/* cmpd	cr7, r3, r4 */
+  i += put_i32 (buf + i, 0x419c0000);	/* blt	cr7, <addr14> */
+  /* Cache top.  */
+  i += GEN_LDU (buf + i, 3, 30, 8);	/* ldu	r3, 8(r30) */
+
+  if (offset_p)
+    *offset_p = 8;
+  if (size_p)
+    *size_p = 14;
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 void
 ppc_emit_le_goto (int *offset_p, int *size_p)
 {
+  unsigned char buf[4 * 4];
+  int i = 0;
+
+  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
+  i += put_i32 (buf + i, 0x7fa32000);	/* cmpd	cr7, r3, r4 */
+  i += put_i32 (buf + i, 0x409d0000);	/* ble	cr7, <addr14> */
+  /* Cache top.  */
+  i += GEN_LDU (buf + i, 3, 30, 8);	/* ldu	r3, 8(r30) */
+
+  if (offset_p)
+    *offset_p = 8;
+  if (size_p)
+    *size_p = 14;
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 void
 ppc_emit_gt_goto (int *offset_p, int *size_p)
 {
+  unsigned char buf[4 * 4];
+  int i = 0;
+
+  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
+  i += put_i32 (buf + i, 0x7fa32000);	/* cmpd	cr7, r3, r4 */
+  i += put_i32 (buf + i, 0x419d0000);	/* bgt	cr7, <addr14> */
+  /* Cache top.  */
+  i += GEN_LDU (buf + i, 3, 30, 8);	/* ldu	r3, 8(r30) */
+
+  if (offset_p)
+    *offset_p = 8;
+  if (size_p)
+    *size_p = 14;
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 void
 ppc_emit_ge_goto (int *offset_p, int *size_p)
 {
+  unsigned char buf[4 * 4];
+  int i = 0;
+
+  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
+  i += put_i32 (buf + i, 0x7fa32000);	/* cmpd	cr7, r3, r4 */
+  i += put_i32 (buf + i, 0x409c0000);	/* bge	cr7, <addr14> */
+  /* Cache top.  */
+  i += GEN_LDU (buf + i, 3, 30, 8);	/* ldu	r3, 8(r30) */
+
+  if (offset_p)
+    *offset_p = 8;
+  if (size_p)
+    *size_p = 14;
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
 }
 
 struct emit_ops ppc_emit_ops_vector =
@@ -1460,12 +1562,12 @@ struct emit_ops ppc_emit_ops_vector =
     ppc_emit_stack_adjust,
     ppc_emit_int_call_1,
     ppc_emit_void_call_2,
-    NULL, //ppc_emit_eq_goto,
-    NULL, //ppc_emit_ne_goto,
-    NULL, //ppc_emit_lt_goto,
-    NULL, //ppc_emit_le_goto,
-    NULL, //ppc_emit_gt_goto,
-    NULL, //ppc_emit_ge_goto
+    ppc_emit_eq_goto,
+    ppc_emit_ne_goto,
+    ppc_emit_lt_goto,
+    ppc_emit_le_goto,
+    ppc_emit_gt_goto,
+    ppc_emit_ge_goto
   };
 
 static struct emit_ops *
