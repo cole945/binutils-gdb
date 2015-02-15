@@ -1473,6 +1473,12 @@ ppc_emit_ops (void)
 {
   return &ppc_emit_ops_vector;
 }
+
+static int
+ppc_supports_range_stepping (void)
+{
+  return 1;
+}
 #endif
 
 /* Provide only a fill function for the general register set.  ps_lgetregs
@@ -1679,7 +1685,7 @@ struct linux_target_ops the_low_target = {
   NULL, /* emit_ops */
 #endif
   ppc_get_min_fast_tracepoint_insn_len,
-  NULL, /* supports_range_stepping */
+  ppc_supports_range_stepping,
 };
 
 void
