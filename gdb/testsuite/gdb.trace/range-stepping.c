@@ -26,7 +26,7 @@
    tracepoint jump.  */
 #if (defined __x86_64__ || defined __i386__)
 #  define NOP "   .byte 0xe9,0x00,0x00,0x00,0x00\n" /* jmp $+5 (5-byte nop) */
-#elif defined __PPC64__
+#elif (defined __PPC64__ || defined __PPC__)
 #  define NOP "    nop\n"
 #else
 #  define NOP "" /* port me */

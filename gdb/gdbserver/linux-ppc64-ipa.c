@@ -21,7 +21,6 @@
 #include "server.h"
 #include "tracepoint.h"
 
-/* Defined in auto-generated file amd64-linux.c.  */
 void init_registers_powerpc_64l (void);
 extern const struct target_desc *tdesc_powerpc_64l;
 
@@ -51,12 +50,12 @@ static const int ppc64_ft_collect_regmap[] = {
   -1, -1, -1, -1, -1, -1, -1, -1,
   -1, -1, -1, -1, -1, -1, -1, -1,
   -1, -1, -1, -1, -1, -1, -1, -1,
-  FT_CR_PC, /* PC */
+  FT_CR_PC * 8, /* PC */
   -1, /* MSR */
-  FT_CR_CR, /* CR */
-  FT_CR_LR, /* LR */
-  FT_CR_CTR, /* CTR */
-  FT_CR_XER, /* XER */
+  FT_CR_CR * 8, /* CR */
+  FT_CR_LR * 8, /* LR */
+  FT_CR_CTR * 8, /* CTR */
+  FT_CR_XER * 8, /* XER */
   -1, /* FPSCR */
 
 };

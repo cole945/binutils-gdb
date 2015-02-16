@@ -5938,8 +5938,9 @@ compile_tracepoint_condition (struct tracepoint *tpoint,
 static int
 write_inferior_data_ptr (CORE_ADDR where, CORE_ADDR ptr)
 {
+  void *pval = (void *) (uintptr_t) ptr;
   return write_inferior_memory (where,
-				(unsigned char *) &ptr, sizeof (void *));
+				(unsigned char *) &pval, sizeof (pval));
 }
 
 /* The base pointer of the IPA's heap.  This is the only memory the

@@ -42,7 +42,7 @@ marker (int anarg)
        SYMBOL(set_point) ":\n"
 #if (defined __x86_64__ || defined __i386__)
        "    call " SYMBOL(func) "\n"
-#elif defined __PPC64__
+#elif (defined __PPC64__ || defined __PPC__)
        "    nop\n"
 #endif
        );
@@ -55,7 +55,7 @@ marker (int anarg)
        SYMBOL(four_byter) ":\n"
 #if (defined __i386__)
        "    cmpl $0x1,0x8(%ebp) \n"
-#elif defined __PPC64__
+#elif (defined __PPC64__ || defined __PPC__)
        "    nop\n"
 #endif
        );

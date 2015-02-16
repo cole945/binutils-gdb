@@ -41,7 +41,7 @@ marker (void)
        SYMBOL(set_point) ":\n"
 #if (defined __x86_64__ || defined __i386__)
        "    call " SYMBOL(func) "\n"
-#elif defined __PPC64__
+#elif (defined __PPC64__ || defined __PPC__)
        "    nop\n"
 #endif
        );
@@ -50,7 +50,7 @@ marker (void)
        SYMBOL(after_set_point) ":\n"
 #if (defined __x86_64__ || defined __i386__)
        "    call " SYMBOL(func) "\n"
-#elif defined __PPC64__
+#elif (defined __PPC64__ || defined __PPC__)
        "    nop\n"
 #endif
        );

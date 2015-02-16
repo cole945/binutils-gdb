@@ -35,7 +35,7 @@ pendfunc2 (int x)
        SYMBOL(set_point2) ":\n"
 #if (defined __x86_64__ || defined __i386__)
        "    call " SYMBOL(foo) "\n"
-#elif defined __PPC64__
+#elif (defined __PPC64__ || defined __PPC__)
        "    nop\n"
 #endif
        );

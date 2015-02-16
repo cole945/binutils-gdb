@@ -245,7 +245,7 @@ case "${target}" in
 			srv_linux_usrregs=yes
 			srv_linux_regsets=yes
 			srv_linux_thread_db=yes
-			ipa_obj="powerpc-64l-ipa.o linux-ppc64-ipa.o"
+			ipa_obj="powerpc-64l-ipa.o powerpc-32l-ipa.o linux-ppc-ipa.o"
 			;;
   powerpc-*-lynxos*)	srv_regobj="powerpc-32.o"
 			srv_tgtobj="lynx-low.o lynx-ppc-low.o"
