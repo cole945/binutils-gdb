@@ -1089,7 +1089,7 @@ enum
   /* basic stack frame
      + room for callee saved registers
      + initial bytecode execution stack  */
-  bytecode_framesize = (48 + 8 * 8) + (2 * 8) + 64,
+  bc_framesz = (48 + 8 * 8) + (4 * 8) + 64,
 };
 
 static void
@@ -1098,34 +1098,45 @@ ppc64_emit_prologue (void)
   /* r31 is the frame-base for restoring stack-pointer.
      r30 is the stack-pointer for bytecode machine.
 	 It should point to next-empty, so we can use LDU for pop.
-     r3  is cache of TOP value.  */
+     r3  is used for cache of TOP value.  It is the first argument,
+	 pointer to CTX.
+     r4  is the second argument, pointer to the result.  */
 
-  unsigned char buf[8 * 4];
+  unsigned char buf[10 * 4];
   int i = 0;
 
   i += GEN_MFSPR (buf, 0, 8);		/* mflr	r0 */
   i += GEN_STD (buf + i, 0, 1, 16);	/* std	r0, 16(r1) */
   i += GEN_STD (buf + i, 31, 1, -8);	/* std	r31, -8(r1) */
   i += GEN_STD (buf + i, 30, 1, -16);	/* std	r30, -16(r1) */
-  i += GEN_ADDI (buf + i, 30, 1, -24);	/* addi	r30, r1, -24 */
+  i += GEN_STD (buf + i, 4, 1, -24);	/* std	r4, -24(r1) */
+  i += GEN_STD (buf + i, 3, 1, -32);	/* std	r3, -32(r1) */
+  i += GEN_ADDI (buf + i, 30, 1, -40);	/* addi	r30, r1, -40 */
   i += GEN_LI (buf + i, 3, 0);		/* li	r3, 0 */
 					/* stdu	r1, -(frame_size)(r1) */
-  i += GEN_STDU (buf + i, 1, 1, -bytecode_framesize);
+  i += GEN_STDU (buf + i, 1, 1, -bc_framesz);
   i += GEN_MR (buf + i, 31, 1);		/* mr	r31, r1 */
 
   write_inferior_memory (current_insn_ptr, buf, i);
   current_insn_ptr += i;
+  gdb_assert (i <= sizeof (buf));
 }
 
 
 static void
 ppc64_emit_epilogue (void)
 {
-  unsigned char buf[6 * 4];
+  unsigned char buf[9 * 4];
   int i = 0;
 
-					/* add	r1, r31, frame_size */
-  i += GEN_ADDI (buf, 1, 31, bytecode_framesize);
+  /* Restore SP.			add	r1, r31, frame_size */
+  i += GEN_ADDI (buf, 1, 31, bc_framesz);
+
+  /* *result = $r3  */
+  i += GEN_LD (buf + i, 4, 1, -24);	/* ld	r4, -24(r1) */
+  i += GEN_STD (buf + i, 3, 4, 0);	/* std	r3, 0(r4) */
+  /* Return 0 for no-error.  */
+  i += GEN_LI (buf + i, 3, 0);		/* li	r3, 0 */
   i += GEN_LD (buf + i, 0, 1, 16);	/* ld	r0, 16(r1) */
   i += GEN_LD (buf + i, 31, 1, -8);	/* ld	r31, -8(r1) */
   i += GEN_LD (buf + i, 30, 1, -16);	/* ld	r30, -16(r1) */
@@ -1134,6 +1145,7 @@ ppc64_emit_epilogue (void)
 
   write_inferior_memory (current_insn_ptr, buf, i);
   current_insn_ptr += i;
+  gdb_assert (i <= sizeof (buf));
 }
 
 static void
@@ -1350,7 +1362,7 @@ ppc64_emit_less_signed (void)
   int i = 0;
 
   i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu     r4, 8(r30) */
-  i += GEN_CMPD (buf + i, 3, 4);	/* cmpd    cr7,r3,r4 */
+  i += GEN_CMPD (buf + i, 4, 3);	/* cmpd    cr7,r3,r4 */
   i += put_i32 (buf + i, 0x7c701026);	/* mfocrf  r3,1 */
   i += put_i32 (buf + i, 0x5463effe);	/* rlwinm  r3,r3,29,31,31 */
 
@@ -1363,7 +1375,7 @@ ppc64_emit_less_unsigned (void)
   int i = 0;
 
   i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu     r4, 8(r30) */
-  i += GEN_CMPLD (buf + i, 3, 4);	/* cmpld   cr7,r3,r4 */
+  i += GEN_CMPLD (buf + i, 4, 3);	/* cmpld   cr7,r3,r4 */
   i += put_i32 (buf + i, 0x7c701026);	/* mfocrf  r3,1 */
   i += put_i32 (buf + i, 0x5463effe);	/* rlwinm  r3,r3,29,31,31 */
 
@@ -1511,8 +1523,8 @@ ppc64_emit_swap (void)
   unsigned char buf[3 * 4];
   int i = 0;
 
-  i += GEN_LD (buf + i, 4, 30, 0);	/* ld	r4, 0(r30) */
-  i += GEN_STD (buf + i, 3, 30, 0);	/* std	r3, 0(r30) */
+  i += GEN_LD (buf + i, 4, 30, 8);	/* ld	r4, -8(r30) */
+  i += GEN_STD (buf + i, 3, 30, 8);	/* std	r3, -8(r30) */
   i += GEN_MR (buf + i, 3, 4);		/* mr	r3, r4 */
 
   write_inferior_memory (current_insn_ptr, buf, i);
@@ -1568,7 +1580,7 @@ ppc64_emit_void_call_2 (CORE_ADDR fn, int arg1)
   int i = 0;
 
   /* Save TOP */
-  i += GEN_STD (buf, 3, 31, bytecode_framesize + 24);
+  i += GEN_STD (buf, 3, 31, bc_framesz + 24);
 
   /* Setup argument.  arg1 is a 16-bit value.  */
   i += GEN_MR (buf + i, 3, 4);		/* mr	r4, r3 */
@@ -1576,7 +1588,7 @@ ppc64_emit_void_call_2 (CORE_ADDR fn, int arg1)
   i += gen_call (buf + i, fn);
 
   /* Restore TOP */
-  i += GEN_LD (buf, 3, 31, bytecode_framesize + 24);
+  i += GEN_LD (buf, 3, 31, bc_framesz + 24);
 
   write_inferior_memory (current_insn_ptr, buf, i);
   current_insn_ptr += i;
