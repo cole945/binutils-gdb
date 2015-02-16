@@ -743,7 +743,7 @@ gen_md_form (unsigned char *buf, int opcd, int rs, int ra, int sh, int mb,
 	     int xo, int rc)
 {
   uint32_t insn = opcd << 26;
-  unsigned int n = (((mb & 0x1f) << 1) | ((mb >> 5) & 0x1)) << 10;
+  unsigned int n = ((mb & 0x1f) << 1) | ((mb >> 5) & 0x1);
   unsigned int sh0_4 = sh & 0x1f;
   unsigned int sh5 = (sh >> 5) & 1;
 
@@ -775,8 +775,8 @@ gen_i_form (unsigned char *buf, int opcd, int li, int aa, int lk)
 
 /* The following are frequently used i-form instructions.  */
 
-#define GEN_B(buf, li)		gen_i_form (buf, li, 0, 0)
-#define GEN_BL(buf, li)		gen_i_form (buf, li, 0, 1)
+#define GEN_B(buf, li)		gen_i_form (buf, 18, li, 0, 0)
+#define GEN_BL(buf, li)		gen_i_form (buf, 18, li, 0, 1)
 
 /* Generate a b-form instruction in BUF and return the number of bytes written.
 
@@ -946,7 +946,7 @@ ppc_install_fast_tracepoint_jump_pad (CORE_ADDR tpoint, CORE_ADDR tpaddr,
 				      CORE_ADDR *adjusted_insn_addr_end,
 				      char *err)
 {
-  unsigned char buf[512];
+  unsigned char buf[1028];
   int i, j, offset;
   CORE_ADDR buildaddr = *jump_entry;
 #if __PPC64__
@@ -1068,7 +1068,7 @@ ppc_install_fast_tracepoint_jump_pad (CORE_ADDR tpoint, CORE_ADDR tpaddr,
       return 1;
     }
   /* b <jentry> */
-  i += GEN_B (buf + i, offset);
+  i += GEN_B (jjump_pad_insn, offset);
   *jjump_pad_insn_size = 4;
 
   *jump_entry = buildaddr + i;
@@ -1248,13 +1248,13 @@ ppc64_emit_zero_ext (int arg)
   switch (arg)
     {
     case 8:
-      i += GEN_RLDICL (3, 3, 0, 56);	/* rldicl 3,3,0,56 */
+      i += GEN_RLDICL (buf, 3, 3, 0, 56);	/* rldicl 3,3,0,56 */
       break;
     case 16:
-      i += GEN_RLDICL (3, 3, 0, 38);	/* rldicl 3,3,0,38 */
+      i += GEN_RLDICL (buf, 3, 3, 0, 38);	/* rldicl 3,3,0,38 */
       break;
     case 32:
-      i += GEN_RLDICL (3, 3, 0, 32);	/* rldicl 3,3,0,32 */
+      i += GEN_RLDICL (buf, 3, 3, 0, 32);	/* rldicl 3,3,0,32 */
       break;
     default:
       emit_error = 1;
