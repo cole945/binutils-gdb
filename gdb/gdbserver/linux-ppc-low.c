@@ -1779,6 +1779,7 @@ struct emit_ops ppc64_emit_ops_vector =
   ppc64_emit_ge_goto
 };
 
+__attribute__ ((unused))
 static struct emit_ops *
 ppc_emit_ops (void)
 {
@@ -1988,7 +1989,11 @@ struct linux_target_ops the_low_target = {
   ppc_supports_tracepoints,
   NULL, /* get_thread_area */
   ppc_install_fast_tracepoint_jump_pad,
+#if __PPC64__
   ppc_emit_ops,
+#else
+  NULL,
+#endif
   ppc_get_min_fast_tracepoint_insn_len,
   ppc_supports_range_stepping,
 };
