@@ -565,6 +565,8 @@ ppc_remove_point (enum raw_bkpt_type type, CORE_ADDR addr,
     }
 }
 
+/* Put a 32-bit INSN instruction in BUF in target endian.  */
+
 static int
 put_i32 (unsigned char *buf, uint32_t insn)
 {
@@ -586,6 +588,8 @@ put_i32 (unsigned char *buf, uint32_t insn)
   return 4;
 }
 
+/* return a 32-bit value in target endian in BUF.  */
+
 static uint32_t
 get_i32 (unsigned char *buf)
 {
@@ -599,28 +603,42 @@ get_i32 (unsigned char *buf)
   return r;
 }
 
-static int
-gen_ds_form (unsigned char *buf, int op6, int rst, int ra, int ds, int sub2)
-{
-  uint32_t insn = op6 << 26;
+/* Generate a ds-form instruction in BUF and return the number of bytes written
 
-  insn |= (rst << 21) | (ra << 16) | (ds & 0xfffc) | (sub2 & 0x3);
+   0      6     11   16          30 32
+   | OPCD | RST | RA |     DS    |XO|  */
+
+static int
+gen_ds_form (unsigned char *buf, int opcd, int rst, int ra, int ds, int xo)
+{
+  uint32_t insn = opcd << 26;
+
+  insn |= (rst << 21) | (ra << 16) | (ds & 0xfffc) | (xo & 0x3);
   return put_i32 (buf, insn);
 }
+
+/* Followings are frequently used ds-form instructions.  */
 
 #define GEN_STD(buf, rs, ra, offset)	gen_ds_form (buf, 62, rs, ra, offset, 0)
 #define GEN_STDU(buf, rs, ra, offset)	gen_ds_form (buf, 62, rs, ra, offset, 1)
 #define GEN_LD(buf, rt, ra, offset)	gen_ds_form (buf, 58, rt, ra, offset, 0)
 #define GEN_LDU(buf, rt, ra, offset)	gen_ds_form (buf, 58, rt, ra, offset, 1)
 
-static int
-gen_d_form (unsigned char *buf, int op6, int rt, int ra, int si)
-{
-  uint32_t insn = op6 << 26;
+/* Generate a d-form instruction in BUF.
 
-  insn |= (rt << 21) | (ra << 16) | (si & 0xffff);
+   0      6     11   16             32
+   | OPCD | RST | RA |       D      |  */
+
+static int
+gen_d_form (unsigned char *buf, int opcd, int rst, int ra, int si)
+{
+  uint32_t insn = opcd << 26;
+
+  insn |= (rst << 21) | (ra << 16) | (si & 0xffff);
   return put_i32 (buf, insn);
 }
+
+/* Followings are frequently used d-form instructions.  */
 
 #define GEN_ADDI(buf, rt, ra, si)	gen_d_form (buf, 14, rt, ra, si)
 #define GEN_ADDIS(buf, rt, ra, si)	gen_d_form (buf, 15, rt, ra, si)
@@ -628,8 +646,165 @@ gen_d_form (unsigned char *buf, int op6, int rt, int ra, int si)
 #define GEN_LIS(buf, rt, si)		GEN_ADDIS (buf, rt, 0, si)
 #define GEN_ORI(buf, rt, ra, si)	gen_d_form (buf, 24, rt, ra, si)
 #define GEN_ORIS(buf, rt, ra, si)	gen_d_form (buf, 25, rt, ra, si)
+#define GEN_LBZ(buf, rt, ra, si)	gen_d_form (buf, 34, rt, ra, si)
+#define GEN_LHZ(buf, rt, ra, si)	gen_d_form (buf, 40, rt, ra, si)
 #define GEN_LWZ(buf, rt, ra, si)	gen_d_form (buf, 32, rt, ra, si)
 #define GEN_STW(buf, rt, ra, si)	gen_d_form (buf, 36, rt, ra, si)
+/* Assume bf = cr7.  */
+#define GEN_CMPWI(buf, ra, si)   gen_d_form (buf, 11, 28, ra, si)
+#define GEN_CMPDI(buf, ra, si)   gen_d_form (buf, 11, 28 | 1, ra, si)
+#define GEN_CMPLWI(buf, ra, ui)  gen_d_form (buf, 10, 28, ra, ui)
+#define GEN_CMPLDI(buf, ra, ui)  gen_d_form (buf, 10, 28 | 1, ra, ui)
+
+/* Generate a xfx-form instruction in BUF and return the number of bytes
+   written.
+
+   0      6     11         21        31 32
+   | OPCD | RST |    RI    |    XO   |/|  */
+
+static int
+gen_xfx_form (unsigned char *buf, int opcd, int rst, int ri, int xo)
+{
+  uint32_t insn = opcd << 26;
+  unsigned int n = ((ri & 0x1f) << 5) | ((ri >> 5) & 0x1f);
+
+  insn |= (rst << 21) | (n << 11) | (xo << 1);
+  return put_i32 (buf, insn);
+}
+
+/* Followings are frequently used xfx-form instructions.  */
+
+#define GEN_MFSPR(buf, rt, spr)		gen_xfx_form (buf, 31, rt, spr, 339)
+#define GEN_MTSPR(buf, rt, spr)		gen_xfx_form (buf, 31, rt, spr, 467)
+
+/* Generate a x-form instruction in BUF and return the number of bytes written.
+
+   0      6     11   16   21       31 32
+   | OPCD | RST | RA | RB |   XO   |RC|  */
+
+static int
+gen_x_form (unsigned char *buf, int opcd, int rst, int ra, int rb,
+	    int xo, int rc)
+{
+  uint32_t insn = opcd << 26;
+
+  insn |= (rst << 21) | (ra << 16) | (rb << 11) | (xo << 1) | rc;
+  return put_i32 (buf, insn);
+}
+
+/* Followings are frequently used x-form instructions.  */
+
+#define GEN_AND(buf, ra, rs, rb)	gen_x_form (buf, 31, rs, ra, rb, 28, 0)
+#define GEN_OR(buf, ra, rs, rb)		gen_x_form (buf, 31, rs, ra, rb, 444, 0)
+#define GEN_XOR(buf, ra, rs, rb)	gen_x_form (buf, 31, rs, ra, rb, 316, 0)
+#define GEN_NOR(buf, ra, rs, rb)	gen_x_form (buf, 31, rs, ra, rb, 124, 0)
+#define GEN_SLD(buf, ra, rs, rb)	gen_x_form (buf, 31, rs, ra, rb, 27, 0)
+#define GEN_SRAD(buf, ra, rs, rb)	gen_x_form (buf, 31, rs, ra, rb, 794, 0)
+#define GEN_SRD(buf, ra, rs, rb)	gen_x_form (buf, 31, rs, ra, rb, 539, 0)
+#define GEN_MR(buf, ra, rs)		GEN_OR (buf, ra, rs, rs)
+#define GEN_EXTSB(buf, ra, rs)		gen_x_form (buf, 31, rs, ra, 0, 954, 0)
+#define GEN_EXTSH(buf, ra, rs)		gen_x_form (buf, 31, rs, ra, 0, 922, 0)
+#define GEN_EXTSW(buf, ra, rs)		gen_x_form (buf, 31, rs, ra, 0, 986, 0)
+#define GEN_LWARX(buf, rt, ra, rb)	gen_x_form (buf, 31, rt, ra, rb, 20, 0)
+#define GEN_STWCX(buf, rs, ra, rb)	gen_x_form (buf, 31, rs, ra, rb, 150, 1)
+/* Assume bf = cr7.  */
+#define GEN_CMPW(buf, ra, rb)    gen_x_form (buf, 31, 28, ra, rb, 0, 0)
+#define GEN_CMPD(buf, ra, rb)    gen_x_form (buf, 31, 28 | 1, ra, rb, 0, 0)
+#define GEN_CMPLW(buf, ra, rb)   gen_x_form (buf, 31, 28, ra, rb, 32, 0)
+#define GEN_CMPLD(buf, ra, rb)   gen_x_form (buf, 31, 28 | 1, ra, rb, 32, 0)
+
+/* Generate a xo-form instruction in BUF and return the number of bytes written.
+
+   0      6    11   16   21 22       31 32
+   | OPCD | RT | RA | RB |OE|   XO   |RC|  */
+
+static int
+gen_xo_form (unsigned char *buf, int opcd, int rt, int ra, int rb, int oe,
+	     int xo, int rc)
+{
+  uint32_t insn = opcd << 26;
+
+  insn |= (rt << 21) | (ra << 16) | (rb << 11) | (oe << 10) | (xo << 1) | rc;
+  return put_i32 (buf, insn);
+}
+
+#define GEN_ADD(buf, rt, ra, rb)   gen_xo_form (buf, 31, rt, ra, rb, 0, 266, 0)
+#define GEN_SUBF(buf, rt, ra, rb)  gen_xo_form (buf, 31, rt, ra, rb, 0, 40, 0)
+#define GEN_MULLD(buf, rt, ra, rb) gen_xo_form (buf, 31, rt, ra, rb, 0, 233, 0)
+#define GEN_SUB(buf, rt, ra, rb)   GEN_SUBF (buf, rt, rb, ra)
+
+/* Generate a md-form instruction in BUF and return the number of bytes written.
+
+   0      6    11   16   21   27   30 31 32
+   | OPCD | RS | RA | sh | mb | XO |sh|Rc|  */
+
+static int
+gen_md_form (unsigned char *buf, int opcd, int rs, int ra, int sh, int mb,
+	     int xo, int rc)
+{
+  uint32_t insn = opcd << 26;
+  unsigned int n = (((mb & 0x1f) << 1) | ((mb >> 5) & 0x1)) << 10;
+  unsigned int sh0_4 = sh & 0x1f;
+  unsigned int sh5 = (sh >> 5) & 1;
+
+  insn |= (rs << 21) | (ra << 16) | (sh0_4 << 11) | (n << 5) | (sh5 << 1)
+	  | (xo << 2);
+  return put_i32 (buf, insn);
+}
+
+/* The following are frequently used md-form instructions.  */
+
+#define GEN_RLDICL(buf, ra, rs ,sh, mb) \
+				gen_md_form (buf, 30, rs, ra, sh, mb, 0, 0)
+#define GEN_RLDICR(buf, ra, rs ,sh, mb) \
+				gen_md_form (buf, 30, rs, ra, sh, mb, 1, 0)
+
+/* Generate a i-form instruction in BUF and return the number of bytes written.
+
+   0      6                          30 31 32
+   | OPCD |            LI            |AA|LK|  */
+
+static int
+gen_i_form (unsigned char *buf, int opcd, int li, int aa, int lk)
+{
+  uint32_t insn = opcd << 26;
+
+  insn |= (li & 0x3fffffc) | (aa & 1) | (lk & 1);
+  return put_i32 (buf, insn);
+}
+
+/* The following are frequently used i-form instructions.  */
+
+#define GEN_B(buf, li)		gen_i_form (buf, li, 0, 0)
+#define GEN_BL(buf, li)		gen_i_form (buf, li, 0, 1)
+
+/* Generate a b-form instruction in BUF and return the number of bytes written.
+
+   0      6    11   16               30 31 32
+   | OPCD | BO | BI |      BD        |AA|LK|  */
+
+static int
+gen_b_form (unsigned char *buf, int opcd, int bo, int bi, int bd,
+	    int aa, int lk)
+{
+  uint32_t insn = opcd << 26;
+
+  insn |= (bo << 21) | (bi << 16) | (bd & 0xfffc) | (aa & 1) | (lk & 1);
+  return put_i32 (buf, insn);
+}
+
+/* The following are frequently used b-form instructions.  */
+/* Assume bi = cr7.  */
+#define GEN_BLT(buf, bd)  gen_b_form (buf, 16, 0xc, (7 << 2) | 0, bd, 0 ,0)
+#define GEN_BGT(buf, bd)  gen_b_form (buf, 16, 0xc, (7 << 2) | 1, bd, 0 ,0)
+#define GEN_BEQ(buf, bd)  gen_b_form (buf, 16, 0xc, (7 << 2) | 2, bd, 0 ,0)
+#define GEN_BGE(buf, bd)  gen_b_form (buf, 16, 0x4, (7 << 2) | 0, bd, 0 ,0)
+#define GEN_BLE(buf, bd)  gen_b_form (buf, 16, 0x4, (7 << 2) | 1, bd, 0 ,0)
+#define GEN_BNE(buf, bd)  gen_b_form (buf, 16, 0x4, (7 << 2) | 2, bd, 0 ,0)
+
+/* GEN_LOAD and GEN_STORE generate 64- or 32-bit load/store for ppc64 or ppc32
+   respectively.  They are primary used for save/restore GPRs in jump-pad,
+   not used for bytecode compiling.  */
 
 #if defined __PPC64__
 #define GEN_LOAD(buf, rt, ra, si)	GEN_LD (buf, rt, ra, si)
@@ -639,47 +814,8 @@ gen_d_form (unsigned char *buf, int op6, int rt, int ra, int si)
 #define GEN_STORE(buf, rt, ra, si)	GEN_STW (buf, rt, ra, si)
 #endif
 
-static int
-gen_xfx_form (unsigned char *buf, int op6, int rst, int ri, int subop, int b1)
-{
-  uint32_t insn = op6 << 26;
-
-  insn |= (rst << 21) | (ri << 11) | (subop << 1) | b1;
-  return put_i32 (buf, insn);
-}
-
-#define GEN_MFSPR(buf, rt, spr) \
-        gen_xfx_form (buf, 31, rt, ((spr & 0x1f) << 5) | ((spr >> 5) & 0x1f), \
-                      339, 0)
-#define GEN_MTSPR(buf, rt, spr) \
-        gen_xfx_form (buf, 31, rt, ((spr & 0x1f) << 5) | ((spr >> 5) & 0x1f), \
-                      467, 0)
-
-static int
-gen_x_form (unsigned char *buf, int op6, int rs, int ra, int rb,
-	    int subop, int rc)
-{
-  uint32_t insn = op6 << 26;
-
-  insn |= (rs << 21) | (ra << 16) | (rb << 11) | (subop << 1) | rc;
-  return put_i32 (buf, insn);
-}
-
-#define GEN_MR(buf, rt, ra)		gen_x_form (buf, 31, ra, rt, ra, 444, 0)
-
-static int
-gen_xo_form (unsigned char *buf, int op6, int rt, int ra, int rb, int oe,
-	     int subop, int rc)
-{
-  uint32_t insn = op6 << 26;
-
-  insn |= (rt << 21) | (ra << 16) | (rb << 11) | (oe << 10) | (subop << 1) | rc;
-  return put_i32 (buf, insn);
-}
-
-#define GEN_ADD(buf, rt, ra, rb)   gen_xo_form (buf, 31, rt, ra, rb, 0, 266, 0)
-#define GEN_SUBF(buf, rt, ra, rb)  gen_xo_form (buf, 31, rt, ra, rb, 0, 40, 0)
-#define GEN_SUB(buf, rt, ra, rb)   GEN_SUBF (buf, rt, rb, ra)
+/* Generate a sequence of instructions to load IMM in the register REG.
+   Write the instructions in BUF and return the number of bytes written.  */
 
 static int
 gen_limm (unsigned char *buf, int reg, uint64_t imm)
@@ -705,7 +841,7 @@ gen_limm (unsigned char *buf, int reg, uint64_t imm)
 	 rldicl	reg, reg, 0, 32 */
       i += GEN_LIS (buf + i, reg, (imm >> 16) & 0xffff);
       i += GEN_ORI (buf + i, reg, reg, imm & 0xffff);
-      i += put_i32 (buf + i, 0x78000020 | (reg << 21) | (reg << 16));
+      i += GEN_RLDICL (buf + i, reg, reg, 0, 32);
     }
   else
     {
@@ -716,7 +852,7 @@ gen_limm (unsigned char *buf, int reg, uint64_t imm)
 	 ori    reg, reg, <imm[15:0]> */
       i += GEN_LIS (buf + i, reg, ((imm >> 48) & 0xffff));
       i += GEN_ORI (buf + i, reg, reg, ((imm >> 32) & 0xffff));
-      i += put_i32 (buf + i, 0x780007c6 | (reg << 21) | (reg << 16));
+      i += GEN_RLDICR (buf + i, reg, reg, 32, 31);
       i += GEN_ORIS (buf + i, reg, reg, ((imm >> 16) & 0xffff));
       i += GEN_ORI (buf + i, reg, reg, (imm & 0xffff));
     }
@@ -724,27 +860,77 @@ gen_limm (unsigned char *buf, int reg, uint64_t imm)
   return i;
 }
 
+/* Generate a sequence for atomically exchange at location LOCK.
+   This code sequence clobbers r6, r7, r8, r9.  */
+
+static int
+gen_atomic_xchg (unsigned char *buf, CORE_ADDR lock, int old_value, int new_value)
+{
+  int i = 0;
+  const int r_lock = 6;
+  const int r_old = 7;
+  const int r_new = 8;
+  const int r_tmp = 9;
+
+  /*
+
+  1: lwsync
+  2: lwarx   TMP, 0, LOCK
+     cmpwi   TMP, OLD
+     bne     1b
+     stwcx.  NEW, 0, LOCK
+     bne     2b */
+
+
+  i += gen_limm (buf + i, r_lock, lock);
+  i += gen_limm (buf + i, r_new, new_value);
+  i += gen_limm (buf + i, r_old, old_value);
+
+  i += put_i32 (buf + i, 0x7c2004ac);	/* lwsync */
+  i += GEN_LWARX (buf + i, r_tmp, 0, r_lock);
+  i += GEN_CMPW (buf + i, r_tmp, r_old);
+  i += GEN_BNE (buf + i, -12);
+  i += GEN_STWCX (buf + i, r_new, 0, r_lock);
+  i += GEN_BNE (buf + i, -16);
+
+  return i;
+}
+
+/* Generate a sequence of instructions for calling a function
+   at address of FN.  Return the number of bytes are written in BUF.
+
+   FIXME: For ppc64be, FN should be the address to the function
+   descriptor, so we should load 8(FN) to R2, 16(FN) to R11
+   and then call the function-entry at 0(FN).  However, current GDB
+   implicitly convert the address to function descriptor to the actual
+   function. See qSymbol handling in remote.c.  Although it seems we
+   can successfully call however, things go wrong when callee trying
+   to access global variable.  */
+
 static int
 gen_call (unsigned char *buf, CORE_ADDR fn)
 {
   int i = 0;
 
-  /* FIXME: For ppc64 big-endian, FN should be the address to
-     the function descriptor.  */
-
   /* Must be called by r12 for caller to calculate TOC address. */
   i += gen_limm (buf + i, 12, fn);
-  i += put_i32 (buf + i, 0x7c0903a6 | (12 << 21));	/* mtctr r12 */
-  i += put_i32 (buf + i, 0x4e800421);			/* bctrl */
+  i += GEN_MTSPR (buf + i, 12, 9);		/* mtctr  r12 */
+  i += put_i32 (buf + i, 0x4e800421);		/* bctrl */
 
   return i;
 }
+
+/* Implement supports_tracepoints hook of target_ops.
+   Always return true.  */
 
 static int
 ppc_supports_tracepoints (void)
 {
   return 1;
 }
+
+/* Implement install_fast_tracepoint_jump_pad of target_ops.
+   See target.h for details.  */
 
 static int
 ppc_install_fast_tracepoint_jump_pad (CORE_ADDR tpoint, CORE_ADDR tpaddr,
@@ -823,16 +1009,18 @@ ppc_install_fast_tracepoint_jump_pad (CORE_ADDR tpoint, CORE_ADDR tpaddr,
   /* Set r3 to TPOINT.  */
   i += gen_limm (buf + i, 3, tpoint);
 
+  i += gen_atomic_xchg (buf + i, lockaddr, 0, 1);
   /* Call to collector.  */
   i += gen_call (buf + i, collector);
+  i += gen_atomic_xchg (buf + i, lockaddr, 1, 0);
 
   /* Restore stack and registers.  */
-  i += GEN_ADDI (buf + i, 1, 1, frame_size);	/* addi   r1,r1,FRAME_SIZE */
-  i += GEN_LOAD (buf + i, 3, 1, -4 * rsz);	/* ld    r3, -32(r1) */
-  i += GEN_LOAD (buf + i, 4, 1, -3 * rsz);	/* ld    r4, -24(r1) */
-  i += GEN_LOAD (buf + i, 5, 1, -2 * rsz);	/* ld    r5, -16(r1) */
-  i += GEN_LOAD (buf + i, 6, 1, -1 * rsz);	/* ld    r6, -8(r1) */
-  i += put_i32 (buf + i, 0x7c6ff120);		/* mtcr   r3 */
+  i += GEN_ADDI (buf + i, 1, 1, frame_size);	/* addi	r1,r1,FRAME_SIZE */
+  i += GEN_LOAD (buf + i, 3, 1, -4 * rsz);	/* ld	r3, -32(r1) */
+  i += GEN_LOAD (buf + i, 4, 1, -3 * rsz);	/* ld	r4, -24(r1) */
+  i += GEN_LOAD (buf + i, 5, 1, -2 * rsz);	/* ld	r5, -16(r1) */
+  i += GEN_LOAD (buf + i, 6, 1, -1 * rsz);	/* ld	r6, -8(r1) */
+  i += put_i32 (buf + i, 0x7c6ff120);		/* mtcr	r3 */
   i += GEN_MTSPR (buf + i, 4, 1);		/* mtxer  r4 */
   i += GEN_MTSPR (buf + i, 5, 8);		/* mtlr   r5 */
   i += GEN_MTSPR (buf + i, 6, 9);		/* mtctr  r6 */
@@ -853,7 +1041,7 @@ ppc_install_fast_tracepoint_jump_pad (CORE_ADDR tpoint, CORE_ADDR tpaddr,
       return 1;
     }
   /* b <tpaddr+4> */
-  i += put_i32 (buf + i, 0x48000000 | (offset & 0x3fffffc));
+  i += GEN_B (buf + i, offset);
   write_inferior_memory (buildaddr, buf, i);
 
   /* Now, insert the original instruction to execute in the jump pad.  */
@@ -880,10 +1068,12 @@ ppc_install_fast_tracepoint_jump_pad (CORE_ADDR tpoint, CORE_ADDR tpaddr,
       return 1;
     }
   /* b <jentry> */
-  put_i32 (jjump_pad_insn, 0x48000000 | (offset & 0x3fffffc));
+  i += GEN_B (buf + i, offset);
   *jjump_pad_insn_size = 4;
 
   *jump_entry = buildaddr + i;
+
+  gdb_assert (i < sizeof (buf));
 
   return 0;
 }
@@ -979,7 +1169,7 @@ ppc64_emit_mul (void)
   int i = 0;
 
   i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu    r4, 8(r30) */
-  i += put_i32 (buf + i, 0x7c6419d2);	/* mulld  r3, r4, r3 */
+  i += GEN_MULLD (buf + i, 3, 4, 3);	/* mulld  r3, r4, r3 */
 
   write_inferior_memory (current_insn_ptr, buf, i);
   current_insn_ptr += i;
@@ -992,7 +1182,7 @@ ppc64_emit_lsh (void)
   int i = 0;
 
   i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
-  i += put_i32 (buf + i, 0x7c831836);	/* sld	r3, r4, r3 */
+  i += GEN_SLD (buf + i, 3, 4, 3);	/* sld	r3, r4, r3 */
 
   write_inferior_memory (current_insn_ptr, buf, i);
   current_insn_ptr += i;
@@ -1005,7 +1195,7 @@ ppc64_emit_rsh_signed (void)
   int i = 0;
 
   i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
-  i += put_i32 (buf + i, 0x7c831e34);	/* srad	r3, r4, r3 */
+  i += GEN_SRAD (buf + i, 3, 4, 3);	/* srad	r3, r4, r3 */
 
   write_inferior_memory (current_insn_ptr, buf, i);
   current_insn_ptr += i;
@@ -1018,7 +1208,7 @@ ppc64_emit_rsh_unsigned (void)
   int i = 0;
 
   i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
-  i += put_i32 (buf + i, 0x7c831c36);	/* srd	r3, r4, r3 */
+  i += GEN_SRD (buf + i, 3, 4, 3);	/* srd	r3, r4, r3 */
 
   write_inferior_memory (current_insn_ptr, buf, i);
   current_insn_ptr += i;
@@ -1033,13 +1223,13 @@ ppc64_emit_ext (int arg)
   switch (arg)
     {
     case 8:
-      i += put_i32 (buf, 0x7c630774);	/* extsb  r3, r3 */
+      i += GEN_EXTSB (buf + i, 3, 3);	/* extsb  r3, r3 */
       break;
     case 16:
-      i += put_i32 (buf, 0x7c630734);	/* extsh  r3, r3 */
+      i += GEN_EXTSH (buf + i, 3, 3);	/* extsh  r3, r3 */
       break;
     case 32:
-      i += put_i32 (buf, 0x7c6307b4);	/* extsw  r3, r3 */
+      i += GEN_EXTSW (buf + i, 3, 3);	/* extsw  r3, r3 */
       break;
     default:
       emit_error = 1;
@@ -1058,13 +1248,13 @@ ppc64_emit_zero_ext (int arg)
   switch (arg)
     {
     case 8:
-      i += put_i32 (buf, 0x78630620);	/* rldicl 3,3,0,56 */
+      i += GEN_RLDICL (3, 3, 0, 56);	/* rldicl 3,3,0,56 */
       break;
     case 16:
-      i += put_i32 (buf, 0x786301a0);	/* rldicl 3,3,0,38 */
+      i += GEN_RLDICL (3, 3, 0, 38);	/* rldicl 3,3,0,38 */
       break;
     case 32:
-      i += put_i32 (buf, 0x78630020);	/* rldicl 3,3,0,32 */
+      i += GEN_RLDICL (3, 3, 0, 32);	/* rldicl 3,3,0,32 */
       break;
     default:
       emit_error = 1;
@@ -1094,7 +1284,7 @@ ppc64_emit_bit_and (void)
   int i = 0;
 
   i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
-  i += put_i32 (buf + i, 0x7c831838);	/* and	r3, r4, r3 */
+  i += GEN_AND (buf + i, 3, 4, 3);	/* and	r3, r4, r3 */
 
   write_inferior_memory (current_insn_ptr, buf, i);
   current_insn_ptr += i;
@@ -1107,7 +1297,7 @@ ppc64_emit_bit_or (void)
   int i = 0;
 
   i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
-  i += put_i32 (buf + i, 0x7c831b78);	/* or	r3, r4, r3 */
+  i += GEN_OR (buf + i, 3, 4, 3);	/* or	r3, r4, r3 */
 
   write_inferior_memory (current_insn_ptr, buf, i);
   current_insn_ptr += i;
@@ -1120,7 +1310,7 @@ ppc64_emit_bit_xor (void)
   int i = 0;
 
   i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
-  i += put_i32 (buf + i, 0x7c831a78);	/* xor	r3, r4, r3 */
+  i += GEN_XOR (buf + i, 3, 4, 3);	/* xor	r3, r4, r3 */
 
   write_inferior_memory (current_insn_ptr, buf, i);
   current_insn_ptr += i;
@@ -1132,7 +1322,7 @@ ppc64_emit_bit_not (void)
   unsigned char buf[4];
   int i = 0;
 
-  i += put_i32 (buf, 0x7c6318f8);	/* nor	r3, r3, r3 */
+  i += GEN_NOR (buf, 3, 3, 3);	/* nor	r3, r3, r3 */
 
   write_inferior_memory (current_insn_ptr, buf, i);
   current_insn_ptr += i;
@@ -1144,10 +1334,10 @@ ppc64_emit_equal (void)
   unsigned char buf[4 * 4];
   int i = 0;
 
-  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu     r4, 8(r30) */
-  i += put_i32 (buf + i, 0x7c632278);	/* xor     r3,r3,r4 */
-  i += put_i32 (buf + i, 0x7c630074);	/* cntlzd  r3,r3 */
-  i += put_i32 (buf + i, 0x7863d182);	/* rldicl  r3,r3,58,6 */
+  i += GEN_LDU (buf + i, 4, 30, 8);		/* ldu     r4, 8(r30) */
+  i += GEN_XOR (buf + i, 3, 3, 4);		/* xor     r3,r3,r4 */
+  i += put_i32 (buf + i, 0x7c630074);		/* cntlzd  r3,r3 */
+  i += GEN_RLDICL (buf + i, 3, 3, 58, 6);	/* rldicl  r3,r3,58,6 */
 
   write_inferior_memory (current_insn_ptr, buf, i);
   current_insn_ptr += i;
@@ -1160,22 +1350,20 @@ ppc64_emit_less_signed (void)
   int i = 0;
 
   i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu     r4, 8(r30) */
-  i += put_i32 (buf + i, 0x7fa32000);	/* cmpd    cr7,r3,r4 */
+  i += GEN_CMPD (buf + i, 3, 4);	/* cmpd    cr7,r3,r4 */
   i += put_i32 (buf + i, 0x7c701026);	/* mfocrf  r3,1 */
   i += put_i32 (buf + i, 0x5463effe);	/* rlwinm  r3,r3,29,31,31 */
 
   write_inferior_memory (current_insn_ptr, buf, i);
   current_insn_ptr += i;
-}
-
-static void
+} static void
 ppc64_emit_less_unsigned (void)
 {
   unsigned char buf[4 * 4];
   int i = 0;
 
   i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu     r4, 8(r30) */
-  i += put_i32 (buf + i, 0x7fa32040);	/* cmpld    cr7,r3,r4 */
+  i += GEN_CMPLD (buf + i, 3, 4);	/* cmpld   cr7,r3,r4 */
   i += put_i32 (buf + i, 0x7c701026);	/* mfocrf  r3,1 */
   i += put_i32 (buf + i, 0x5463effe);	/* rlwinm  r3,r3,29,31,31 */
 
@@ -1192,16 +1380,16 @@ ppc64_emit_ref (int size)
   switch (size)
     {
     case 1:
-      i += put_i32 (buf + i, 0x88630000);	/* lbz 3,0(3) */
+      i += GEN_LBZ (buf + i, 3, 3, 0);		/* lbz 3,0(3) */
       break;
     case 2:
-      i += put_i32 (buf + i, 0xa0630000);	/* lha 3,0(3) */
+      i += GEN_LHZ (buf + i, 3, 3, 0);		/* lhz 3,0(3) */
       break;
     case 4:
-      i += put_i32 (buf + i, 0x80630000);	/* lwz 3,0(3) */
+      i += GEN_LWZ (buf + i, 3, 3, 0);		/* lwz 3,0(3) */
       break;
     case 8:
-      i += put_i32 (buf + i, 0xe8630000);	/* ld 3,0(3) */
+      i += GEN_LD (buf + i, 3, 3, 0);		/* ld 3,0(3) */
       break;
     }
 
@@ -1217,8 +1405,8 @@ ppc64_emit_if_goto (int *offset_p, int *size_p)
 
   i += GEN_MR (buf + i, 4, 3);		/* mr    r4, r3 */
   i += GEN_LDU (buf + i, 3, 30, 8);	/* ldu   r3, 8(r30) */
-  i += put_i32 (buf + i, 0x2fa40000);	/* cmpdi cr7, r4, 0 */
-  i += put_i32 (buf + i, 0x409e0000);	/* bne   cr7, <addr14> */
+  i += GEN_CMPDI (buf + i, 4, 0);	/* cmpdi cr7, r4, 0 */
+  i += GEN_BNE (buf + i, 0);		/* bne   cr7, <addr14> */
 
   if (offset_p)
     *offset_p = 12;
@@ -1235,7 +1423,7 @@ ppc64_emit_goto (int *offset_p, int *size_p)
   unsigned char buf[4];
   int i = 0;
 
-  i += put_i32 (buf, 0x48000000);	/* b    <addr24> */
+  i += GEN_B (buf, 0);			/* b    <addr24> */
 
   if (offset_p)
     *offset_p = 0;
@@ -1294,15 +1482,15 @@ ppc64_emit_stack_flush (void)
   /* addi	r4, r30, -(112 + 8)
      cmpd	cr7, r4, r1
      bgt	1f
-   / ld		r4, 0(r1)
+   - ld		r4, 0(r1)
    | addi	r1, r1, -64
-   | st		r4, 0(r1)
+   \ st		r4, 0(r1)
   1: st		r3, 0(r30)
      addi	r30, r30, -8 */
 
   i += GEN_ADDI (buf + i, 4, 30, -(112 + 8));
-  i += put_i32 (buf + i, 0x7fa40800);
-  i += put_i32 (buf + i, 0x41810010);
+  i += GEN_CMPD (buf + i, 4, 1);
+  i += GEN_BGT (buf + i, 16);
   {
     /* Expand stack.  */
     i += GEN_LD (buf + i, 4, 1, 0);
@@ -1311,7 +1499,7 @@ ppc64_emit_stack_flush (void)
   }
   /* Push TOP in stack.  */
   i += GEN_STD (buf + i, 3, 30, 0);
-  i += put_i32 (buf + i, 0x3bdefff8);
+  i += GEN_ADDI (buf + i, 30, 30, -8);
 
   write_inferior_memory (current_insn_ptr, buf, i);
   current_insn_ptr += i;
@@ -1401,8 +1589,8 @@ ppc64_emit_eq_goto (int *offset_p, int *size_p)
   int i = 0;
 
   i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
-  i += put_i32 (buf + i, 0x7fa32000);	/* cmpd	cr7, r3, r4 */
-  i += put_i32 (buf + i, 0x419e0000);	/* beq	cr7, <addr14> */
+  i += GEN_CMPD (buf + i, 3, 4);	/* cmpd	cr7, r3, r4 */
+  i += GEN_BEQ (buf + i, 0);		/* beq	cr7, <addr14> */
   /* Cache top.  */
   i += GEN_LDU (buf + i, 3, 30, 8);	/* ldu	r3, 8(r30) */
 
@@ -1422,8 +1610,8 @@ ppc64_emit_ne_goto (int *offset_p, int *size_p)
   int i = 0;
 
   i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
-  i += put_i32 (buf + i, 0x7fa32000);	/* cmpd	cr7, r3, r4 */
-  i += put_i32 (buf + i, 0x409e0000);	/* bne	cr7, <addr14> */
+  i += GEN_CMPD (buf + i, 3, 4);	/* cmpd	cr7, r3, r4 */
+  i += GEN_BNE (buf + i, 0);		/* bne	cr7, <addr14> */
   /* Cache top.  */
   i += GEN_LDU (buf + i, 3, 30, 8);	/* ldu	r3, 8(r30) */
 
@@ -1443,8 +1631,8 @@ ppc64_emit_lt_goto (int *offset_p, int *size_p)
   int i = 0;
 
   i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
-  i += put_i32 (buf + i, 0x7fa32000);	/* cmpd	cr7, r3, r4 */
-  i += put_i32 (buf + i, 0x419c0000);	/* blt	cr7, <addr14> */
+  i += GEN_CMPD (buf + i, 3, 4);	/* cmpd	cr7, r3, r4 */
+  i += GEN_BLT (buf + i, 0);		/* blt	cr7, <addr14> */
   /* Cache top.  */
   i += GEN_LDU (buf + i, 3, 30, 8);	/* ldu	r3, 8(r30) */
 
@@ -1464,8 +1652,8 @@ ppc64_emit_le_goto (int *offset_p, int *size_p)
   int i = 0;
 
   i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
-  i += put_i32 (buf + i, 0x7fa32000);	/* cmpd	cr7, r3, r4 */
-  i += put_i32 (buf + i, 0x409d0000);	/* ble	cr7, <addr14> */
+  i += GEN_CMPD (buf + i, 3, 4);	/* cmpd	cr7, r3, r4 */
+  i += GEN_BLE (buf + i, 0);		/* ble	cr7, <addr14> */
   /* Cache top.  */
   i += GEN_LDU (buf + i, 3, 30, 8);	/* ldu	r3, 8(r30) */
 
@@ -1485,8 +1673,8 @@ ppc64_emit_gt_goto (int *offset_p, int *size_p)
   int i = 0;
 
   i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
-  i += put_i32 (buf + i, 0x7fa32000);	/* cmpd	cr7, r3, r4 */
-  i += put_i32 (buf + i, 0x419d0000);	/* bgt	cr7, <addr14> */
+  i += GEN_CMPD (buf + i, 3, 4);	/* cmpd	cr7, r3, r4 */
+  i += GEN_BGT (buf + i, 0);		/* bgt	cr7, <addr14> */
   /* Cache top.  */
   i += GEN_LDU (buf + i, 3, 30, 8);	/* ldu	r3, 8(r30) */
 
@@ -1506,8 +1694,8 @@ ppc64_emit_ge_goto (int *offset_p, int *size_p)
   int i = 0;
 
   i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
-  i += put_i32 (buf + i, 0x7fa32000);	/* cmpd	cr7, r3, r4 */
-  i += put_i32 (buf + i, 0x409c0000);	/* bge	cr7, <addr14> */
+  i += GEN_CMPD (buf + i, 3, 4);	/* cmpd	cr7, r3, r4 */
+  i += GEN_BGE (buf + i, 0);		/* bge	cr7, <addr14> */
   /* Cache top.  */
   i += GEN_LDU (buf + i, 3, 30, 8);	/* ldu	r3, 8(r30) */
 
@@ -1525,22 +1713,22 @@ ppc_write_goto_address (CORE_ADDR from, CORE_ADDR to, int size)
 {
   int rel = to - from;
   uint32_t insn;
-  int op6;
+  int opcd;
   unsigned char buf[4];
 
   read_inferior_memory (from, buf, 4);
   insn = get_i32 (buf);
-  op6 = (insn >> 26) & 0x3f;
+  opcd = (insn >> 26) & 0x3f;
 
   switch (size)
     {
     case 14:
-      if (op6 != 16)
+      if (opcd != 16)
 	emit_error = 1;
       insn |= (rel & 0xfffc);
       break;
     case 24:
-      if (op6 != 18)
+      if (opcd != 18)
 	emit_error = 1;
       insn |= (rel & 0x3fffffc);
       break;
@@ -1591,7 +1779,7 @@ struct emit_ops ppc64_emit_ops_vector =
   ppc64_emit_ge_goto
 };
 
-struct emit_ops *
+static struct emit_ops *
 ppc_emit_ops (void)
 {
 #if __PPC64__
@@ -1800,7 +1988,7 @@ struct linux_target_ops the_low_target = {
   ppc_supports_tracepoints,
   NULL, /* get_thread_area */
   ppc_install_fast_tracepoint_jump_pad,
-  NULL, /* ppc_emit_ops, */
+  ppc_emit_ops,
   ppc_get_min_fast_tracepoint_insn_len,
   ppc_supports_range_stepping,
 };
