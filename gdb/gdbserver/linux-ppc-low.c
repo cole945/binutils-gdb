@@ -713,26 +713,6 @@ gen_x_form (unsigned char *buf, int opcd, int rst, int ra, int rb,
 #define GEN_CMPLW(buf, ra, rb)   gen_x_form (buf, 31, 28, ra, rb, 32, 0)
 #define GEN_CMPLD(buf, ra, rb)   gen_x_form (buf, 31, 28 | 1, ra, rb, 32, 0)
 
-/* Generate a xo-form instruction in BUF and return the number of bytes written.
-
-   0      6    11   16   21 22       31 32
-   | OPCD | RT | RA | RB |OE|   XO   |RC|  */
-
-static int
-gen_xo_form (unsigned char *buf, int opcd, int rt, int ra, int rb, int oe,
-	     int xo, int rc)
-{
-  uint32_t insn = opcd << 26;
-
-  insn |= (rt << 21) | (ra << 16) | (rb << 11) | (oe << 10) | (xo << 1) | rc;
-  return put_i32 (buf, insn);
-}
-
-#define GEN_ADD(buf, rt, ra, rb)   gen_xo_form (buf, 31, rt, ra, rb, 0, 266, 0)
-#define GEN_SUBF(buf, rt, ra, rb)  gen_xo_form (buf, 31, rt, ra, rb, 0, 40, 0)
-#define GEN_MULLD(buf, rt, ra, rb) gen_xo_form (buf, 31, rt, ra, rb, 0, 233, 0)
-#define GEN_SUB(buf, rt, ra, rb)   GEN_SUBF (buf, rt, rb, ra)
-
 /* Generate a md-form instruction in BUF and return the number of bytes written.
 
    0      6    11   16   21   27   30 31 32
@@ -813,6 +793,26 @@ gen_b_form (unsigned char *buf, int opcd, int bo, int bi, int bd,
 #define GEN_LOAD(buf, rt, ra, si)	GEN_LWZ (buf, rt, ra, si)
 #define GEN_STORE(buf, rt, ra, si)	GEN_STW (buf, rt, ra, si)
 #endif
+
+static void
+emit_insns (unsigned char *buf, int n)
+{
+  write_inferior_memory (current_insn_ptr, buf, n);
+  current_insn_ptr += n;
+}
+
+#define EMIT_ASM(NAME, INSNS)						\
+  do									\
+    {									\
+      extern unsigned char start_bcax_ ## NAME [], end_bcax_ ## NAME [];		\
+      emit_insns (start_bcax_ ## NAME,					\
+		  end_bcax_ ## NAME - start_bcax_ ## NAME);		\
+      __asm__ (".section .text.__ppcbcax\n\t"				\
+	       "start_bcax_" #NAME ":\n\t"				\
+	       INSNS "\n\t"						\
+	       "end_bcax_" #NAME ":\n\t"				\
+	       ".previous\n\t");					\
+    } while (0)
 
 /* Generate a sequence of instructions to load IMM in the register REG.
    Write the instructions in BUF and return the number of bytes written.  */
@@ -1151,262 +1151,176 @@ ppc64_emit_epilogue (void)
 static void
 ppc64_emit_add (void)
 {
-  unsigned char buf[2 * 4];
-  int i = 0;
-
-  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
-  i += GEN_ADD (buf + i, 3, 4, 3);	/* add	r3, r4, r3 */
-
-  write_inferior_memory (current_insn_ptr, buf, i);
-  current_insn_ptr += i;
+  EMIT_ASM (ppc64_add,
+	    "ldu  4, 8(30)\n\t"
+	    "add  3, 4, 3\n\t");
 }
 
 static void
 ppc64_emit_sub (void)
 {
-  unsigned char buf[2 * 4];
-  int i = 0;
-
-  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
-  i += GEN_SUB (buf + i, 3, 4, 3);	/* sub	r3, r4, r3 */
-
-  write_inferior_memory (current_insn_ptr, buf, i);
-  current_insn_ptr += i;
+  EMIT_ASM (ppc64_sub,
+	    "ldu  4, 8(30)\n\t"
+	    "sub  3, 4, 3\n\t");
 }
 
 static void
 ppc64_emit_mul (void)
 {
-  unsigned char buf[2 * 4];
-  int i = 0;
-
-  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu    r4, 8(r30) */
-  i += GEN_MULLD (buf + i, 3, 4, 3);	/* mulld  r3, r4, r3 */
-
-  write_inferior_memory (current_insn_ptr, buf, i);
-  current_insn_ptr += i;
+  EMIT_ASM (ppc64_mul,
+	    "ldu    4, 8(30)\n\t"
+	    "mulld  3, 4, 3\n\t");
 }
 
 static void
 ppc64_emit_lsh (void)
 {
-  unsigned char buf[2 * 4];
-  int i = 0;
-
-  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
-  i += GEN_SLD (buf + i, 3, 4, 3);	/* sld	r3, r4, r3 */
-
-  write_inferior_memory (current_insn_ptr, buf, i);
-  current_insn_ptr += i;
+  EMIT_ASM (ppc64_lsh,
+	    "ldu  4, 8(30)\n\t"
+	    "sld  3, 4, 3\n\t");
 }
 
 static void
 ppc64_emit_rsh_signed (void)
 {
-  unsigned char buf[2 * 4];
-  int i = 0;
-
-  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
-  i += GEN_SRAD (buf + i, 3, 4, 3);	/* srad	r3, r4, r3 */
-
-  write_inferior_memory (current_insn_ptr, buf, i);
-  current_insn_ptr += i;
+  EMIT_ASM (ppc64_rsha,
+	    "ldu   4, 8(30)\n\t"
+	    "srad  3, 4, 3\n\t");
 }
 
 static void
 ppc64_emit_rsh_unsigned (void)
 {
-  unsigned char buf[2 * 4];
-  int i = 0;
-
-  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
-  i += GEN_SRD (buf + i, 3, 4, 3);	/* srd	r3, r4, r3 */
-
-  write_inferior_memory (current_insn_ptr, buf, i);
-  current_insn_ptr += i;
+  EMIT_ASM (ppc64_rshl,
+	    "ldu  4, 8(30)\n\t"
+	    "srd  3, 4, 3\n\t");
 }
 
 static void
 ppc64_emit_ext (int arg)
 {
-  unsigned char buf[4];
-  int i = 0;
-
   switch (arg)
     {
     case 8:
-      i += GEN_EXTSB (buf + i, 3, 3);	/* extsb  r3, r3 */
+      EMIT_ASM (ppc64_ext8, "extsb  3, 3\n\t");
       break;
     case 16:
-      i += GEN_EXTSH (buf + i, 3, 3);	/* extsh  r3, r3 */
+      EMIT_ASM (ppc64_ext16, "extsh  3, 3\n\t");
       break;
     case 32:
-      i += GEN_EXTSW (buf + i, 3, 3);	/* extsw  r3, r3 */
+      EMIT_ASM (ppc64_ext32, "extsw  3, 3\n\t");
       break;
     default:
       emit_error = 1;
     }
-
-  write_inferior_memory (current_insn_ptr, buf, i);
-  current_insn_ptr += i;
 }
 
 static void
 ppc64_emit_zero_ext (int arg)
 {
-  unsigned char buf[4];
-  int i = 0;
-
   switch (arg)
     {
     case 8:
-      i += GEN_RLDICL (buf, 3, 3, 0, 56);	/* rldicl 3,3,0,56 */
+      EMIT_ASM (ppc64_zext8, "rldicl 3,3,0,56\n\t");
       break;
     case 16:
-      i += GEN_RLDICL (buf, 3, 3, 0, 38);	/* rldicl 3,3,0,38 */
+      EMIT_ASM (ppc64_zext16, "rldicl 3,3,0,48\n\t");
       break;
     case 32:
-      i += GEN_RLDICL (buf, 3, 3, 0, 32);	/* rldicl 3,3,0,32 */
+      EMIT_ASM (ppc64_zext32, "rldicl 3,3,0,32\n\t");
       break;
     default:
       emit_error = 1;
     }
-
-  write_inferior_memory (current_insn_ptr, buf, i);
-  current_insn_ptr += i;
 }
 
 static void
 ppc64_emit_log_not (void)
 {
-  unsigned char buf[2 * 4];
-  int i = 0;
-
-  i += put_i32 (buf + i, 0x7c630074);	/* cntlzd r3, r3 */
-  i += put_i32 (buf + i, 0x7863d182);	/* srdi   r3, r3, 6 */
-
-  write_inferior_memory (current_insn_ptr, buf, i);
-  current_insn_ptr += i;
+  EMIT_ASM (ppc64_log_not,
+	    "cntlzd  3, 3\n\t"
+	    "srdi    3, 3, 6\n\t");
 }
 
 static void
 ppc64_emit_bit_and (void)
 {
-  unsigned char buf[2 * 4];
-  int i = 0;
-
-  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
-  i += GEN_AND (buf + i, 3, 4, 3);	/* and	r3, r4, r3 */
-
-  write_inferior_memory (current_insn_ptr, buf, i);
-  current_insn_ptr += i;
+  EMIT_ASM (ppc64_bit_and,
+	    "ldu  4, 8(30)\n\t"
+	    "and  3, 4, 3\n\t");
 }
 
 static void
 ppc64_emit_bit_or (void)
 {
-  unsigned char buf[2 * 4];
-  int i = 0;
-
-  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
-  i += GEN_OR (buf + i, 3, 4, 3);	/* or	r3, r4, r3 */
-
-  write_inferior_memory (current_insn_ptr, buf, i);
-  current_insn_ptr += i;
+  EMIT_ASM (ppc64_bit_or,
+	    "ldu  4, 8(30)\n\t"
+	    "or   3, 4, 3\n\t");
 }
 
 static void
 ppc64_emit_bit_xor (void)
 {
-  unsigned char buf[2 * 4];
-  int i = 0;
-
-  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
-  i += GEN_XOR (buf + i, 3, 4, 3);	/* xor	r3, r4, r3 */
-
-  write_inferior_memory (current_insn_ptr, buf, i);
-  current_insn_ptr += i;
+  EMIT_ASM (ppc64_bit_xor,
+	    "ldu  4, 8(30)\n\t"
+	    "xor  3, 4, 3\n\t");
 }
 
 static void
 ppc64_emit_bit_not (void)
 {
-  unsigned char buf[4];
-  int i = 0;
-
-  i += GEN_NOR (buf, 3, 3, 3);	/* nor	r3, r3, r3 */
-
-  write_inferior_memory (current_insn_ptr, buf, i);
-  current_insn_ptr += i;
+  EMIT_ASM (ppc64_bit_not,
+	    "nor  3, 3, 3\n\t");
 }
 
 static void
 ppc64_emit_equal (void)
 {
-  unsigned char buf[4 * 4];
-  int i = 0;
-
-  i += GEN_LDU (buf + i, 4, 30, 8);		/* ldu     r4, 8(r30) */
-  i += GEN_XOR (buf + i, 3, 3, 4);		/* xor     r3,r3,r4 */
-  i += put_i32 (buf + i, 0x7c630074);		/* cntlzd  r3,r3 */
-  i += GEN_RLDICL (buf + i, 3, 3, 58, 6);	/* rldicl  r3,r3,58,6 */
-
-  write_inferior_memory (current_insn_ptr, buf, i);
-  current_insn_ptr += i;
+  EMIT_ASM (ppc64_equal,
+	    "ldu     4, 8(30)\n\t"
+	    "xor     3, 3, 4\n\t"
+	    "cntlzd  3, 3\n\t"
+	    "srdi    3, 3, 6\n\t");
 }
 
 static void
 ppc64_emit_less_signed (void)
 {
-  unsigned char buf[4 * 4];
-  int i = 0;
+  EMIT_ASM (ppc64_less_signed,
+	    "ldu     4, 8(30)\n\t"
+	    "cmpd    7, 3, 4\n\t"
+	    "mfocrf  3, 1\n\t"
+	    "rlwinm  3, 3, 29, 31, 31\n\t");
+}
 
-  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu     r4, 8(r30) */
-  i += GEN_CMPD (buf + i, 4, 3);	/* cmpd    cr7,r3,r4 */
-  i += put_i32 (buf + i, 0x7c701026);	/* mfocrf  r3,1 */
-  i += put_i32 (buf + i, 0x5463effe);	/* rlwinm  r3,r3,29,31,31 */
-
-  write_inferior_memory (current_insn_ptr, buf, i);
-  current_insn_ptr += i;
-} static void
+static void
 ppc64_emit_less_unsigned (void)
 {
-  unsigned char buf[4 * 4];
-  int i = 0;
-
-  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu     r4, 8(r30) */
-  i += GEN_CMPLD (buf + i, 4, 3);	/* cmpld   cr7,r3,r4 */
-  i += put_i32 (buf + i, 0x7c701026);	/* mfocrf  r3,1 */
-  i += put_i32 (buf + i, 0x5463effe);	/* rlwinm  r3,r3,29,31,31 */
-
-  write_inferior_memory (current_insn_ptr, buf, i);
-  current_insn_ptr += i;
+  EMIT_ASM (ppc64_less_unsigned,
+	    "ldu     4, 8(30)\n\t"
+	    "cmpld   7, 3, 4\n\t"
+	    "mfocrf  3, 1\n\t"
+	    "rlwinm  3, 3, 29, 31, 31\n\t");
 }
 
 static void
 ppc64_emit_ref (int size)
 {
-  unsigned char buf[4];
-  int i = 0;
-
   switch (size)
     {
     case 1:
-      i += GEN_LBZ (buf + i, 3, 3, 0);		/* lbz 3,0(3) */
+      EMIT_ASM (ppc64_ref8, "lbz   3, 0(3)\n\t");
       break;
     case 2:
-      i += GEN_LHZ (buf + i, 3, 3, 0);		/* lhz 3,0(3) */
+      EMIT_ASM (ppc64_ref16, "lhz   3, 0(3)\n\t");
       break;
     case 4:
-      i += GEN_LWZ (buf + i, 3, 3, 0);		/* lwz 3,0(3) */
+      EMIT_ASM (ppc64_ref32, "lwz   3, 0(3)\n\t");
       break;
     case 8:
-      i += GEN_LD (buf + i, 3, 3, 0);		/* ld 3,0(3) */
+      EMIT_ASM (ppc64_ref64, "ld    3, 0(3)\n\t");
       break;
     }
-
-  write_inferior_memory (current_insn_ptr, buf, i);
-  current_insn_ptr += i;
 }
 
 static void
@@ -1520,15 +1434,10 @@ ppc64_emit_stack_flush (void)
 static void
 ppc64_emit_swap (void)
 {
-  unsigned char buf[3 * 4];
-  int i = 0;
-
-  i += GEN_LD (buf + i, 4, 30, 8);	/* ld	r4, -8(r30) */
-  i += GEN_STD (buf + i, 3, 30, 8);	/* std	r3, -8(r30) */
-  i += GEN_MR (buf + i, 3, 4);		/* mr	r3, r4 */
-
-  write_inferior_memory (current_insn_ptr, buf, i);
-  current_insn_ptr += i;
+  EMIT_ASM (ppc64_swap,
+	    "ld	4, 8(30)\n\t"
+	    "std	3, 8(30)\n\t"
+	    "mr	3, 4\n\t");
 }
 
 static void
