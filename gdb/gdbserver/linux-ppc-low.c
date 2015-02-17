@@ -1152,48 +1152,48 @@ static void
 ppc64_emit_add (void)
 {
   EMIT_ASM (ppc64_add,
-	    "ldu  4, 8(30)\n\t"
-	    "add  3, 4, 3\n\t");
+	    "ldu  4, 8(30)	\n"
+	    "add  3, 4, 3	\n");
 }
 
 static void
 ppc64_emit_sub (void)
 {
   EMIT_ASM (ppc64_sub,
-	    "ldu  4, 8(30)\n\t"
-	    "sub  3, 4, 3\n\t");
+	    "ldu  4, 8(30)	\n"
+	    "sub  3, 4, 3	\n");
 }
 
 static void
 ppc64_emit_mul (void)
 {
   EMIT_ASM (ppc64_mul,
-	    "ldu    4, 8(30)\n\t"
-	    "mulld  3, 4, 3\n\t");
+	    "ldu    4, 8(30)	\n"
+	    "mulld  3, 4, 3	\n");
 }
 
 static void
 ppc64_emit_lsh (void)
 {
   EMIT_ASM (ppc64_lsh,
-	    "ldu  4, 8(30)\n\t"
-	    "sld  3, 4, 3\n\t");
+	    "ldu  4, 8(30)	\n"
+	    "sld  3, 4, 3	\n");
 }
 
 static void
 ppc64_emit_rsh_signed (void)
 {
   EMIT_ASM (ppc64_rsha,
-	    "ldu   4, 8(30)\n\t"
-	    "srad  3, 4, 3\n\t");
+	    "ldu   4, 8(30)	\n"
+	    "srad  3, 4, 3	\n");
 }
 
 static void
 ppc64_emit_rsh_unsigned (void)
 {
   EMIT_ASM (ppc64_rshl,
-	    "ldu  4, 8(30)\n\t"
-	    "srd  3, 4, 3\n\t");
+	    "ldu  4, 8(30)	\n"
+	    "srd  3, 4, 3	\n");
 }
 
 static void
@@ -1202,13 +1202,13 @@ ppc64_emit_ext (int arg)
   switch (arg)
     {
     case 8:
-      EMIT_ASM (ppc64_ext8, "extsb  3, 3\n\t");
+      EMIT_ASM (ppc64_ext8, "extsb  3, 3	\n");
       break;
     case 16:
-      EMIT_ASM (ppc64_ext16, "extsh  3, 3\n\t");
+      EMIT_ASM (ppc64_ext16, "extsh  3, 3	\n");
       break;
     case 32:
-      EMIT_ASM (ppc64_ext32, "extsw  3, 3\n\t");
+      EMIT_ASM (ppc64_ext32, "extsw  3, 3	\n");
       break;
     default:
       emit_error = 1;
@@ -1221,13 +1221,13 @@ ppc64_emit_zero_ext (int arg)
   switch (arg)
     {
     case 8:
-      EMIT_ASM (ppc64_zext8, "rldicl 3,3,0,56\n\t");
+      EMIT_ASM (ppc64_zext8, "rldicl 3,3,0,56	\n");
       break;
     case 16:
-      EMIT_ASM (ppc64_zext16, "rldicl 3,3,0,48\n\t");
+      EMIT_ASM (ppc64_zext16, "rldicl 3,3,0,48	\n");
       break;
     case 32:
-      EMIT_ASM (ppc64_zext32, "rldicl 3,3,0,32\n\t");
+      EMIT_ASM (ppc64_zext32, "rldicl 3,3,0,32	\n");
       break;
     default:
       emit_error = 1;
@@ -1238,69 +1238,69 @@ static void
 ppc64_emit_log_not (void)
 {
   EMIT_ASM (ppc64_log_not,
-	    "cntlzd  3, 3\n\t"
-	    "srdi    3, 3, 6\n\t");
+	    "cntlzd  3, 3	\n"
+	    "srdi    3, 3, 6	\n");
 }
 
 static void
 ppc64_emit_bit_and (void)
 {
   EMIT_ASM (ppc64_bit_and,
-	    "ldu  4, 8(30)\n\t"
-	    "and  3, 4, 3\n\t");
+	    "ldu  4, 8(30)	\n"
+	    "and  3, 4, 3	\n");
 }
 
 static void
 ppc64_emit_bit_or (void)
 {
   EMIT_ASM (ppc64_bit_or,
-	    "ldu  4, 8(30)\n\t"
-	    "or   3, 4, 3\n\t");
+	    "ldu  4, 8(30)	\n"
+	    "or   3, 4, 3	\n");
 }
 
 static void
 ppc64_emit_bit_xor (void)
 {
   EMIT_ASM (ppc64_bit_xor,
-	    "ldu  4, 8(30)\n\t"
-	    "xor  3, 4, 3\n\t");
+	    "ldu  4, 8(30)	\n"
+	    "xor  3, 4, 3	\n");
 }
 
 static void
 ppc64_emit_bit_not (void)
 {
   EMIT_ASM (ppc64_bit_not,
-	    "nor  3, 3, 3\n\t");
+	    "nor  3, 3, 3	\n");
 }
 
 static void
 ppc64_emit_equal (void)
 {
   EMIT_ASM (ppc64_equal,
-	    "ldu     4, 8(30)\n\t"
-	    "xor     3, 3, 4\n\t"
-	    "cntlzd  3, 3\n\t"
-	    "srdi    3, 3, 6\n\t");
+	    "ldu     4, 8(30)	\n"
+	    "xor     3, 3, 4	\n"
+	    "cntlzd  3, 3	\n"
+	    "srdi    3, 3, 6	\n");
 }
 
 static void
 ppc64_emit_less_signed (void)
 {
   EMIT_ASM (ppc64_less_signed,
-	    "ldu     4, 8(30)\n\t"
-	    "cmpd    7, 3, 4\n\t"
-	    "mfocrf  3, 1\n\t"
-	    "rlwinm  3, 3, 29, 31, 31\n\t");
+	    "ldu     4, 8(30)		\n"
+	    "cmpd    7, 3, 4		\n"
+	    "mfocrf  3, 1		\n"
+	    "rlwinm  3, 3, 29, 31, 31	\n");
 }
 
 static void
 ppc64_emit_less_unsigned (void)
 {
   EMIT_ASM (ppc64_less_unsigned,
-	    "ldu     4, 8(30)\n\t"
-	    "cmpld   7, 3, 4\n\t"
-	    "mfocrf  3, 1\n\t"
-	    "rlwinm  3, 3, 29, 31, 31\n\t");
+	    "ldu     4, 8(30)		\n"
+	    "cmpld   7, 3, 4		\n"
+	    "mfocrf  3, 1		\n"
+	    "rlwinm  3, 3, 29, 31, 31	\n");
 }
 
 static void
@@ -1309,16 +1309,16 @@ ppc64_emit_ref (int size)
   switch (size)
     {
     case 1:
-      EMIT_ASM (ppc64_ref8, "lbz   3, 0(3)\n\t");
+      EMIT_ASM (ppc64_ref8, "lbz   3, 0(3)	\n");
       break;
     case 2:
-      EMIT_ASM (ppc64_ref16, "lhz   3, 0(3)\n\t");
+      EMIT_ASM (ppc64_ref16, "lhz   3, 0(3)	\n");
       break;
     case 4:
-      EMIT_ASM (ppc64_ref32, "lwz   3, 0(3)\n\t");
+      EMIT_ASM (ppc64_ref32, "lwz   3, 0(3)	\n");
       break;
     case 8:
-      EMIT_ASM (ppc64_ref64, "ld    3, 0(3)\n\t");
+      EMIT_ASM (ppc64_ref64, "ld    3, 0(3)	\n");
       break;
     }
 }
@@ -1326,38 +1326,28 @@ ppc64_emit_ref (int size)
 static void
 ppc64_emit_if_goto (int *offset_p, int *size_p)
 {
-  unsigned char buf[4 * 4];
-  int i = 0;
-
-  i += GEN_MR (buf + i, 4, 3);		/* mr    r4, r3 */
-  i += GEN_LDU (buf + i, 3, 30, 8);	/* ldu   r3, 8(r30) */
-  i += GEN_CMPDI (buf + i, 4, 0);	/* cmpdi cr7, r4, 0 */
-  i += GEN_BNE (buf + i, 0);		/* bne   cr7, <addr14> */
+  EMIT_ASM (ppc64_if_goto,
+	    "mr     4, 3	\n"
+	    "ldu    3, 8(30)	\n"
+	    "cmpdi  7, 4, 0	\n"
+	    "1:bne  7, 1b	\n");
 
   if (offset_p)
     *offset_p = 12;
   if (size_p)
     *size_p = 14;
-
-  write_inferior_memory (current_insn_ptr, buf, i);
-  current_insn_ptr += i;
 }
 
 static void
 ppc64_emit_goto (int *offset_p, int *size_p)
 {
-  unsigned char buf[4];
-  int i = 0;
-
-  i += GEN_B (buf, 0);			/* b    <addr24> */
+  EMIT_ASM (ppc64_goto,
+	    "1:b	1b	\n");
 
   if (offset_p)
     *offset_p = 0;
   if (size_p)
     *size_p = 24;
-
-  write_inferior_memory (current_insn_ptr, buf, i);
-  current_insn_ptr += i;
 }
 
 static void
@@ -1388,13 +1378,7 @@ ppc64_emit_reg (int reg)
 static void
 ppc64_emit_pop (void)
 {
-  unsigned char buf[4];
-  int i = 0;
-
-  i += GEN_LDU (buf, 3, 30, 8);	/* ldu	r3, 8(r30) */
-
-  write_inferior_memory (current_insn_ptr, buf, i);
-  current_insn_ptr += i;
+  EMIT_ASM (ppc64_pop, "ldu  3, 8(30) \n");
 }
 
 static void
@@ -1527,106 +1511,76 @@ ppc64_emit_eq_goto (int *offset_p, int *size_p)
 void
 ppc64_emit_ne_goto (int *offset_p, int *size_p)
 {
-  unsigned char buf[4 * 4];
-  int i = 0;
-
-  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
-  i += GEN_CMPD (buf + i, 3, 4);	/* cmpd	cr7, r3, r4 */
-  i += GEN_BNE (buf + i, 0);		/* bne	cr7, <addr14> */
-  /* Cache top.  */
-  i += GEN_LDU (buf + i, 3, 30, 8);	/* ldu	r3, 8(r30) */
+  EMIT_ASM (ppc64_ne_goto,
+	    "ldu     4, 8(30)	\n"
+	    "cmpd    7, 3, 4	\n"
+	    "ldu     3, 8(30)	\n"
+	    "1:bne   7, 1b	\n");
 
   if (offset_p)
-    *offset_p = 8;
+    *offset_p = 12;
   if (size_p)
     *size_p = 14;
-
-  write_inferior_memory (current_insn_ptr, buf, i);
-  current_insn_ptr += i;
 }
 
 void
 ppc64_emit_lt_goto (int *offset_p, int *size_p)
 {
-  unsigned char buf[4 * 4];
-  int i = 0;
-
-  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
-  i += GEN_CMPD (buf + i, 3, 4);	/* cmpd	cr7, r3, r4 */
-  i += GEN_BLT (buf + i, 0);		/* blt	cr7, <addr14> */
-  /* Cache top.  */
-  i += GEN_LDU (buf + i, 3, 30, 8);	/* ldu	r3, 8(r30) */
+  EMIT_ASM (ppc64_lt_goto,
+	    "ldu     4, 8(30)	\n"
+	    "cmpd    7, 3, 4	\n"
+	    "ldu     3, 8(30)	\n"
+	    "1:blt   7, 1b	\n");
 
   if (offset_p)
-    *offset_p = 8;
+    *offset_p = 12;
   if (size_p)
     *size_p = 14;
-
-  write_inferior_memory (current_insn_ptr, buf, i);
-  current_insn_ptr += i;
 }
 
 void
 ppc64_emit_le_goto (int *offset_p, int *size_p)
 {
-  unsigned char buf[4 * 4];
-  int i = 0;
-
-  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
-  i += GEN_CMPD (buf + i, 3, 4);	/* cmpd	cr7, r3, r4 */
-  i += GEN_BLE (buf + i, 0);		/* ble	cr7, <addr14> */
-  /* Cache top.  */
-  i += GEN_LDU (buf + i, 3, 30, 8);	/* ldu	r3, 8(r30) */
+  EMIT_ASM (ppc64_le_goto,
+	    "ldu     4, 8(30)	\n"
+	    "cmpd    7, 3, 4	\n"
+	    "ldu     3, 8(30)	\n"
+	    "1:ble   7, 1b	\n");
 
   if (offset_p)
-    *offset_p = 8;
+    *offset_p = 12;
   if (size_p)
     *size_p = 14;
-
-  write_inferior_memory (current_insn_ptr, buf, i);
-  current_insn_ptr += i;
 }
 
 void
 ppc64_emit_gt_goto (int *offset_p, int *size_p)
 {
-  unsigned char buf[4 * 4];
-  int i = 0;
-
-  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
-  i += GEN_CMPD (buf + i, 3, 4);	/* cmpd	cr7, r3, r4 */
-  i += GEN_BGT (buf + i, 0);		/* bgt	cr7, <addr14> */
-  /* Cache top.  */
-  i += GEN_LDU (buf + i, 3, 30, 8);	/* ldu	r3, 8(r30) */
+  EMIT_ASM (ppc64_gt_goto,
+	    "ldu     4, 8(30)	\n"
+	    "cmpd    7, 3, 4	\n"
+	    "ldu     3, 8(30)	\n"
+	    "1:bgt   7, 1b	\n");
 
   if (offset_p)
-    *offset_p = 8;
+    *offset_p = 12;
   if (size_p)
     *size_p = 14;
-
-  write_inferior_memory (current_insn_ptr, buf, i);
-  current_insn_ptr += i;
 }
 
 void
 ppc64_emit_ge_goto (int *offset_p, int *size_p)
 {
-  unsigned char buf[4 * 4];
-  int i = 0;
-
-  i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
-  i += GEN_CMPD (buf + i, 3, 4);	/* cmpd	cr7, r3, r4 */
-  i += GEN_BGE (buf + i, 0);		/* bge	cr7, <addr14> */
-  /* Cache top.  */
-  i += GEN_LDU (buf + i, 3, 30, 8);	/* ldu	r3, 8(r30) */
+  EMIT_ASM (ppc64_ge_goto,
+	    "ldu     4, 8(30)	\n"
+	    "cmpd    7, 3, 4	\n"
+	    "ldu     3, 8(30)	\n"
+	    "1:bge   7, 1b	\n");
 
   if (offset_p)
-    *offset_p = 8;
+    *offset_p = 12;
   if (size_p)
     *size_p = 14;
-
-  write_inferior_memory (current_insn_ptr, buf, i);
-  current_insn_ptr += i;
 }
 
 static void
@@ -1646,12 +1600,12 @@ ppc_write_goto_address (CORE_ADDR from, CORE_ADDR to, int size)
     case 14:
       if (opcd != 16)
 	emit_error = 1;
-      insn |= (rel & 0xfffc);
+      insn = (insn & ~0xfffc) | (rel & 0xfffc);
       break;
     case 24:
       if (opcd != 18)
 	emit_error = 1;
-      insn |= (rel & 0x3fffffc);
+      insn = (insn & ~0x3fffffc) | (rel & 0x3fffffc);
       break;
     }
 
