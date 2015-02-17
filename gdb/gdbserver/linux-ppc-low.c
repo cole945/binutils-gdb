@@ -1288,7 +1288,7 @@ ppc64_emit_less_signed (void)
 {
   EMIT_ASM (ppc64_less_signed,
 	    "ldu     4, 8(30)		\n"
-	    "cmpd    7, 3, 4		\n"
+	    "cmpd    7, 4, 3		\n"
 	    "mfocrf  3, 1		\n"
 	    "rlwinm  3, 3, 29, 31, 31	\n");
 }
@@ -1298,7 +1298,7 @@ ppc64_emit_less_unsigned (void)
 {
   EMIT_ASM (ppc64_less_unsigned,
 	    "ldu     4, 8(30)		\n"
-	    "cmpld   7, 3, 4		\n"
+	    "cmpld   7, 4, 3		\n"
 	    "mfocrf  3, 1		\n"
 	    "rlwinm  3, 3, 29, 31, 31	\n");
 }
@@ -1494,7 +1494,7 @@ ppc64_emit_eq_goto (int *offset_p, int *size_p)
   int i = 0;
 
   i += GEN_LDU (buf + i, 4, 30, 8);	/* ldu	r4, 8(r30) */
-  i += GEN_CMPD (buf + i, 3, 4);	/* cmpd	cr7, r3, r4 */
+  i += GEN_CMPD (buf + i, 4, 3);	/* cmpd	cr7, r3, r4 */
   i += GEN_BEQ (buf + i, 0);		/* beq	cr7, <addr14> */
   /* Cache top.  */
   i += GEN_LDU (buf + i, 3, 30, 8);	/* ldu	r3, 8(r30) */
@@ -1513,7 +1513,7 @@ ppc64_emit_ne_goto (int *offset_p, int *size_p)
 {
   EMIT_ASM (ppc64_ne_goto,
 	    "ldu     4, 8(30)	\n"
-	    "cmpd    7, 3, 4	\n"
+	    "cmpd    7, 4, 3	\n"
 	    "ldu     3, 8(30)	\n"
 	    "1:bne   7, 1b	\n");
 
@@ -1528,7 +1528,7 @@ ppc64_emit_lt_goto (int *offset_p, int *size_p)
 {
   EMIT_ASM (ppc64_lt_goto,
 	    "ldu     4, 8(30)	\n"
-	    "cmpd    7, 3, 4	\n"
+	    "cmpd    7, 4, 3	\n"
 	    "ldu     3, 8(30)	\n"
 	    "1:blt   7, 1b	\n");
 
@@ -1543,7 +1543,7 @@ ppc64_emit_le_goto (int *offset_p, int *size_p)
 {
   EMIT_ASM (ppc64_le_goto,
 	    "ldu     4, 8(30)	\n"
-	    "cmpd    7, 3, 4	\n"
+	    "cmpd    7, 4, 3	\n"
 	    "ldu     3, 8(30)	\n"
 	    "1:ble   7, 1b	\n");
 
@@ -1558,7 +1558,7 @@ ppc64_emit_gt_goto (int *offset_p, int *size_p)
 {
   EMIT_ASM (ppc64_gt_goto,
 	    "ldu     4, 8(30)	\n"
-	    "cmpd    7, 3, 4	\n"
+	    "cmpd    7, 4, 3	\n"
 	    "ldu     3, 8(30)	\n"
 	    "1:bgt   7, 1b	\n");
 
@@ -1573,7 +1573,7 @@ ppc64_emit_ge_goto (int *offset_p, int *size_p)
 {
   EMIT_ASM (ppc64_ge_goto,
 	    "ldu     4, 8(30)	\n"
-	    "cmpd    7, 3, 4	\n"
+	    "cmpd    7, 4, 3	\n"
 	    "ldu     3, 8(30)	\n"
 	    "1:bge   7, 1b	\n");
 
