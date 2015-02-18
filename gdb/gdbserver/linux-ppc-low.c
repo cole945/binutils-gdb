@@ -514,6 +514,12 @@ ppc_breakpoint_at (CORE_ADDR where)
   return 0;
 }
 
+/* Implement supports_z_point_type target-ops.
+
+   Returns true if type Z_TYPE breakpoint is supported.
+   Presently, only software breakpoint is handled, so tracepoints
+   and breakpoints can be inserted at the same location.  */
+
 static int
 ppc_supports_z_point_type (char z_type)
 {
@@ -528,6 +534,9 @@ ppc_supports_z_point_type (char z_type)
       return 0;
     }
 }
+
+/* Implement insert_point target-ops.
+   Returns 0 on success, -1 on failure and 1 on unsupported.  */
 
 static int
 ppc_insert_point (enum raw_bkpt_type type, CORE_ADDR addr,
@@ -546,6 +555,9 @@ ppc_insert_point (enum raw_bkpt_type type, CORE_ADDR addr,
       return 1;
     }
 }
+
+/* Implement remove_point target-ops.
+   Returns 0 on success, -1 on failure and 1 on unsupported.  */
 
 static int
 ppc_remove_point (enum raw_bkpt_type type, CORE_ADDR addr,
@@ -1074,14 +1086,14 @@ ppc_get_min_fast_tracepoint_insn_len ()
 	|  LR save area           (SP + 16)
 	|  CR save area           (SP + 8)
   SP -> +- Back chain             (SP + 0)
-        |  r31
-        |  r30
-        |  r4
-        |  r3
+	|  r31
+	|  r30
+	|  r4
+	|  r3
  r30 -> +- Bytecode execution stack
-        |
-        |  64-byte (8 doublewords) at initial
-        |  Expand stack as needed
+	|
+	|  64-byte (8 doublewords) at initial
+	|  Expand stack as needed
  r31 -> +-
 
   initial frame size
