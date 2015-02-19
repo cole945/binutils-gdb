@@ -24,27 +24,22 @@
 #if defined __PPC64__
 void init_registers_powerpc_64l (void);
 extern const struct target_desc *tdesc_powerpc_64l;
-#define REG2MAP(n)	((n) * 8)
+#define REGSZ		8
 #else
 void init_registers_powerpc_32l (void);
 extern const struct target_desc *tdesc_powerpc_32l;
-#define REG2MAP(n)	((n) * 4)
+#define REGSZ		4
 #endif
 
-/* fast tracepoints collect registers.  */
-#define _FT_CR_PC	0
-#define _FT_CR_R0	1
-#define _FT_CR_CR	33
-#define _FT_CR_XER	34
-#define _FT_CR_LR	35
-#define _FT_CR_CTR	36
-
-#define FT_CR_PC	REG2MAP (_FT_CR_PC)
-#define FT_CR_GPR(n)	REG2MAP (_FT_CR_R0 + (n))
-#define FT_CR_CR	REG2MAP (_FT_CR_CR)
-#define FT_CR_XER	REG2MAP (_FT_CR_XER)
-#define FT_CR_LR	REG2MAP (_FT_CR_LR)
-#define FT_CR_CTR	REG2MAP (_FT_CR_CTR)
+/* These macros define the position of registers in the buffer collected
+   by the fast tracepoint jump pad.  */
+#define FT_CR_PC	0
+#define FT_CR_R0	1
+#define FT_CR_CR	33
+#define FT_CR_XER	34
+#define FT_CR_LR	35
+#define FT_CR_CTR	36
+#define FT_CR_GPR(n)	(FT_CR_R0 + (n))
 
 static const int ppc_ft_collect_regmap[] = {
   /* GPRs */
@@ -71,11 +66,13 @@ static const int ppc_ft_collect_regmap[] = {
   FT_CR_CTR, /* CTR */
   FT_CR_XER, /* XER */
   -1, /* FPSCR */
-
 };
 
 #define PPC_NUM_FT_COLLECT_GREGS \
   (sizeof (ppc_ft_collect_regmap) / sizeof(ppc_ft_collect_regmap[0]))
+
+/* Supply registers collected by the fast tracepoint jump pad.
+   BUF is the second argument we pass to gdb_collect in jump pad.  */
 
 void
 supply_fast_tracepoint_registers (struct regcache *regcache,
@@ -88,9 +85,13 @@ supply_fast_tracepoint_registers (struct regcache *regcache,
       if (ppc_ft_collect_regmap[i] == -1)
 	continue;
       supply_register (regcache, i,
-		       ((char *) buf) + ppc_ft_collect_regmap[i]);
+		       ((char *) buf)
+			+ ppc_ft_collect_regmap[i] * REGSZ);
     }
 }
+
+/* Return the value of register REGNUM.  RAW_REGS is collected buffer
+   by jump pad.  This function is called by emit_reg.  */
 
 ULONGEST __attribute__ ((visibility("default"), used))
 gdb_agent_get_raw_reg (const unsigned char *raw_regs, int regnum)
@@ -100,8 +101,11 @@ gdb_agent_get_raw_reg (const unsigned char *raw_regs, int regnum)
   if (ppc_ft_collect_regmap[regnum] == -1)
     return 0;
 
-  return *(ULONGEST *) (raw_regs + ppc_ft_collect_regmap[regnum]);
+  return *(ULONGEST *) (raw_regs
+			+ ppc_ft_collect_regmap[regnum] * REGSZ);
 }
+
+/* Initialize ipa_tdesc and others.  */
 
 void
 initialize_low_tracepoint (void)

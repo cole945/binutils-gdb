@@ -1063,21 +1063,17 @@ ppc_install_fast_tracepoint_jump_pad (CORE_ADDR tpoint, CORE_ADDR tpaddr,
   return 0;
 }
 
+/* Returns the minimum instruction length for installing a tracepoint.  */
+
 static int
 ppc_get_min_fast_tracepoint_insn_len ()
 {
   return 4;
 }
 
-/* r31 is the frame-base for restoring stack-pointer.
-   r30 is the stack-pointer for bytecode machine.
-       It should point to next-empty, so we can use LDU for pop.
-   r3  is used for cache of TOP value.  It is the first argument,
-       pointer to CTX.
-   r4  is the second argument, pointer to the result.
-   SP+24 is used for saving TOP during call.
+/*
 
-   Bytecode execution stack frame
+  Bytecode execution stack frame
 
 	|  Parameter save area    (SP + 48) [8 doublewords]
 	|  TOC save area          (SP + 40)
@@ -1085,22 +1081,43 @@ ppc_get_min_fast_tracepoint_insn_len ()
 	|  compiler doubleword    (SP + 24)
 	|  LR save area           (SP + 16)
 	|  CR save area           (SP + 8)
-  SP -> +- Back chain             (SP + 0)
-	|  r31
-	|  r30
-	|  r4
-	|  r3
+ SP' -> +- Back chain             (SP + 0)
+	|  Save r31
+	|  Save r30
+	|  Save r4    for *value
+	|  Save r3    for CTX
  r30 -> +- Bytecode execution stack
 	|
-	|  64-byte (8 doublewords) at initial
-	|  Expand stack as needed
+	|  64-byte (8 doublewords) at initial.  Expand stack as needed.
+	|
  r31 -> +-
 
   initial frame size
   = (48 + 8 * 8) + (4 * 8) + 64
-  = 208 */
+  = 112 + 96
+  = 208
+
+   r31 is the frame-base for restoring stack-pointer.
+   r30 is the stack-pointer for bytecode machine.
+       It should point to next-empty, so we can use LDU for pop.
+   r3  is used for cache of TOP value.
+       It is the first argument, pointer to CTX.
+   r4  is the second argument, pointer to the result.
+   SP+24 is used for saving TOP during call.
+
+ Note:
+ * To restore stack at epilogue
+   => sp = r31 + 208
+ * To check stack is big enough for bytecode execution.
+   => r30 - 8 > SP + 112
+ * To return execution result.
+   => 0(r4) = TOP
+
+ */
 
 enum { bc_framesz = 208 };
+
+/* Emit prologue in inferior memory.  See above comments.  */
 
 static void
 ppc64_emit_prologue (void)
@@ -1117,6 +1134,8 @@ ppc64_emit_prologue (void)
 	    "stdu  1, -208(1)	\n"
 	    "mr	   31, 1	\n");
 }
+
+/* Emit epilogue in inferior memory.  See above comments.  */
 
 static void
 ppc64_emit_epilogue (void)
@@ -1136,6 +1155,8 @@ ppc64_emit_epilogue (void)
 	    "blr		\n");
 }
 
+/* TOP = stack[--sp] + TOP  */
+
 static void
 ppc64_emit_add (void)
 {
@@ -1143,6 +1164,8 @@ ppc64_emit_add (void)
 	    "ldu  4, 8(30)	\n"
 	    "add  3, 4, 3	\n");
 }
+
+/* TOP = stack[--sp] - TOP  */
 
 static void
 ppc64_emit_sub (void)
@@ -1152,6 +1175,8 @@ ppc64_emit_sub (void)
 	    "sub  3, 4, 3	\n");
 }
 
+/* TOP = stack[--sp] * TOP  */
+
 static void
 ppc64_emit_mul (void)
 {
@@ -1159,6 +1184,8 @@ ppc64_emit_mul (void)
 	    "ldu    4, 8(30)	\n"
 	    "mulld  3, 4, 3	\n");
 }
+
+/* TOP = stack[--sp] << TOP  */
 
 static void
 ppc64_emit_lsh (void)
@@ -1168,6 +1195,9 @@ ppc64_emit_lsh (void)
 	    "sld  3, 4, 3	\n");
 }
 
+/* Top = stack[--sp] >> TOP
+   (Arithmetic shift right)  */
+
 static void
 ppc64_emit_rsh_signed (void)
 {
@@ -1176,6 +1206,9 @@ ppc64_emit_rsh_signed (void)
 	    "srad  3, 4, 3	\n");
 }
 
+/* Top = stack[--sp] >> TOP
+   (Logical shift right)  */
+
 static void
 ppc64_emit_rsh_unsigned (void)
 {
@@ -1183,6 +1216,8 @@ ppc64_emit_rsh_unsigned (void)
 	    "ldu  4, 8(30)	\n"
 	    "srd  3, 4, 3	\n");
 }
+
+/* Emit code for signed-extension specified by ARG.  */
 
 static void
 ppc64_emit_ext (int arg)
@@ -1203,6 +1238,8 @@ ppc64_emit_ext (int arg)
     }
 }
 
+/* Emit code for zero-extension specified by ARG.  */
+
 static void
 ppc64_emit_zero_ext (int arg)
 {
@@ -1222,6 +1259,9 @@ ppc64_emit_zero_ext (int arg)
     }
 }
 
+/* TOP = !TOP
+   i.e., TOP = (TOP == 0) ? 1 : 0;  */
+
 static void
 ppc64_emit_log_not (void)
 {
@@ -1229,6 +1269,8 @@ ppc64_emit_log_not (void)
 	    "cntlzd  3, 3	\n"
 	    "srdi    3, 3, 6	\n");
 }
+
+/* TOP = stack[--sp] & TOP  */
 
 static void
 ppc64_emit_bit_and (void)
@@ -1238,6 +1280,8 @@ ppc64_emit_bit_and (void)
 	    "and  3, 4, 3	\n");
 }
 
+/* TOP = stack[--sp] | TOP  */
+
 static void
 ppc64_emit_bit_or (void)
 {
@@ -1245,6 +1289,8 @@ ppc64_emit_bit_or (void)
 	    "ldu  4, 8(30)	\n"
 	    "or   3, 4, 3	\n");
 }
+
+/* TOP = stack[--sp] ^ TOP  */
 
 static void
 ppc64_emit_bit_xor (void)
@@ -1254,12 +1300,17 @@ ppc64_emit_bit_xor (void)
 	    "xor  3, 4, 3	\n");
 }
 
+/* TOP = ~TOP
+   i.e., TOP = ~(TOP | TOP)  */
+
 static void
 ppc64_emit_bit_not (void)
 {
   EMIT_ASM (ppc64_bit_not,
 	    "nor  3, 3, 3	\n");
 }
+
+/* TOP = stack[--sp] == TOP  */
 
 static void
 ppc64_emit_equal (void)
@@ -1271,6 +1322,9 @@ ppc64_emit_equal (void)
 	    "srdi    3, 3, 6	\n");
 }
 
+/* TOP = stack[--sp] < TOP
+   (Signed comparison)  */
+
 static void
 ppc64_emit_less_signed (void)
 {
@@ -1281,6 +1335,9 @@ ppc64_emit_less_signed (void)
 	    "rlwinm  3, 3, 29, 31, 31	\n");
 }
 
+/* TOP = stack[--sp] < TOP
+   (Unsigned comparison)  */
+
 static void
 ppc64_emit_less_unsigned (void)
 {
@@ -1290,6 +1347,9 @@ ppc64_emit_less_unsigned (void)
 	    "mfocrf  3, 1		\n"
 	    "rlwinm  3, 3, 29, 31, 31	\n");
 }
+
+/* Access the memory address in TOP in size of SIZE.
+   Zero-extend the read value.  */
 
 static void
 ppc64_emit_ref (int size)
@@ -1311,32 +1371,7 @@ ppc64_emit_ref (int size)
     }
 }
 
-static void
-ppc64_emit_if_goto (int *offset_p, int *size_p)
-{
-  EMIT_ASM (ppc64_if_goto,
-	    "mr     4, 3	\n"
-	    "ldu    3, 8(30)	\n"
-	    "cmpdi  7, 4, 0	\n"
-	    "1:bne  7, 1b	\n");
-
-  if (offset_p)
-    *offset_p = 12;
-  if (size_p)
-    *size_p = 14;
-}
-
-static void
-ppc64_emit_goto (int *offset_p, int *size_p)
-{
-  EMIT_ASM (ppc64_goto,
-	    "1:b	1b	\n");
-
-  if (offset_p)
-    *offset_p = 0;
-  if (size_p)
-    *size_p = 24;
-}
+/* TOP = NUM  */
 
 static void
 ppc64_emit_const (LONGEST num)
@@ -1350,24 +1385,36 @@ ppc64_emit_const (LONGEST num)
   current_insn_ptr += i;
 }
 
+/* Set TOP to the value of register REG by calling get_raw_reg function
+   with two argument, collected buffer and register number.  */
+
 static void
 ppc64_emit_reg (int reg)
 {
   unsigned char buf[8 * 8];
   int i = 0;
 
-  i += GEN_MR (buf, 3, reg);	/* mr	r3, reg */
-  i += gen_call (buf, get_raw_reg_func_addr ());
+  i += GEN_LD (buf + i, 3, 31, bc_framesz - 32);
+  i += GEN_LD (buf + i, 3, 3, 48);
+  i += GEN_LI (buf + i, 4, reg);	/* mr	r4, reg */
+  i += gen_call (buf + i, get_raw_reg_func_addr ());
 
   write_inferior_memory (current_insn_ptr, buf, i);
   current_insn_ptr += i;
 }
+
+/* TOP = stack[--sp] */
 
 static void
 ppc64_emit_pop (void)
 {
   EMIT_ASM (ppc64_pop, "ldu  3, 8(30) \n");
 }
+
+/* stack[sp++] = TOP
+
+   Because we may use up bytecode stack, expand 8 doublewords more
+   if needed.  */
 
 static void
 ppc64_emit_stack_flush (void)
@@ -1376,25 +1423,29 @@ ppc64_emit_stack_flush (void)
      Otherwise, expand 64-byte more.  */
 
   EMIT_ASM (ppc64_stack_flush,
+	    "  std   3, 0(30)		\n"
 	    "  addi  4, 30, -(112 + 8)	\n"
 	    "  cmpd  7, 4, 1		\n"
 	    "  bgt   1f			\n"
 	    "  ld    4, 0(1)		\n"
 	    "  addi  1, 1, -64		\n"
 	    "  std   4, 0(1)		\n"
-	    "1:std   3, 0(30)		\n"
-	    "  addi  30, 30, -8		\n"
+	    "1:addi  30, 30, -8		\n"
 	   );
 }
+
+/* Swap TOP and stack[sp-1]  */
 
 static void
 ppc64_emit_swap (void)
 {
   EMIT_ASM (ppc64_swap,
-	    "ld	4, 8(30)\n\t"
-	    "std	3, 8(30)\n\t"
-	    "mr	3, 4\n\t");
+	    "ld   4, 8(30)	\n"
+	    "std  3, 8(30)	\n"
+	    "mr   3, 4		\n");
 }
+
+/* Discard N elements in the stack.  */
 
 static void
 ppc64_emit_stack_adjust (int n)
@@ -1409,6 +1460,8 @@ ppc64_emit_stack_adjust (int n)
   gdb_assert (i <= sizeof (buf));
 }
 
+/* Call function FN.  */
+
 static void
 ppc64_emit_call (CORE_ADDR fn)
 {
@@ -1422,7 +1475,9 @@ ppc64_emit_call (CORE_ADDR fn)
   gdb_assert (i <= sizeof (buf));
 }
 
-/* FN's prototype is `LONGEST(*fn)(int)'.  */
+/* FN's prototype is `LONGEST(*fn)(int)'.
+   TOP = fn (arg1)
+  */
 
 static void
 ppc64_emit_int_call_1 (CORE_ADDR fn, int arg1)
@@ -1439,7 +1494,10 @@ ppc64_emit_int_call_1 (CORE_ADDR fn, int arg1)
   gdb_assert (i <= sizeof (buf));
 }
 
-/* FN's prototype is `void(*fn)(int,LONGEST)'.  */
+/* FN's prototype is `void(*fn)(int,LONGEST)'.
+   fn (arg1, TOP)
+
+   TOP should be preserved/restored before/after the call.  */
 
 static void
 ppc64_emit_void_call_2 (CORE_ADDR fn, int arg1)
@@ -1451,7 +1509,7 @@ ppc64_emit_void_call_2 (CORE_ADDR fn, int arg1)
   i += GEN_STD (buf, 3, 31, bc_framesz + 24);
 
   /* Setup argument.  arg1 is a 16-bit value.  */
-  i += GEN_MR (buf + i, 3, 4);		/* mr	r4, r3 */
+  i += GEN_MR (buf + i, 4, 3);		/* mr	r4, r3 */
   i += GEN_LI (buf + i, 3, arg1);	/* li	r3, arg1 */
   i += gen_call (buf + i, fn);
 
@@ -1463,7 +1521,49 @@ ppc64_emit_void_call_2 (CORE_ADDR fn, int arg1)
   gdb_assert (i <= sizeof (buf));
 }
 
-void
+/* Note in the following goto ops:
+
+   When emitting goto, the target address is later relocated by
+   write_goto_address.  OFFSET_P is the offset of the branch instruction
+   in the code sequence, and SIZE_P is how to relocate the instruction,
+   recognized by ppc_write_goto_address.  In current implementation,
+   SIZE can be either 24 or 14 for branch of conditional-branch instruction.
+ */
+
+/* If TOP is true, goto somewhere.  Otherwise, just fall-through.  */
+
+static void
+ppc64_emit_if_goto (int *offset_p, int *size_p)
+{
+  EMIT_ASM (ppc64_if_goto,
+	    "mr     4, 3	\n"
+	    "ldu    3, 8(30)	\n"
+	    "cmpdi  7, 4, 0	\n"
+	    "1:bne  7, 1b	\n");
+
+  if (offset_p)
+    *offset_p = 12;
+  if (size_p)
+    *size_p = 14;
+}
+
+/* Unconditional goto.  */
+
+static void
+ppc64_emit_goto (int *offset_p, int *size_p)
+{
+  EMIT_ASM (ppc64_goto,
+	    "1:b	1b	\n");
+
+  if (offset_p)
+    *offset_p = 0;
+  if (size_p)
+    *size_p = 24;
+}
+
+/* Goto if stack[--sp] == TOP  */
+
+static void
 ppc64_emit_eq_goto (int *offset_p, int *size_p)
 {
   EMIT_ASM (ppc64_eq_goto,
@@ -1478,7 +1578,9 @@ ppc64_emit_eq_goto (int *offset_p, int *size_p)
     *size_p = 14;
 }
 
-void
+/* Goto if stack[--sp] != TOP  */
+
+static void
 ppc64_emit_ne_goto (int *offset_p, int *size_p)
 {
   EMIT_ASM (ppc64_ne_goto,
@@ -1493,7 +1595,9 @@ ppc64_emit_ne_goto (int *offset_p, int *size_p)
     *size_p = 14;
 }
 
-void
+/* Goto if stack[--sp] < TOP  */
+
+static void
 ppc64_emit_lt_goto (int *offset_p, int *size_p)
 {
   EMIT_ASM (ppc64_lt_goto,
@@ -1508,7 +1612,9 @@ ppc64_emit_lt_goto (int *offset_p, int *size_p)
     *size_p = 14;
 }
 
-void
+/* Goto if stack[--sp] <= TOP  */
+
+static void
 ppc64_emit_le_goto (int *offset_p, int *size_p)
 {
   EMIT_ASM (ppc64_le_goto,
@@ -1523,7 +1629,9 @@ ppc64_emit_le_goto (int *offset_p, int *size_p)
     *size_p = 14;
 }
 
-void
+/* Goto if stack[--sp] > TOP  */
+
+static void
 ppc64_emit_gt_goto (int *offset_p, int *size_p)
 {
   EMIT_ASM (ppc64_gt_goto,
@@ -1538,7 +1646,9 @@ ppc64_emit_gt_goto (int *offset_p, int *size_p)
     *size_p = 14;
 }
 
-void
+/* Goto if stack[--sp] >= TOP  */
+
+static void
 ppc64_emit_ge_goto (int *offset_p, int *size_p)
 {
   EMIT_ASM (ppc64_ge_goto,
@@ -1552,6 +1662,11 @@ ppc64_emit_ge_goto (int *offset_p, int *size_p)
   if (size_p)
     *size_p = 14;
 }
+
+/* Relocate previous emitted branch instruction.  FROM is the address
+   of the branch instruction, TO is the goto target address, and SIZE
+   if the value we set by *SIZE_P before.  Currently, it is either
+   24 or 14 of branch and conditonal-branch instruction.  */
 
 static void
 ppc_write_goto_address (CORE_ADDR from, CORE_ADDR to, int size)
@@ -1577,13 +1692,17 @@ ppc_write_goto_address (CORE_ADDR from, CORE_ADDR to, int size)
 	emit_error = 1;
       insn = (insn & ~0x3fffffc) | (rel & 0x3fffffc);
       break;
+    default:
+      emit_error = 1;
     }
 
   put_i32 (buf, insn);
   write_inferior_memory (from, buf, 4);
 }
 
-struct emit_ops ppc64_emit_ops_vector =
+/* Vector of emit ops for PowerPC64.  */
+
+static struct emit_ops ppc64_emit_ops_vector =
 {
   ppc64_emit_prologue,
   ppc64_emit_epilogue,
@@ -1624,6 +1743,8 @@ struct emit_ops ppc64_emit_ops_vector =
   ppc64_emit_ge_goto
 };
 
+/*  Implementation of emit_ops target ops.   */
+
 __attribute__ ((unused))
 static struct emit_ops *
 ppc_emit_ops (void)
@@ -1634,6 +1755,8 @@ ppc_emit_ops (void)
   return NULL;
 #endif
 }
+
+/* Returns true for supporting range-stepping.  */
 
 static int
 ppc_supports_range_stepping (void)
