@@ -602,6 +602,7 @@ put_i32 (unsigned char *buf, uint32_t insn)
 
 /* return a 32-bit value in target endian in BUF.  */
 
+__attribute__((unused)) /* Maybe unused due to conditional compilation.  */
 static uint32_t
 get_i32 (unsigned char *buf)
 {
@@ -620,6 +621,7 @@ get_i32 (unsigned char *buf)
    0      6     11   16          30 32
    | OPCD | RST | RA |     DS    |XO|  */
 
+__attribute__((unused)) /* Maybe unused due to conditional compilation.  */
 static int
 gen_ds_form (unsigned char *buf, int opcd, int rst, int ra, int ds, int xo)
 {
@@ -781,26 +783,6 @@ gen_b_form (unsigned char *buf, int opcd, int bo, int bi, int bd,
 #define GEN_LOAD(buf, rt, ra, si)	GEN_LWZ (buf, rt, ra, si)
 #define GEN_STORE(buf, rt, ra, si)	GEN_STW (buf, rt, ra, si)
 #endif
-
-static void
-emit_insns (unsigned char *buf, int n)
-{
-  write_inferior_memory (current_insn_ptr, buf, n);
-  current_insn_ptr += n;
-}
-
-#define EMIT_ASM(NAME, INSNS)						\
-  do									\
-    {									\
-      extern unsigned char start_bcax_ ## NAME [], end_bcax_ ## NAME [];		\
-      emit_insns (start_bcax_ ## NAME,					\
-		  end_bcax_ ## NAME - start_bcax_ ## NAME);		\
-      __asm__ (".section .text.__ppcbcax\n\t"				\
-	       "start_bcax_" #NAME ":\n\t"				\
-	       INSNS "\n\t"						\
-	       "end_bcax_" #NAME ":\n\t"				\
-	       ".previous\n\t");					\
-    } while (0)
 
 /* Generate a sequence of instructions to load IMM in the register REG.
    Write the instructions in BUF and return the number of bytes written.  */
@@ -1072,6 +1054,27 @@ ppc_get_min_fast_tracepoint_insn_len ()
 }
 
 #if __PPC64__
+
+static void
+emit_insns (unsigned char *buf, int n)
+{
+  write_inferior_memory (current_insn_ptr, buf, n);
+  current_insn_ptr += n;
+}
+
+#define EMIT_ASM(NAME, INSNS)					\
+  do								\
+    {								\
+      extern unsigned char start_bcax_ ## NAME [];		\
+      extern unsigned char end_bcax_ ## NAME [];		\
+      emit_insns (start_bcax_ ## NAME,				\
+		  end_bcax_ ## NAME - start_bcax_ ## NAME);	\
+      __asm__ (".section .text.__ppcbcax\n\t"			\
+	       "start_bcax_" #NAME ":\n\t"			\
+	       INSNS "\n\t"					\
+	       "end_bcax_" #NAME ":\n\t"			\
+	       ".previous\n\t");				\
+    } while (0)
 
 /*
 
