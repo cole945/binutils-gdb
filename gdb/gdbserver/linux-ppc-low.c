@@ -1071,6 +1071,8 @@ ppc_get_min_fast_tracepoint_insn_len ()
   return 4;
 }
 
+#if __PPC64__
+
 /*
 
   Bytecode execution stack frame
@@ -1749,12 +1751,9 @@ __attribute__ ((unused))
 static struct emit_ops *
 ppc_emit_ops (void)
 {
-#if __PPC64__
   return &ppc64_emit_ops_vector;
-#else
-  return NULL;
-#endif
 }
+#endif
 
 /* Returns true for supporting range-stepping.  */
 
