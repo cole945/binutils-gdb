@@ -21,6 +21,8 @@
 #include "server.h"
 #include "tracepoint.h"
 
+#include <sys/auxv.h>
+
 #ifdef __powerpc64__
 void init_registers_powerpc_64l (void);
 extern const struct target_desc *tdesc_powerpc_64l;
@@ -103,6 +105,55 @@ gdb_agent_get_raw_reg (const unsigned char *raw_regs, int regnum)
 
   return *(ULONGEST *) (raw_regs
 			+ ppc_ft_collect_regmap[regnum] * REGSZ);
+}
+
+#ifndef HAVE_GETAUXVAL
+/* Retrieve the value of TYPE from the auxiliary vector.  If TYPE is not
+   found, 0 is returned.  This function is provided if glibc is too old.  */
+
+static unsigned long
+getauxval (unsigned long type)
+{
+  unsigned long data[2];
+  FILE *f = fopen ("/proc/self/auxv", "r");
+  unsigned long value = 0;
+
+  if (f == NULL)
+    return 0;
+
+  while (fread (data, sizeof (data), 1, f) > 0)
+    {
+      if (data[0] == AT_HWCAP)
+	{
+	  value = data[1];
+	  break;
+	}
+    }
+
+  fclose (f);
+  return value;
+}
+#endif
+
+/* See tracepoint.h.  */
+
+uintptr_t
+jump_pad_area_hint (void)
+{
+  /* Use AT_PHDR address to guess where the main executable is mapped,
+     and try to map the jump pad before it.  The jump pad should be
+     closed enough to the executable for unconditional branch (+/- 32MB). */
+
+  const int SCRATCH_BUFFER_NPAGES = 20;
+  uintptr_t base = getauxval (AT_PHDR);
+  uintptr_t pagesz = sysconf (_SC_PAGE_SIZE);
+  uintptr_t hint = (base & ~(pagesz - 1)) - SCRATCH_BUFFER_NPAGES * pagesz;
+
+  /* Return the lowest possible value if wrap-around.  */
+  if (hint > base)
+    hint = pagesz;
+
+  return hint;
 }
 
 /* Initialize ipa_tdesc and others.  */

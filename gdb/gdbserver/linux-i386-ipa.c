@@ -113,6 +113,16 @@ gdb_agent_get_raw_reg (const unsigned char *raw_regs, int regnum)
     return *(int *) (raw_regs + i386_ft_collect_regmap[regnum]);
 }
 
+/* See tracepoint.h.  */
+
+uintptr_t
+jump_pad_area_hint (void)
+{
+  /* Allocate scratch buffer aligned on a page boundary, at a low
+     address (close to the main executable's code).  */
+  return sysconf (_SC_PAGE_SIZE);
+}
+
 #ifdef HAVE_UST
 
 #include <ust/processor.h>

@@ -131,6 +131,9 @@ void supply_static_tracepoint_registers (struct regcache *regcache,
 					 CORE_ADDR pc);
 void set_trampoline_buffer_space (CORE_ADDR begin, CORE_ADDR end,
 				  char *errmsg);
+/* Return the address for where to allocate buffer for jump pad.
+   The buffer should be close enough for tracepoints.  */
+uintptr_t jump_pad_area_hint (void);
 
 extern const struct target_desc *ipa_tdesc;
 
