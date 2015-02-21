@@ -30,6 +30,8 @@
 #include <sys/uio.h>
 
 #include "gdb_proc_service.h"
+#include "ax.h"
+#include "tracepoint.h"
 
 /* Defined in auto-generated files.  */
 void init_registers_aarch64 (void);
@@ -304,7 +306,7 @@ static const unsigned long aarch64_breakpoint = 0x00800011;
 static int
 aarch64_breakpoint_at (CORE_ADDR where)
 {
-  unsigned long insn;
+  unsigned long insn = 0;
 
   (*the_target->read_memory) (where, (unsigned char *) &insn, 4);
   if (insn == aarch64_breakpoint)
@@ -950,13 +952,13 @@ aarch64_supports_z_point_type (char z_type)
 {
   switch (z_type)
     {
+    case Z_PACKET_SW_BP:
     case Z_PACKET_HW_BP:
     case Z_PACKET_WRITE_WP:
     case Z_PACKET_READ_WP:
     case Z_PACKET_ACCESS_WP:
       return 1;
     default:
-      /* Leave the handling of sw breakpoints with the gdb client.  */
       return 0;
     }
 }
@@ -979,6 +981,9 @@ aarch64_insert_point (enum raw_bkpt_type type, CORE_ADDR addr,
   if (show_debug_regs)
     fprintf (stderr, "insert_point on entry (addr=0x%08lx, len=%d)\n",
 	     (unsigned long) addr, len);
+
+  if (type == raw_bkpt_type_sw)
+    return insert_memory_breakpoint (bp);
 
   /* Determine the type from the raw breakpoint type.  */
   targ_type = raw_bkpt_type_to_target_hw_bp_type (type);
@@ -1015,6 +1020,9 @@ aarch64_remove_point (enum raw_bkpt_type type, CORE_ADDR addr,
   if (show_debug_regs)
     fprintf (stderr, "remove_point on entry (addr=0x%08lx, len=%d)\n",
 	     (unsigned long) addr, len);
+
+  if (type == raw_bkpt_type_sw)
+    return remove_memory_breakpoint (bp);
 
   /* Determine the type from the raw breakpoint type.  */
   targ_type = raw_bkpt_type_to_target_hw_bp_type (type);
@@ -1172,6 +1180,874 @@ aarch64_linux_prepare_to_resume (struct lwp_info *lwp)
     }
 }
 
+static int
+aarch64_supports_tracepoints (void)
+{
+  return 1;
+}
+
+static int
+aarch64_get_min_fast_tracepoint_insn_len (void)
+{
+  return 4;
+}
+
+static int
+aarch64_supports_range_stepping (void)
+{
+  return 1;
+}
+
+/* Put a 32-bit INSN instruction in BUF in target endian.  */
+
+static int
+put_i32 (unsigned char *buf, uint32_t insn)
+{
+  buf[3] = (insn >> 24) & 0xff;
+  buf[2] = (insn >> 16) & 0xff;
+  buf[1] = (insn >> 8) & 0xff;
+  buf[0] = insn & 0xff;
+
+  return 4;
+}
+
+/* return a 32-bit value in target endian in BUF.  */
+
+static uint32_t
+get_i32 (unsigned char *buf)
+{
+  uint32_t r;
+
+  r = (buf[3] << 24) | (buf[2] << 16) | (buf[1] << 8) | buf[0];
+
+  return r;
+}
+
+static void
+emit_insns (unsigned char *buf, int n)
+{
+  write_inferior_memory (current_insn_ptr, buf, n);
+  current_insn_ptr += n;
+}
+
+#define __EMIT_ASM(NAME, INSNS)					\
+  do								\
+    {								\
+      extern unsigned char start_bcax_ ## NAME [];		\
+      extern unsigned char end_bcax_ ## NAME [];		\
+      emit_insns (start_bcax_ ## NAME,				\
+		  end_bcax_ ## NAME - start_bcax_ ## NAME);	\
+      __asm__ (".section .text.__a64bcax\n\t"			\
+	       "start_bcax_" #NAME ":\n\t"			\
+	       INSNS "\n\t"					\
+	       "end_bcax_" #NAME ":\n\t"			\
+	       ".previous\n\t");				\
+    } while (0)
+
+#define _EMIT_ASM(NAME, INSNS)	__EMIT_ASM(NAME, INSNS)
+#define EMIT_ASM(INSNS)		_EMIT_ASM(__LINE__, INSNS)
+
+#define GEN_STP(buf, rt, rt2, rn, imm7)				\
+	put_i32 (buf, 0xa9000000 | (rt) | ((rn) << 5)		\
+		| ((rt2) << 10)	| ((((imm7) >> 3) & 0x7f) << 15))
+
+#define GEN_STR(buf, rt, rn, imm9)				\
+	put_i32 (buf, 0xf9000001 | (rt) | (((rn) & 0x1ff) << 5))
+
+
+#define GEN_LDP(buf, rt, rt2, rn, imm7)				\
+	put_i32 (buf, 0xa94003e0 | (rt) | ((rn) << 5)		\
+		| ((rt2) << 10)	| ((((imm7) >> 3) & 0x7f) << 15))
+
+#define GEN_LDR(buf, rt, rn, imm9)				\
+	put_i32 (buf, 0xf94003e0 | (rt) | (((rn) & 0x1ff) << 5))
+
+#define GEN_ADDI(buf, rd, rn, imm12)				\
+	put_i32 (buf, 0x91000000 | (rd)				\
+		 | ((rn) << 5) | (((imm12) & 0xfff) << 10))
+
+#define GEN_MOV(buf, rd, rn)					\
+	GEN_ADDI (buf, rd, rn, 0)
+
+#define GEN_SUBI(buf, rd, rn, imm12)				\
+	put_i32 (buf, 0xd1000000 | (rd)				\
+		 | ((rn) << 5) | (((imm12) & 0xfff) << 10))
+
+#define GEN_MOVZ(buf, rd, imm16, shift)				\
+	put_i32 (buf, 0xd2800000 | (((shift) >> 4) << 21)	\
+		 | (rd) | (((imm16) & 0xffff) << 5))
+
+#define GEN_MOVK(buf, rd, imm16, shift)				\
+	put_i32 (buf, 0xf2800000 | (((shift) >> 4) << 21)	\
+		 | (rd) | (((imm16) & 0xffff) << 5))
+
+#define GEN_BLR(buf, rt)					\
+	put_i32 (buf, 0xd63f0000 | ((rt) << 5))
+
+#define GEN_B(buf, offset)					\
+	put_i32 (buf, 0x14000000 | ((offset >> 2) & 0x3ffffff))
+
+static int
+gen_limm (unsigned char *buf, int rt, uint64_t imm)
+{
+  unsigned char *p = buf;
+  unsigned shift = 0;
+
+
+  p += GEN_MOVZ (p, rt, imm & 0xffff, shift);
+
+  imm >>= 16;
+  shift += 16;
+
+  while (imm)
+    {
+      p += GEN_MOVK (p, rt, imm & 0xffff, shift);
+      imm >>= 16;
+      shift += 16;
+    }
+
+  return p - buf;
+}
+
+static int
+aarch64_install_fast_tracepoint_jump_pad (CORE_ADDR tpoint,
+					  CORE_ADDR tpaddr,
+					  CORE_ADDR collector,
+					  CORE_ADDR lockaddr,
+					  ULONGEST orig_size,
+					  CORE_ADDR *jump_entry,
+					  CORE_ADDR *trampoline,
+					  ULONGEST *trampoline_size,
+					  unsigned char *jjump_pad_insn,
+					  ULONGEST *jjump_pad_insn_size,
+					  CORE_ADDR *adjusted_insn_addr,
+					  CORE_ADDR *adjusted_insn_addr_end,
+					  char *err)
+{
+  CORE_ADDR buildaddr = *jump_entry;
+  unsigned char buf[1024];
+  unsigned char *p = buf;
+  int i, offset;
+  const int framesz = 272;
+
+  debug_printf ("install fast tracepoint jump pad at 0x%lx\n",
+		(unsigned long) buildaddr);
+
+  /* Stack frame layout for thie jump pad,
+
+     High	PC (tpaddr)
+		SP
+		NZCV
+		x30
+		...
+		x1
+     Low	x0
+
+     (32 GPRs + PC + NZCV) = (32 + 1 + 1) * 8 = 272
+
+     The code flow of this jump pad,
+
+     1. Save GPR and NZCV
+     3. Adjust SP
+     4. Prepare argument
+     5. Call gdb_collector
+     6. Restore SP
+     7. Restore GPR and NZCV
+     8. Build a jump for back to the program
+     9. Copy/relocate original instruction
+    10. Build a jump for replacing orignal instruction.  */
+
+  for (i = 0; i < 30; i += 2)
+    p += GEN_STP (p, i, i + 1, 31, -framesz + i * 8);
+
+  p += put_i32 (p, 0xd53b4200);			/* mrs     x0, nzcv */
+  p += GEN_ADDI (p, 1, 31, 0);			/* mov     x1, sp */
+  p += gen_limm (p, 2, tpaddr);			/* li      x2, TPADDR */
+
+  p += GEN_STP (p, 30, 0, 31, -framesz + 30 * 8);
+  p += GEN_STP (p, 1, 2, 31, -framesz + 32 * 8);
+
+  /* Adjust SP.  */
+  p += GEN_SUBI (p, 31, 31, framesz);
+
+  /* Prepare argument.  */
+  p += gen_limm (p, 0, tpoint);
+  p += GEN_ADDI (p, 1, 31, 0);
+
+  p += gen_limm (p, 2, collector);
+  p += GEN_BLR (p, 2);
+
+  /* Restore SP.  */
+  p += GEN_ADDI (p, 31, 31, framesz);
+
+  /* Restore NZCV.  */
+  p += GEN_LDP (p, 30, 0, 31, -framesz + 30 * 8);
+  p += put_i32 (p, 0xd51b4200);			/* msr     nzcv, x0 */
+
+  /* Restore GPRs.  */
+  for (i = 0; i < 30; i += 2)
+    p += GEN_LDP (p, i, i + 1, 31, -framesz + i * 8);
+
+
+  /* Flush instructions to inferior memory.  */
+  write_inferior_memory (buildaddr, buf, p - buf);
+
+  /* Now, insert the original instruction to execute in the jump pad.  */
+  *adjusted_insn_addr = buildaddr + (p - buf);
+  *adjusted_insn_addr_end = *adjusted_insn_addr;
+  relocate_instruction (adjusted_insn_addr_end, tpaddr);
+
+  /* Verify the relocation size.  If should be 4 for normal copy, or 8
+     for some conditional branch.  */
+  if ((*adjusted_insn_addr_end - *adjusted_insn_addr == 0)
+      || (*adjusted_insn_addr_end - *adjusted_insn_addr > 8))
+    {
+      sprintf (err, "E.Unexpected instruction length = %d"
+		    "when relocate instruction.",
+		    (int) (*adjusted_insn_addr_end - *adjusted_insn_addr));
+      return 1;
+    }
+
+  buildaddr = *adjusted_insn_addr_end;
+  p = buf;
+  /* Finally, write a jump back to the program.  */
+  offset = (tpaddr + 4) - buildaddr;
+  if (offset >= (1 << 27) || offset < -(1 << 27))
+    {
+      sprintf (err, "E.Jump back from jump pad too far from tracepoint "
+		    "(offset 0x%x > 26-bit).", offset);
+      return 1;
+    }
+  /* b <tpaddr+4> */
+  p += GEN_B (p, offset);
+  write_inferior_memory (buildaddr, buf, p - buf);
+
+  /* The jump pad is now built.  Wire in a jump to our jump pad.  This
+     is always done last (by our caller actually), so that we can
+     install fast tracepoints with threads running.  This relies on
+     the agent's atomic write support.  */
+  offset = *jump_entry - tpaddr;
+  if (offset >= (1 << 27) || offset < -(1 << 27))
+    {
+      sprintf (err, "E.Jump back from jump pad too far from tracepoint "
+		    "(offset 0x%x > 26-bit).", offset);
+      return 1;
+    }
+  /* b <jentry> */
+  GEN_B (jjump_pad_insn, offset);
+  *jjump_pad_insn_size = 4;
+
+  *jump_entry = buildaddr + (p - buf);
+
+  return 0;
+}
+
+/*
+
+  Bytecode execution stack frame
+
+   x30 is link register.
+   x29 is the frame-base for restoring stack-pointer.
+   x28 is the stack-pointer for bytecode machine.
+       It should point to next-empty, so we can use LDU for pop.
+   x0  is used for cache of TOP value.
+       It is the first argument, pointer to CTX.
+   x1  is the second argument, pointer to the result.
+
+
+ */
+
+enum { bc_framesz = 208 };
+
+/* Emit prologue in inferior memory.  See above comments.  */
+
+static void
+aarch64_emit_prologue (void)
+{
+  EMIT_ASM ("stp    x0, x1, [sp, -48]!		\n"
+	    "stp    x27, x28, [sp, 16]		\n"
+	    "stp    x29, x30, [sp, 32]		\n"
+	    "mov    x29, x1			\n"
+	    "sub    x28, x1, 8			\n"
+	    "sub    x1, x1, 64			\n"
+	    "mov    x0, 0			\n"
+	);
+}
+
+/* Emit epilogue in inferior memory.  See above comments.  */
+
+static void
+aarch64_emit_epilogue (void)
+{
+  EMIT_ASM ("mov    sp, x29			\n"
+	    "ldr    x1, [sp, 8]			\n"
+	    "ldp    x27, x28, [sp, 16]		\n"
+	    "ldp    x29, x30, [sp, 32]		\n"
+	    /* *value = TOP */
+	    "str    x0, [x1]			\n"
+	    "mov    x0, 0			\n"
+	    "add    sp, sp, 48			\n");
+}
+
+/* TOP = stack[--sp] + TOP  */
+
+static void
+aarch64_emit_add (void)
+{
+  EMIT_ASM ("ldr  x1, [x28, 8]!	\n"
+	    "add  x0, x1, x0	\n");
+}
+
+/* TOP = stack[--sp] - TOP  */
+
+static void
+aarch64_emit_sub (void)
+{
+  EMIT_ASM ("ldr  x1, [x28, 8]!	\n"
+	    "sub  x0, x1, x0	\n");
+}
+
+/* TOP = stack[--sp] * TOP  */
+
+static void
+aarch64_emit_mul (void)
+{
+  EMIT_ASM ("ldr  x1, [x28, 8]!	\n"
+	    "mul  x0, x1, x0	\n");
+}
+
+/* TOP = stack[--sp] << TOP  */
+
+static void
+aarch64_emit_lsh (void)
+{
+  EMIT_ASM ("ldr  x1, [x28, 8]!	\n"
+	    "lsl  x0, x1, x0	\n");
+}
+
+/* Top = stack[--sp] >> TOP
+   (Arithmetic shift right)  */
+
+static void
+aarch64_emit_rsh_signed (void)
+{
+  EMIT_ASM ("ldr  x1, [x28, 8]!	\n"
+	    "asr  x0, x1, x0	\n");
+}
+
+/* Top = stack[--sp] >> TOP
+   (Logical shift right)  */
+
+static void
+aarch64_emit_rsh_unsigned (void)
+{
+  EMIT_ASM ("ldr  x1, [x28, 8]!	\n"
+	    "lsr  x0, x1, x0	\n");
+}
+
+/* Emit code for signed-extension specified by ARG.  */
+
+static void
+aarch64_emit_ext (int arg)
+{
+  switch (arg)
+    {
+    case 8:
+      EMIT_ASM ("sxtb  w3, w3	\n");
+      break;
+    case 16:
+      EMIT_ASM ("sxth  w3, w3	\n");
+      break;
+    case 32:
+      EMIT_ASM ("sxtw  x0, w3	\n");
+      break;
+    default:
+      emit_error = 1;
+    }
+}
+
+/* Emit code for zero-extension specified by ARG.  */
+
+static void
+aarch64_emit_zero_ext (int arg)
+{
+  switch (arg)
+    {
+    case 8:
+      EMIT_ASM ("and  w0, w0, 0xff	\n");
+      /* break; */
+    case 16:
+      EMIT_ASM ("and  w0, w0, 0xffff	\n");
+      break;
+    case 32:
+      EMIT_ASM ("and  x0, x0, 0xffffffff	\n");
+      break;
+    default:
+      emit_error = 1;
+    }
+}
+
+/* TOP = !TOP
+   i.e., TOP = (TOP == 0) ? 1 : 0;  */
+
+static void
+aarch64_emit_log_not (void)
+{
+  EMIT_ASM ("cmp  x0, xzr	\n"
+	    "cset x0, eq	\n");
+}
+
+/* TOP = stack[--sp] & TOP  */
+
+static void
+aarch64_emit_bit_and (void)
+{
+  EMIT_ASM ("ldr  x1, [x28, 8]!	\n"
+	    "and  x0, x1, x0	\n");
+}
+
+/* TOP = stack[--sp] | TOP  */
+
+static void
+aarch64_emit_bit_or (void)
+{
+  EMIT_ASM ("ldr  x1, [x28, 8]!	\n"
+	    "orr  x0, x1, x0	\n");
+}
+
+/* TOP = stack[--sp] ^ TOP  */
+
+static void
+aarch64_emit_bit_xor (void)
+{
+  EMIT_ASM ("ldr  x1, [x28, 8]!	\n"
+	    "eor  x0, x1, x0	\n");
+}
+
+/* TOP = ~TOP  */
+
+static void
+aarch64_emit_bit_not (void)
+{
+  EMIT_ASM ("mvn  x0, x0	\n");
+}
+
+/* TOP = stack[--sp] == TOP  */
+
+static void
+aarch64_emit_equal (void)
+{
+  EMIT_ASM ("ldr  x1, [x28, 8]!	\n"
+	    "cmp  x0, x1	\n"
+	    "cset x0, eq	\n");
+}
+
+/* TOP = stack[--sp] < TOP
+   (Signed comparison)  */
+
+static void
+aarch64_emit_less_signed (void)
+{
+  EMIT_ASM ("ldr  x1, [x28, 8]!	\n"
+	    "cmp  x0, x1	\n"
+	    "cset x0, lt	\n");
+}
+
+/* TOP = stack[--sp] < TOP
+   (Unsigned comparison)  */
+
+static void
+aarch64_emit_less_unsigned (void)
+{
+  EMIT_ASM ("ldr  x1, [x28, 8]!	\n"
+	    "cmp  x0, x1	\n"
+	    "cset x0, cc	\n");
+}
+
+/* Access the memory address in TOP in size of SIZE.
+   Zero-extend the read value.  */
+
+static void
+aarch64_emit_ref (int size)
+{
+  switch (size)
+    {
+    case 1:
+      EMIT_ASM ("ldrb  w0, [x0]	\n");
+      break;
+    case 2:
+      EMIT_ASM ("ldrh  w0, [x0]	\n");
+      break;
+    case 4:
+      EMIT_ASM ("ldr   w0, [x0]	\n");
+      break;
+    case 8:
+      EMIT_ASM ("ldr   x0, [x0]	\n");
+      break;
+    }
+}
+
+/* TOP = NUM  */
+
+static void
+aarch64_emit_const (LONGEST num)
+{
+  unsigned char buf[5 * 4];
+  int i = 0;
+
+  i += gen_limm (buf + i, 3, num);
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
+}
+
+/* Set TOP to the value of register REG by calling get_raw_reg function
+   with two argument, collected buffer and register number.  */
+
+static void
+aarch64_emit_reg (int reg)
+{
+  unsigned char buf[16 * 4];
+  unsigned char *p = buf;
+
+  p += GEN_LDR (p, 0, 29, 0);
+  p += GEN_LDR (p, 0, 0, 48);
+  p += gen_limm (p, 1, reg);
+  p += gen_limm (p, 2, get_raw_reg_func_addr ());
+  p += GEN_BLR (p, 2);
+
+  write_inferior_memory (current_insn_ptr, buf, (p - buf));
+  current_insn_ptr += (p - buf);
+}
+
+/* TOP = stack[--sp] */
+
+static void
+aarch64_emit_pop (void)
+{
+  EMIT_ASM ("ldr  x1, [x28, 8]!	\n");
+}
+
+/* stack[sp++] = TOP
+
+   Because we may use up bytecode stack, expand 8 doublewords more
+   if needed.  */
+
+static void
+aarch64_emit_stack_flush (void)
+{
+  /* Make sure bytecode stack is big enough before push.
+     Otherwise, expand 64-byte more.  */
+
+  EMIT_ASM ("  str   x0, [x28], -8	\n"
+	    "  mov   x2, sp		\n"
+	    "  cmp   x28, x2		\n"
+	    "  bhi   1f			\n"
+	    "  sub   sp, sp, 64		\n"
+	    "1:				\n"
+	   );
+}
+
+/* Swap TOP and stack[sp-1]  */
+
+static void
+aarch64_emit_swap (void)
+{
+  EMIT_ASM ("ldr  x1, [x28, 8]		\n"
+	    "str  x0, [x28, 8]		\n"
+	    "mov  x0, x1\n");
+}
+
+/* Discard N elements in the stack.  */
+
+static void
+aarch64_emit_stack_adjust (int n)
+{
+  unsigned char buf[4];
+  int i = 0;
+
+  i += GEN_ADDI (buf, 30, 30, n << 3);	/* addi	r30, r30, (n << 3) */
+
+  write_inferior_memory (current_insn_ptr, buf, i);
+  current_insn_ptr += i;
+  gdb_assert (i <= sizeof (buf));
+}
+
+/* Call function FN.  */
+
+static void
+aarch64_emit_call (CORE_ADDR fn)
+{
+  unsigned char buf[16 * 4];
+  unsigned char *p = buf;
+
+  p += GEN_MOV (p, 27, 0);
+  p += gen_limm (p, 2, get_raw_reg_func_addr ());
+  p += GEN_BLR (p, 2);
+  p += GEN_MOV (p, 0, 27);
+
+  write_inferior_memory (current_insn_ptr, buf, (p - buf));
+  current_insn_ptr += (p - buf);
+  gdb_assert ((p - buf) <= sizeof (buf));
+}
+
+/* FN's prototype is `LONGEST(*fn)(int)'.
+   TOP = fn (arg1)
+  */
+
+static void
+aarch64_emit_int_call_1 (CORE_ADDR fn, int arg1)
+{
+  unsigned char buf[16 * 4];
+  unsigned char *p = buf;
+
+  p += gen_limm (p, 0, arg1);
+  p += gen_limm (p, 2, fn);
+  p += GEN_BLR (p, 2);
+
+  write_inferior_memory (current_insn_ptr, buf, (p - buf));
+  current_insn_ptr += (p - buf);
+  gdb_assert ((p - buf) <= sizeof (buf));
+}
+
+/* FN's prototype is `void(*fn)(int,LONGEST)'.
+   fn (arg1, TOP)
+
+   TOP should be preserved/restored before/after the call.  */
+
+static void
+aarch64_emit_void_call_2 (CORE_ADDR fn, int arg1)
+{
+  unsigned char buf[16 * 4];
+  unsigned char *p = buf;
+
+  p += GEN_MOV (p, 27, 0);
+  p += GEN_MOV (p, 1, 0);
+  p += gen_limm (p, 0, arg1);
+  p += gen_limm (p, 2, fn);
+  p += GEN_BLR (p, 2);
+  p += GEN_MOV (p, 0, 27);
+
+  write_inferior_memory (current_insn_ptr, buf, (p - buf));
+  current_insn_ptr += (p - buf);
+  gdb_assert ((p - buf) <= sizeof (buf));
+}
+
+/* Note in the following goto ops:
+
+   When emitting goto, the target address is later relocated by
+   write_goto_address.  OFFSET_P is the offset of the branch instruction
+   in the code sequence, and SIZE_P is how to relocate the instruction,
+   recognized by aarch64_write_goto_address.  In current implementation,
+   SIZE can be either 26 or 19 for branch of conditional-branch instruction.  */
+
+/* If TOP is true, goto somewhere.  Otherwise, just fall-through.  */
+
+static void
+aarch64_emit_if_goto (int *offset_p, int *size_p)
+{
+  EMIT_ASM ("  mov   x1, x0		\n"
+	    "  ldr   x0, [x28, 8]!	\n"
+	    "1:cbnz  x1, 1b		\n");
+
+  if (offset_p)
+    *offset_p = 8;
+  if (size_p)
+    *size_p = 19;
+}
+
+/* Unconditional goto.  */
+
+static void
+aarch64_emit_goto (int *offset_p, int *size_p)
+{
+  EMIT_ASM ("1:b	1b	\n");
+
+  if (offset_p)
+    *offset_p = 0;
+  if (size_p)
+    *size_p = 26;
+}
+
+/* Goto if stack[--sp] == TOP  */
+
+static void
+aarch64_emit_eq_goto (int *offset_p, int *size_p)
+{
+  EMIT_ASM ("ldr     x4, [x28, 8]	\n"
+	    "cmp     x4, x3		\n"
+	    "ldr     x3, [x28, 16]!	\n"
+	    "1:beq   1b			\n");
+
+  if (offset_p)
+    *offset_p = 12;
+  if (size_p)
+    *size_p = 19;
+}
+
+/* Goto if stack[--sp] != TOP  */
+
+static void
+aarch64_emit_ne_goto (int *offset_p, int *size_p)
+{
+  EMIT_ASM ("ldr     x4, [x28, 8]	\n"
+	    "cmp     x4, x3		\n"
+	    "ldr     x3, [x28, 16]!	\n"
+	    "1:bne   1b			\n");
+
+  if (offset_p)
+    *offset_p = 12;
+  if (size_p)
+    *size_p = 19;
+}
+
+/* Goto if stack[--sp] < TOP  */
+
+static void
+aarch64_emit_lt_goto (int *offset_p, int *size_p)
+{
+  EMIT_ASM ("ldr     x4, [x28, 8]	\n"
+	    "cmp     x4, x3		\n"
+	    "ldr     x3, [x28, 16]!	\n"
+	    "1:blt   1b			\n");
+
+  if (offset_p)
+    *offset_p = 12;
+  if (size_p)
+    *size_p = 19;
+}
+
+/* Goto if stack[--sp] <= TOP  */
+
+static void
+aarch64_emit_le_goto (int *offset_p, int *size_p)
+{
+  EMIT_ASM ("ldr     x4, [x28, 8]	\n"
+	    "cmp     x4, x3		\n"
+	    "ldr     x3, [x28, 16]!	\n"
+	    "1:ble   1b			\n");
+
+  if (offset_p)
+    *offset_p = 12;
+  if (size_p)
+    *size_p = 19;
+}
+
+/* Goto if stack[--sp] > TOP  */
+
+static void
+aarch64_emit_gt_goto (int *offset_p, int *size_p)
+{
+  EMIT_ASM ("ldr     x4, [x28, 8]	\n"
+	    "cmp     x4, x3		\n"
+	    "ldr     x3, [x28, 16]!	\n"
+	    "1:bgt   1b			\n");
+
+  if (offset_p)
+    *offset_p = 12;
+  if (size_p)
+    *size_p = 19;
+}
+
+/* Goto if stack[--sp] >= TOP  */
+
+static void
+aarch64_emit_ge_goto (int *offset_p, int *size_p)
+{
+  EMIT_ASM ("ldr     x4, [x28, 8]	\n"
+	    "cmp     x4, x3		\n"
+	    "ldr     x3, [x28, 16]!	\n"
+	    "1:bge   1b			\n");
+
+  if (offset_p)
+    *offset_p = 12;
+  if (size_p)
+    *size_p = 19;
+}
+
+/* Relocate previous emitted branch instruction.  FROM is the address
+   of the branch instruction, TO is the goto target address, and SIZE
+   if the value we set by *SIZE_P before.  Currently, it is either
+   24 or 14 of branch and conditional-branch instruction.  */
+
+static void
+aarch64_write_goto_address (CORE_ADDR from, CORE_ADDR to, int size)
+{
+  int rel = to - from;
+  uint32_t insn;
+  unsigned char buf[4];
+
+  read_inferior_memory (from, buf, 4);
+  insn = get_i32 (buf);
+
+  switch (size)
+    {
+    case 19:
+      insn = (insn & ~(0x7ffff << 5)) | (((rel >> 2) & 0x7ffff) << 5);
+      break;
+    case 26:
+      insn = (insn & ~0x3ffffff) | ((rel >> 2) & 0x3ffffff);
+      break;
+    default:
+      emit_error = 1;
+    }
+
+  put_i32 (buf, insn);
+  write_inferior_memory (from, buf, 4);
+}
+
+/* Vector of emit ops for PowerPC64.  */
+
+static struct emit_ops aarch64_emit_ops_vector =
+{
+  aarch64_emit_prologue,
+  aarch64_emit_epilogue,
+  aarch64_emit_add,
+  aarch64_emit_sub,
+  aarch64_emit_mul,
+  aarch64_emit_lsh,
+  aarch64_emit_rsh_signed,
+  aarch64_emit_rsh_unsigned,
+  aarch64_emit_ext,
+  aarch64_emit_log_not,
+  aarch64_emit_bit_and,
+  aarch64_emit_bit_or,
+  aarch64_emit_bit_xor,
+  aarch64_emit_bit_not,
+  aarch64_emit_equal,
+  aarch64_emit_less_signed,
+  aarch64_emit_less_unsigned,
+  aarch64_emit_ref,
+  aarch64_emit_if_goto,
+  aarch64_emit_goto,
+  aarch64_write_goto_address,
+  aarch64_emit_const,
+  aarch64_emit_call,
+  aarch64_emit_reg,
+  aarch64_emit_pop,
+  aarch64_emit_stack_flush,
+  aarch64_emit_zero_ext,
+  aarch64_emit_swap,
+  aarch64_emit_stack_adjust,
+  aarch64_emit_int_call_1,
+  aarch64_emit_void_call_2,
+  aarch64_emit_eq_goto,
+  aarch64_emit_ne_goto,
+  aarch64_emit_lt_goto,
+  aarch64_emit_le_goto,
+  aarch64_emit_gt_goto,
+  aarch64_emit_ge_goto
+};
+
+/*  Implementation of emit_ops target ops.   */
+
+__attribute__ ((unused))
+static struct emit_ops *
+aarch64_emit_ops (void)
+{
+  return &aarch64_emit_ops_vector;
+}
+
 /* ptrace hardware breakpoint resource info is formatted as follows:
 
    31             24             16               8              0
@@ -1300,6 +2176,13 @@ struct linux_target_ops the_low_target =
   aarch64_linux_new_process,
   aarch64_linux_new_thread,
   aarch64_linux_prepare_to_resume,
+  NULL, /* linux_process_qsupported */
+  aarch64_supports_tracepoints,
+  NULL, /* get_thread_area */
+  aarch64_install_fast_tracepoint_jump_pad,
+  NULL, /* Use interpreter for ppc32.  */
+  aarch64_get_min_fast_tracepoint_insn_len,
+  aarch64_supports_range_stepping,
 };
 
 void

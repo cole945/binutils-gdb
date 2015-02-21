@@ -49,6 +49,11 @@ if [is_amd64_regs_target] {
     set fpreg "ebp"
     set spreg "esp"
     set pcreg "eip"
+} elseif [istarget "aarch64*"] {
+    # 'fp' is a user-register; GDB cannot yet trace user-register contents.
+    set fpreg "x29"
+    set spreg "sp"
+    set pcreg "pc"
 }
 
 # Set breakpoint and tracepoint at the same address.

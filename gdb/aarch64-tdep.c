@@ -1908,6 +1908,77 @@ aarch64_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr,
   return aarch64_default_breakpoint;
 }
 
+/* Return true if ADDR is a valid address for tracepoint.  Set *ISZIE
+   to the number of bytes the target should copy elsewhere for the
+   tracepoint.  */
+
+static int
+aarch64_fast_tracepoint_valid_at (struct gdbarch *gdbarch,
+				  CORE_ADDR addr, int *isize, char **msg)
+{
+  if (isize)
+    *isize = 4;		/* All instructions are 4-byte.  */
+  if (msg)
+    *msg = NULL;
+  return 1;
+}
+
+/* Copy the instruction from OLDLOC to *TO, and update *TO to *TO + size
+   of instruction.  This function is used to adjust pc-relative instructions
+   when copying.  */
+
+static void
+aarch64_relocate_instruction (struct gdbarch *gdbarch,
+			      CORE_ADDR *to, CORE_ADDR oldloc)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+  uint32_t insn;
+  int rel, newrel;
+
+  insn = read_memory_unsigned_integer (oldloc, 4, byte_order);
+
+  if (((insn >> 26) & 0x1f) == 0x5)
+    {
+      /* Unconditional branch imm26  */
+      rel = extract_signed_bitfield (insn, 26, 0) << 2;
+      newrel = (oldloc - *to) + rel;
+
+      /* Out of range. Cannot relocate instruction.  */
+      if (newrel >= (1 << 27) || newrel < -(1 << 27))
+	return;
+
+      insn = (insn & ~0x3ffffff) | (newrel & 0x3ffffff);
+    }
+  else if (((insn >> 23) & 0x3f) == 0x1b)
+    {
+      /* TBZ or TBNZ imm14 */
+      rel = extract_signed_bitfield (insn, 14, 5) << 2;
+      newrel = (oldloc - *to) + rel;
+
+      return;
+    }
+  else if (((insn >> 25) & 0x3f) == 0x1a)
+    {
+      /* CBZ or CBNZ imm19*/
+      rel = extract_signed_bitfield (insn, 19, 5) << 2;
+      newrel = (oldloc - *to) + rel;
+
+      return;
+    }
+  else if (((insn >> 25) & 0x7f) == 0x2a)
+    {
+      /* B.cond imm19 */
+      rel = extract_signed_bitfield (insn, 19, 5) << 2;
+      newrel = (oldloc - *to) + rel;
+
+      return;
+    }
+
+  write_memory_unsigned_integer (*to, 4, byte_order, insn);
+  *to += 4;
+}
+
 /* Extract from an array REGS containing the (raw) register state a
    function return value of type TYPE, and copy that, in virtual
    format, into VALBUF.  */
@@ -2701,6 +2772,11 @@ aarch64_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_cannot_step_breakpoint (gdbarch, 1);
   set_gdbarch_have_nonsteppable_watchpoint (gdbarch, 1);
   set_gdbarch_software_single_step (gdbarch, aarch64_software_single_step);
+
+  /* Tracepoint manipulation.  */
+  set_gdbarch_fast_tracepoint_valid_at (gdbarch,
+					aarch64_fast_tracepoint_valid_at);
+  set_gdbarch_relocate_instruction (gdbarch, aarch64_relocate_instruction);
 
   /* Information about registers, etc.  */
   set_gdbarch_sp_regnum (gdbarch, AARCH64_SP_REGNUM);
