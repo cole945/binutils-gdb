@@ -917,13 +917,7 @@ aarch64_scan_prologue (struct frame_info *this_frame,
 
       prologue_end = min (prologue_end, prev_pc);
 
-      TRY_CATCH (ex, RETURN_MASK_ERROR)
-	{
-	  aarch64_analyze_prologue (gdbarch, prologue_start, prologue_end,
-				    cache);
-	}
-      if (ex.reason < 0 &&  ex.error != NOT_AVAILABLE_ERROR)
-	throw_exception (ex);
+      aarch64_analyze_prologue (gdbarch, prologue_start, prologue_end, cache);
     }
   else
     {
@@ -2032,6 +2026,36 @@ aarch64_relocate_instruction (struct gdbarch *gdbarch,
   *to += 4;
 }
 
+static void
+aarch64_gen_return_address (struct gdbarch *gdbarch,
+			    struct agent_expr *ax, struct axs_value *value,
+			    CORE_ADDR scope)
+{
+  struct aarch64_prologue_cache *cache;
+  int reg;
+  CORE_ADDR block_addr;
+  CORE_ADDR prologue_start;
+  CORE_ADDR prologue_end;
+
+  cache = FRAME_OBSTACK_ZALLOC (struct aarch64_prologue_cache);
+  cache->saved_regs = trad_frame_alloc_saved_regs (this_frame);
+
+  cache->framereg = AARCH64_FP_REGNUM;
+  cache->framesize = 16;
+
+  if (find_pc_partial_function (block_addr, NULL, &prologue_start,
+				&prologue_end))
+    {
+      aarch64_analyze_prologue (gdbarch, prologue_start, prologue_end, cache);
+    }
+
+  ax_reg (ax, AARCH64_FP_REGNUM);
+  ax_const_l (ax, 8);
+  ax_simple (ax, aop_add);
+  value->type = register_type (gdbarch, AARCH64_LR_REGNUM);
+  value->kind = axs_lvalue_memory;
+}
+
 /* Extract from an array REGS containing the (raw) register state a
    function return value of type TYPE, and copy that, in virtual
    format, into VALBUF.  */
@@ -2834,6 +2858,7 @@ aarch64_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_fast_tracepoint_valid_at (gdbarch,
 					aarch64_fast_tracepoint_valid_at);
   set_gdbarch_relocate_instruction (gdbarch, aarch64_relocate_instruction);
+  set_gdbarch_gen_return_address (gdbarch, aarch64_gen_return_address);
 
   /* Information about registers, etc.  */
   set_gdbarch_sp_regnum (gdbarch, AARCH64_SP_REGNUM);
