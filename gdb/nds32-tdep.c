@@ -2988,7 +2988,7 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
     {
       if (need_pseudo_fpu)
 	{
-	  int fsregs = (fpregs + 1) * 8;
+	  int fsregs = (1 << fpregs) * 8;
 
 	  if (fsregs > 32)
 	    fsregs = 32;
