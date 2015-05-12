@@ -2860,16 +2860,34 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   struct gdbarch_list *best_arch;
   const struct target_desc *tdesc = NULL;
   struct tdesc_arch_data *tdesc_data = NULL;
-  int i, maxregs;
+  int i, maxregs, fpregs = -1, need_pseudo_fpu = 0;
 
-  /* Allocate space for the new architecture.  */
   tdep = xcalloc (1, sizeof (struct gdbarch_tdep));
-  gdbarch = gdbarch_alloc (&info, tdep);
+
+  /* Extract the elf_flags, if available.  */
+  if (info.abfd && bfd_get_flavour (info.abfd) == bfd_target_elf_flavour)
+    {
+      int eflags = elf_elfheader (info.abfd)->e_flags;
+      int nds32_abi = eflags & EF_NDS_ABI;
+
+      /* Split large arguments by default.  */
+      tdep->abi_split = TRUE;
+      /* Do not use FPRs by default.  */
+      tdep->abi_use_fpr = FALSE;
+      switch (nds32_abi)
+	{
+	case E_NDS_ABI_V2FP:
+	case E_NDS_ABI_V2FP_PLUS:
+	  tdep->abi_use_fpr = TRUE;
+	  /* Fall-through.  */
+	case E_NDS_ABI_V2:
+	  tdep->abi_split = FALSE;
+	}
+    }
 
   if (tdesc_has_registers (info.target_desc))
     {
       int valid_p;
-      int fpregs = -1;
       static const char *const nds32_fp_names[] = { "r28", "fp", NULL };
       static const char *const nds32_lp_names[] = { "r30", "lp", NULL };
       static const char *const nds32_sp_names[] = { "r31", "sp", NULL };
@@ -2903,7 +2921,6 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 	{
 	  tdesc_data_cleanup (tdesc_data);
 	  xfree (tdep);
-	  gdbarch_free (gdbarch);
 	  return NULL;
 	}
 
@@ -2933,6 +2950,43 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
       /* If FS registers do not exist, make them pseudo registers
 	 of FD registers.  */
       if (fpregs != -1 && tdesc_unnumbered_register (feature, "fs0") == 0)
+	need_pseudo_fpu = 1;
+    }
+
+  /* If there is already a candidate, use it.  */
+  for (best_arch = gdbarch_list_lookup_by_info (arches, &info);
+       best_arch != NULL;
+       best_arch = gdbarch_list_lookup_by_info (best_arch->next, &info))
+    {
+      struct gdbarch_tdep *idep = gdbarch_tdep (best_arch->gdbarch);
+
+      if (tdep->abi_split != idep->abi_split)
+	continue;
+      if (tdep->abi_use_fpr != idep->abi_use_fpr)
+	continue;
+
+      /* Check FPU registers.  */
+      if (idep->fpu_freg != tdep->fpu_freg)
+	continue;
+
+      /* Found a match.  */
+      break;
+    }
+
+  if (best_arch != NULL)
+    {
+      if (tdesc_data != NULL)
+	tdesc_data_cleanup (tdesc_data);
+      xfree (tdep);
+      return best_arch->gdbarch;
+    }
+
+  /* Allocate space for the new architecture.  */
+  gdbarch = gdbarch_alloc (&info, tdep);
+
+  if (tdesc_data)
+    {
+      if (need_pseudo_fpu)
 	{
 	  int fsregs = (fpregs + 1) * 8;
 
@@ -2960,54 +3014,6 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
       set_gdbarch_num_pseudo_regs (gdbarch, 32);
       set_gdbarch_pseudo_register_read (gdbarch, nds32_pseudo_register_read);
       set_gdbarch_pseudo_register_write (gdbarch, nds32_pseudo_register_write);
-    }
-
-  /* Extract the elf_flags, if available.  */
-  if (info.abfd && bfd_get_flavour (info.abfd) == bfd_target_elf_flavour)
-    {
-      int eflags = elf_elfheader (info.abfd)->e_flags;
-      int nds32_abi = eflags & EF_NDS_ABI;
-
-      /* Split large arguments by default.  */
-      tdep->abi_split = TRUE;
-      /* Do not use FPRs by default.  */
-      tdep->abi_use_fpr = FALSE;
-      switch (nds32_abi)
-	{
-	case E_NDS_ABI_V2FP:
-	case E_NDS_ABI_V2FP_PLUS:
-	  tdep->abi_use_fpr = TRUE;
-	  /* Fall-through.  */
-	case E_NDS_ABI_V2:
-	  tdep->abi_split = FALSE;
-	}
-    }
-
-  /* If there is already a candidate, use it.  */
-  for (best_arch = gdbarch_list_lookup_by_info (arches, &info);
-       best_arch != NULL;
-       best_arch = gdbarch_list_lookup_by_info (best_arch->next, &info))
-    {
-      struct gdbarch_tdep *idep = gdbarch_tdep (best_arch->gdbarch);
-
-      if (tdep->abi_split != idep->abi_split)
-	continue;
-      if (tdep->abi_use_fpr != idep->abi_use_fpr)
-	continue;
-
-      /* Check FPU registers.  */
-      if (idep->fpu_freg != tdep->fpu_freg)
-	continue;
-
-      /* Found a match.  */
-      break;
-    }
-
-  if (best_arch != NULL)
-    {
-      xfree (tdep);
-      gdbarch_free (gdbarch);
-      return best_arch->gdbarch;
     }
 
   /* Add nds32 register aliases.  */
