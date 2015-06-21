@@ -694,7 +694,7 @@ enum tracepoint_type
 
 struct tracepoint_hit_ctx;
 
-typedef enum eval_result_type (*condfn) (struct tracepoint_hit_ctx *,
+typedef enum eval_result_type (*condfn) (unsigned char *,
 					 ULONGEST *);
 
 /* The definition of a tracepoint.  */
@@ -4903,7 +4903,10 @@ condition_true_at_tracepoint (struct tracepoint_hit_ctx *ctx,
      used.  */
 #ifdef IN_PROCESS_AGENT
   if (tpoint->compiled_cond)
-    err = ((condfn) (uintptr_t) (tpoint->compiled_cond)) (ctx, &value);
+    {
+      struct fast_tracepoint_ctx *fctx = (struct fast_tracepoint_ctx *) ctx;
+      err = ((condfn) (uintptr_t) (tpoint->compiled_cond)) (fctx->regs, &value);
+    }
   else
 #endif
     {
