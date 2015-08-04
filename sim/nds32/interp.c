@@ -2498,9 +2498,3 @@ sim_create_inferior (SIM_DESC sd, struct bfd *prog_bfd, char **argv,
 
   return SIM_RC_OK;
 }
-
-void
-sim_set_callbacks (host_callback * ptr)
-{
-  /* callback = ptr; */
-}
