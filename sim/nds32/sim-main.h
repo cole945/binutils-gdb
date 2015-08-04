@@ -96,6 +96,5 @@ struct sim_state {
 
 #include "sim-engine.h"
 #include "sim-options.h"
-#include "run-sim.h"
 
 #endif
