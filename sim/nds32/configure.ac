@@ -9,8 +9,6 @@ SIM_AC_OPTION_WARNINGS
 SIM_AC_OPTION_ALIGNMENT(NONSTRICT_ALIGNMENT)
 SIM_AC_OPTION_ENVIRONMENT
 
-NDS32_SIM_EXTRA_OBJS=
-
 AC_CHECK_FUNCS([ \
 	getuid getgid geteuid getegid setuid setgid \
 	access fcntl link \
@@ -23,7 +21,5 @@ AC_CHECK_HEADERS([ \
 	sys/ioctl.h \
 	sys/times.h \
 ])
-
-AC_SUBST([NDS32_SIM_EXTRA_OBJS], ${NDS32_SIM_EXTRA_OBJS})
 
 SIM_AC_OUTPUT
