@@ -46,44 +46,44 @@
 CB_TARGET_DEFS_MAP cb_nds32_libgloss_syscall_map[] =
 {
    /* These are used by the ANSI C support of libc.  */
-  {CB_SYS_exit,		1},
-  {CB_SYS_open,		2},
-  {CB_SYS_close,	3},
-  {CB_SYS_read,		4},
-  {CB_SYS_write,	5},
-  {CB_SYS_lseek,	6},
-  {CB_SYS_unlink,	7},
-  {CB_SYS_getpid,	8},
-  {CB_SYS_kill,		9},
-  {CB_SYS_fstat,	10},
+  {"exit", CB_SYS_exit,		1},
+  {"open", CB_SYS_open,		2},
+  {"close", CB_SYS_close,	3},
+  {"read", CB_SYS_read,		4},
+  {"write", CB_SYS_write,	5},
+  {"lseek", CB_SYS_lseek,	6},
+  {"unlink", CB_SYS_unlink,	7},
+  {"getpid", CB_SYS_getpid,	8},
+  {"kill", CB_SYS_kill,		9},
+  {"fstat", CB_SYS_fstat,	10},
 
   /* ARGV support.  */
-  {CB_SYS_argvlen,	12},
-  {CB_SYS_argv,		13},
+  {"argvlen", CB_SYS_argvlen,	12},
+  {"argv", CB_SYS_argv,		13},
 
   /* These are extras added for one reason or another.  */
-  {CB_SYS_chdir,	14},
-  {CB_SYS_stat,		15},
-  {CB_SYS_chmod,	16},
-  {CB_SYS_utime,	17},
-  {CB_SYS_time,		18},
+  {"chdir", CB_SYS_chdir,	14},
+  {"stat", CB_SYS_stat,		15},
+  {"chmod", CB_SYS_chmod,	16},
+  {"utime", CB_SYS_utime,	17},
+  {"time", CB_SYS_time,		18},
 
-  {CB_SYS_gettimeofday,	19},
-  {CB_SYS_times,	20},
-  {CB_SYS_link,		21},
+  {"gettimeofday", CB_SYS_gettimeofday,	19},
+  {"times", CB_SYS_times,	20},
+  {"link", CB_SYS_link,		21},
   /* SYS_argc		= 172, */
   /* SYS_argnlen	= 173, */
   /* SYS_argn		= 174, */
   /* RedBoot. */
-  {CB_SYS_rename,	3001},
-  {CB_SYS_NDS32_isatty,	3002},
+  {"rename", CB_SYS_rename,	3001},
+  {"NDS32_isatty", CB_SYS_NDS32_isatty,	3002},
   /* SYS_system		= 3003, */
 
   /* NDS32 specific */
-  {CB_SYS_NDS32_errno,	6001},
-  {CB_SYS_NDS32_getcmdline, 6002},
+  {"NDS32_errno", CB_SYS_NDS32_errno,	6001},
+  {"NDS32_getcmdline", CB_SYS_NDS32_getcmdline, 6002},
 
-  {-1, -1}
+  {0, -1, -1}
 };
 
 /* Check
