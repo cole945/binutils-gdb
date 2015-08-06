@@ -1895,7 +1895,6 @@ nds32_epilogue_frame_sniffer (const struct frame_unwind *self,
 static struct nds32_unwind_cache *
 nds32_epilogue_frame_cache (struct frame_info *this_frame, void **this_cache)
 {
-  volatile struct gdb_exception ex;
   struct nds32_unwind_cache *cache;
   CORE_ADDR sp;
 
@@ -1905,7 +1904,7 @@ nds32_epilogue_frame_cache (struct frame_info *this_frame, void **this_cache)
   cache = nds32_alloc_frame_cache (this_frame);
   *this_cache = cache;
 
-  TRY_CATCH (ex, RETURN_MASK_ERROR)
+  TRY
     {
       /* At this point the stack looks as if we just entered the
 	 function, with the return address at the top of the
@@ -1913,8 +1912,12 @@ nds32_epilogue_frame_cache (struct frame_info *this_frame, void **this_cache)
       sp = get_frame_register_unsigned (this_frame, NDS32_SP_REGNUM);
       cache->prev_sp = sp;
     }
-  if (ex.reason < 0 && ex.error != NOT_AVAILABLE_ERROR)
-    throw_exception (ex);
+  CATCH (ex, RETURN_MASK_ERROR)
+    {
+      if (ex.error != NOT_AVAILABLE_ERROR)
+	throw_exception (ex);
+    }
+  END_CATCH
 
   return cache;
 }
