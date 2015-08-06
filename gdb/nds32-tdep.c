@@ -765,10 +765,10 @@ nds32_alloc_frame_cache (struct frame_info *this_frame)
   return cache;
 }
 
-/* Implement the gdbarch_in_function_epilogue_p method.  */
+/* Implement the stack_frame_destroyed_p gdbarch method.  */
 
 static int
-nds32_in_function_epilogue_p (struct gdbarch *gdbarch, CORE_ADDR addr)
+nds32_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR addr)
 {
   uint32_t insn;
   int r = 0;
@@ -1886,8 +1886,8 @@ nds32_epilogue_frame_sniffer (const struct frame_unwind *self,
 			      void **this_prologue_cache)
 {
   if (frame_relative_level (this_frame) == 0)
-    return nds32_in_function_epilogue_p (get_frame_arch (this_frame),
-					 get_frame_pc (this_frame));
+    return nds32_stack_frame_destroyed_p (get_frame_arch (this_frame),
+					  get_frame_pc (this_frame));
   else
     return 0;
 }
@@ -2250,7 +2250,7 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_write_pc (gdbarch, nds32_write_pc);
   set_gdbarch_unwind_sp (gdbarch, nds32_unwind_sp);
   set_gdbarch_unwind_pc (gdbarch, nds32_unwind_pc);
-  set_gdbarch_in_function_epilogue_p (gdbarch, nds32_in_function_epilogue_p);
+  set_gdbarch_stack_frame_destroyed_p (gdbarch, nds32_stack_frame_destroyed_p);
   set_gdbarch_dwarf2_reg_to_regnum (gdbarch, nds32_dwarf_dwarf2_reg_to_regnum);
   set_gdbarch_register_sim_regno (gdbarch, nds32_register_sim_regno);
   set_gdbarch_push_dummy_call (gdbarch, nds32_push_dummy_call);
