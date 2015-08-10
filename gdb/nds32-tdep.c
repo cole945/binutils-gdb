@@ -2525,7 +2525,7 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   struct gdbarch_list *best_arch;
   const struct target_desc *tdesc = NULL;
   struct tdesc_arch_data *tdesc_data = NULL;
-  int i;
+  int i, maxregs;
 
   /* Allocate space for the new architecture.  */
   tdep = xcalloc (1, sizeof (struct gdbarch_tdep));
@@ -2674,6 +2674,32 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
       return best_arch->gdbarch;
     }
 
+  /* Add nds32 register aliases.  */
+  maxregs = (gdbarch_num_regs (gdbarch) + gdbarch_num_pseudo_regs (gdbarch));
+  for (i = 0; i < (int) ARRAY_SIZE (nds32_register_aliases); i++)
+    {
+      int regnum, j;
+
+      regnum = -1;
+      for (j = 0; j < maxregs; j++)
+	{
+	  const char *regname = gdbarch_register_name (gdbarch, j);
+
+	  if (regname != NULL
+	      && strcmp (regname, nds32_register_aliases[i].name) == 0)
+	    {
+	      regnum = j;
+	      break;
+	    }
+	}
+
+      if (regnum == -1)
+	continue;
+
+      user_reg_add (gdbarch, nds32_register_aliases[i].alias,
+		    nds32_value_of_reg, nds32_register_aliases[i].name);
+    }
+
   nds32_add_reggroups (gdbarch);
 
   gdbarch_init_osabi (info, gdbarch);
@@ -2719,25 +2745,6 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   dwarf2_frame_set_init_reg (gdbarch, nds32_dwarf2_frame_init_reg);
   dwarf2_append_unwinders (gdbarch);
   frame_unwind_append_unwinder (gdbarch, &nds32_frame_unwind);
-
-  /* Add nds32 register aliases.  */
-  /* This is a simple workaround to force user-reg being initialized
-     before gdbarch initialized.  Without this, calling
-     user_reg_map_name_to_regnum will crash.  */
-  user_reg_add (gdbarch, "r0", nds32_value_of_reg, "r0");
-  for (i = 0; i < (int) ARRAY_SIZE (nds32_register_aliases); i++)
-    {
-      int regnum;
-
-      regnum = user_reg_map_name_to_regnum
-	(gdbarch, nds32_register_aliases[i].name, -1);
-
-      if (regnum == -1)
-	continue;
-
-      user_reg_add (gdbarch, nds32_register_aliases[i].alias,
-		    nds32_value_of_reg, nds32_register_aliases[i].name);
-    }
 
   return gdbarch;
 }
