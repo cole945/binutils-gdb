@@ -211,6 +211,7 @@ nds32_remote_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr,
 static int
 nds32_dwarf_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int num)
 {
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   const int DXR = 34;
   const int FSR = 38;
   const int FDR = FSR + 32;
@@ -220,9 +221,9 @@ nds32_dwarf_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int num)
   else if (num >= DXR && num < DXR + 4)		/* D0/D1 */
     return num - DXR + NDS32_D0LO_REGNUM;
   else if (num >= FSR && num < FSR + 32)	/* FS */
-    return num - FSR + user_reg_map_name_to_regnum (gdbarch, "fs0", -1);
+    return num - FSR + tdep->fs0_regnum;
   else if (num >= FDR && num < FDR + 32)	/* FD */
-    return num - FDR + user_reg_map_name_to_regnum (gdbarch, "fd0", -1);
+    return num - FDR + tdep->fd0_regnum;
 
   /* No match, return a inaccessible register number.  */
   return gdbarch_num_regs (gdbarch) + gdbarch_num_pseudo_regs (gdbarch);
@@ -1044,6 +1045,7 @@ nds32_pseudo_register_write (struct gdbarch *gdbarch,
 			     struct regcache *regcache, int regnum,
 			     const gdb_byte *buf)
 {
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   char name_buf[8];
   gdb_byte reg_buf[8];
   int offset;
@@ -1064,9 +1066,7 @@ nds32_pseudo_register_write (struct gdbarch *gdbarch,
       else
 	offset = (regnum & 1) ? 0 : 4;
 
-      xsnprintf (name_buf, sizeof (name_buf), "fd%d", regnum >> 1);
-      fd_regnum = user_reg_map_name_to_regnum (gdbarch, name_buf,
-					       strlen (name_buf));
+      fd_regnum = tdep->fd0_regnum + (regnum >> 1);
       regcache_raw_read (regcache, fd_regnum, reg_buf);
       memcpy (reg_buf + offset, buf, 4);
       regcache_raw_write (regcache, fd_regnum, reg_buf);
@@ -1920,8 +1920,8 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   if (tdep->abi_use_fpr)
     {
       /* Use FP registers to pass arguments.  */
-      fs0_regnum = user_reg_map_name_to_regnum (gdbarch, "fs0", -1);
-      fd0_regnum = user_reg_map_name_to_regnum (gdbarch, "fd0", -1);
+      fs0_regnum = tdep->fs0_regnum;
+      fd0_regnum = tdep->fd0_regnum;
     }
 
   /* Set the return address.  For the nds32, the return breakpoint is
@@ -2115,7 +2115,6 @@ nds32_extract_return_value (struct type *type, struct regcache *regcache,
   int typecode = TYPE_CODE (type);
   struct gdbarch *gdbarch = get_regcache_arch (regcache);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-  int fs0_regnum, fd0_regnum;
 
   /* Although struct are returned in r0/r1 registers, but struct have
      only one single/double floating-point member are returned in FS/FD
@@ -2126,13 +2125,10 @@ nds32_extract_return_value (struct type *type, struct regcache *regcache,
 
   if (typecode == TYPE_CODE_FLT && tdep->abi_use_fpr)
     {
-      fs0_regnum = user_reg_map_name_to_regnum (gdbarch, "fs0", -1);
-      fd0_regnum = user_reg_map_name_to_regnum (gdbarch, "fd0", -1);
-
       if (len == 4)
-	regcache_cooked_read (regcache, fs0_regnum, readbuf);
+	regcache_cooked_read (regcache, tdep->fs0_regnum, readbuf);
       else if (len == 8)
-	regcache_cooked_read (regcache, fd0_regnum, readbuf);
+	regcache_cooked_read (regcache, tdep->fd0_regnum, readbuf);
       else
 	internal_error (__FILE__, __LINE__,
 			_("Cannot extract return value of %d bytes "
@@ -2212,7 +2208,6 @@ nds32_store_return_value (struct type *type, struct regcache *regcache,
   int typecode = TYPE_CODE (type);
   struct gdbarch *gdbarch = get_regcache_arch (regcache);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-  int fs0_regnum, fd0_regnum;
 
   /* Although struct are returned in r0/r1 registers, but struct have
      only one single/double floating-point member are returned in FS/FD
@@ -2223,13 +2218,10 @@ nds32_store_return_value (struct type *type, struct regcache *regcache,
 
   if (typecode == TYPE_CODE_FLT && tdep->abi_use_fpr)
     {
-      fs0_regnum = user_reg_map_name_to_regnum (gdbarch, "fs0", -1);
-      fd0_regnum = user_reg_map_name_to_regnum (gdbarch, "fd0", -1);
-
       if (len == 4)
-	regcache_cooked_write (regcache, fs0_regnum, writebuf);
+	regcache_cooked_write (regcache, tdep->fs0_regnum, writebuf);
       else if (len == 8)
-	regcache_cooked_write (regcache, fd0_regnum, writebuf);
+	regcache_cooked_write (regcache, tdep->fd0_regnum, writebuf);
       else
 	internal_error (__FILE__, __LINE__,
 			_("Cannot store return value of %d bytes long "
@@ -2698,6 +2690,23 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
       user_reg_add (gdbarch, nds32_register_aliases[i].alias,
 		    nds32_value_of_reg, nds32_register_aliases[i].name);
+    }
+
+  /* Find the register number of fs0 and fd0.  */
+  tdep->fs0_regnum = -1;
+  tdep->fd0_regnum = -1;
+  for (i = 0; i < maxregs; i++)
+    {
+      const char *regname = gdbarch_register_name (gdbarch, i);
+
+      if (regname == NULL || regname[0] != 'f' || regname[2] != '0' ||
+	  regname[3] != '\0')
+	continue;
+
+      if (regname[1] == 's')
+	tdep->fs0_regnum = i;
+      else if (regname[1] == 'd')
+	tdep->fd0_regnum = i;
     }
 
   nds32_add_reggroups (gdbarch);
