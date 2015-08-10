@@ -2754,6 +2754,7 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   dwarf2_frame_set_init_reg (gdbarch, nds32_dwarf2_frame_init_reg);
   dwarf2_append_unwinders (gdbarch);
   frame_unwind_append_unwinder (gdbarch, &nds32_frame_unwind);
+  frame_base_append_sniffer (gdbarch, dwarf2_frame_base_sniffer);
 
   return gdbarch;
 }
