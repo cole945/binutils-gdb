@@ -1347,8 +1347,6 @@ nds32_in_function_epilogue_p (struct gdbarch *gdbarch, CORE_ADDR addr)
   insn = read_memory_unsigned_integer (addr, 4, BFD_ENDIAN_BIG);
   if ((insn & 0x80000000) == 0)
     {
-      /* 32-bit instruction */
-
       /* ret */
       if (insn == N32_JREG (JR, 0, REG_LP, 0, 1))
 	r = 1;
@@ -1356,11 +1354,9 @@ nds32_in_function_epilogue_p (struct gdbarch *gdbarch, CORE_ADDR addr)
       else if (insn == N32_TYPE0 (MISC, N32_MISC_IRET))
 	r = 2;
     }
-  else
-    {
-      if (insn == N16_TYPE5 (RET5, REG_LP))
-	r = 3;
-    }
+  else if (insn == N16_TYPE5 (RET5, REG_LP))
+    r = 3;
+
   return r > 0;
 }
 
@@ -2445,6 +2441,94 @@ static const struct frame_base nds32_frame_base =
   nds32_frame_base_address
 };
 
+static int
+nds32_epilogue_frame_sniffer (const struct frame_unwind *self,
+			      struct frame_info *this_frame,
+			      void **this_prologue_cache)
+{
+  if (frame_relative_level (this_frame) == 0)
+    return nds32_in_function_epilogue_p (get_frame_arch (this_frame),
+					 get_frame_pc (this_frame));
+  else
+    return 0;
+}
+
+static struct nds32_unwind_cache *
+nds32_epilogue_frame_cache (struct frame_info *this_frame, void **this_cache)
+{
+  volatile struct gdb_exception ex;
+  struct nds32_unwind_cache *cache;
+  CORE_ADDR sp;
+
+  if (*this_cache)
+    return *this_cache;
+
+  cache = nds32_alloc_frame_cache (this_frame);
+  *this_cache = cache;
+
+  TRY_CATCH (ex, RETURN_MASK_ERROR)
+    {
+      /* At this point the stack looks as if we just entered the
+	 function, with the return address at the top of the
+	 stack.  */
+      sp = get_frame_register_unsigned (this_frame, NDS32_SP_REGNUM);
+      cache->prev_sp = sp;
+    }
+  if (ex.reason < 0 && ex.error != NOT_AVAILABLE_ERROR)
+    throw_exception (ex);
+
+  return cache;
+}
+
+static enum unwind_stop_reason
+nds32_epilogue_frame_unwind_stop_reason (struct frame_info *this_frame,
+					 void **this_cache)
+{
+  struct nds32_unwind_cache *cache =
+    nds32_epilogue_frame_cache (this_frame, this_cache);
+
+  if (!cache->prev_sp)
+    return UNWIND_UNAVAILABLE;
+
+  return UNWIND_NO_REASON;
+}
+
+static void
+nds32_epilogue_frame_this_id (struct frame_info *this_frame,
+			      void **this_cache, struct frame_id *this_id)
+{
+  CORE_ADDR func, base;
+  struct nds32_unwind_cache *cache =
+    nds32_epilogue_frame_cache (this_frame, this_cache);
+
+  base = cache->prev_sp;
+  func = get_frame_func (this_frame);
+
+  if (base == -1)
+    (*this_id) = frame_id_build_unavailable_stack (func);
+  else
+    (*this_id) = frame_id_build (base + 8, func);
+}
+
+static struct value *
+nds32_epilogue_frame_prev_register (struct frame_info *this_frame,
+				    void **this_cache, int regnum)
+{
+  /* Make sure we've initialized the cache.  */
+  nds32_epilogue_frame_cache (this_frame, this_cache);
+
+  return nds32_frame_prev_register (this_frame, this_cache, regnum);
+}
+
+static const struct frame_unwind nds32_epilogue_frame_unwind = {
+    NORMAL_FRAME,
+    nds32_epilogue_frame_unwind_stop_reason,
+    nds32_epilogue_frame_this_id,
+    nds32_epilogue_frame_prev_register,
+    NULL,
+    nds32_epilogue_frame_sniffer
+};
+
 /* Implement the gdbarch_overlay_update method.  */
 
 static void
@@ -2751,6 +2835,7 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_get_longjmp_target (gdbarch, nds32_get_longjmp_target);
 
   /* The order of appending is the order it check frame.  */
+  frame_unwind_append_unwinder (gdbarch, &nds32_epilogue_frame_unwind);
   dwarf2_frame_set_init_reg (gdbarch, nds32_dwarf2_frame_init_reg);
   dwarf2_append_unwinders (gdbarch);
   frame_unwind_append_unwinder (gdbarch, &nds32_frame_unwind);
