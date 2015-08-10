@@ -1331,6 +1331,7 @@ nds32_alloc_frame_cache (struct frame_info *this_frame)
   cache->fp_offset = 0;
   cache->use_frame = 0;
   cache->base = 0;
+  cache->prev_sp = -1;
 
   return cache;
 }
