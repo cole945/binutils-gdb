@@ -2198,7 +2198,8 @@ proc supports_process_record {} {
          || [istarget "i\[34567\]86-*-linux*"]
          || [istarget "aarch64*-*-linux*"]
          || [istarget "powerpc*-*-linux*"]
-         || [istarget "s390*-*-linux*"] } {
+         || [istarget "s390*-*-linux*"]
+         || [istarget "nds32*"] } {
 	return 1
     }
 
@@ -2217,7 +2218,8 @@ proc supports_reverse {} {
          || [istarget "i\[34567\]86-*-linux*"]
          || [istarget "aarch64*-*-linux*"]
          || [istarget "powerpc*-*-linux*"]
-         || [istarget "s390*-*-linux*"] } {
+         || [istarget "s390*-*-linux*"]
+         || [istarget "nds32*"] } {
 	return 1
     }
 
