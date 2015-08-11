@@ -1006,6 +1006,7 @@ nds32_pseudo_register_read (struct gdbarch *gdbarch,
 			    struct regcache *regcache, int regnum,
 			    gdb_byte *buf)
 {
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   char name_buf[8];
   gdb_byte reg_buf[8];
   int offset;
@@ -1027,9 +1028,7 @@ nds32_pseudo_register_read (struct gdbarch *gdbarch,
       else
 	offset = (regnum & 1) ? 0 : 4;
 
-      xsnprintf (name_buf, sizeof (name_buf), "fd%d", regnum >> 1);
-      fd_regnum = user_reg_map_name_to_regnum (gdbarch, name_buf,
-					       strlen (name_buf));
+      fd_regnum = tdep->fd0_regnum + (regnum >> 1);
       status = regcache_raw_read (regcache, fd_regnum, reg_buf);
       if (status == REG_VALID)
 	memcpy (buf, reg_buf + offset, 4);
