@@ -276,9 +276,11 @@ static struct reggroup *nds32_ir_reggroup;
 static struct reggroup *nds32_mr_reggroup;
 static struct reggroup *nds32_dr_reggroup;
 static struct reggroup *nds32_pfr_reggroup;
+static struct reggroup *nds32_hspr_reggroup;
 static struct reggroup *nds32_dmar_reggroup;
 static struct reggroup *nds32_racr_reggroup;
 static struct reggroup *nds32_idr_reggroup;
+static struct reggroup *nds32_secur_reggroup;
 static struct reggroup *nds32_audio_reggroup;
 
 static void
@@ -290,9 +292,11 @@ nds32_init_reggroups (void)
   nds32_mr_reggroup = reggroup_new ("mr", USER_REGGROUP);
   nds32_dr_reggroup = reggroup_new ("dr", USER_REGGROUP);
   nds32_pfr_reggroup = reggroup_new ("pfr", USER_REGGROUP);
+  nds32_hspr_reggroup = reggroup_new ("hspr", USER_REGGROUP);
   nds32_dmar_reggroup = reggroup_new ("dmar", USER_REGGROUP);
   nds32_racr_reggroup = reggroup_new ("racr", USER_REGGROUP);
   nds32_idr_reggroup = reggroup_new ("idr", USER_REGGROUP);
+  nds32_secur_reggroup = reggroup_new ("secur", USER_REGGROUP);
 
   nds32_audio_reggroup = reggroup_new ("audio", USER_REGGROUP);
 }
@@ -312,9 +316,11 @@ nds32_add_reggroups (struct gdbarch *gdbarch)
   reggroup_add (gdbarch, nds32_mr_reggroup);
   reggroup_add (gdbarch, nds32_dr_reggroup);
   reggroup_add (gdbarch, nds32_pfr_reggroup);
+  reggroup_add (gdbarch, nds32_hspr_reggroup);
   reggroup_add (gdbarch, nds32_dmar_reggroup);
   reggroup_add (gdbarch, nds32_racr_reggroup);
   reggroup_add (gdbarch, nds32_idr_reggroup);
+  reggroup_add (gdbarch, nds32_secur_reggroup);
 }
 
 /* Implement the gdbarch_register_reggroup_p method.  */
@@ -325,15 +331,16 @@ nds32_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 {
   int i;
   struct reggroup *groups[] =
-  {
+    {
       nds32_cr_reggroup, nds32_ir_reggroup, nds32_mr_reggroup,
-      nds32_dr_reggroup, nds32_pfr_reggroup, nds32_dmar_reggroup,
-      nds32_racr_reggroup, nds32_idr_reggroup
-  };
+      nds32_dr_reggroup, nds32_pfr_reggroup, nds32_hspr_reggroup,
+      nds32_dmar_reggroup, nds32_racr_reggroup, nds32_idr_reggroup,
+      nds32_secur_reggroup
+    };
   static const char *prefix[] =
-  {
-      "cr", "ir", "mr", "dr", "pfr", "dmar", "racr", "idr"
-  };
+    {
+      "cr", "ir", "mr", "dr", "pfr", "hspr", "dmar", "racr", "idr", "secur"
+    };
 
   gdb_assert (ARRAY_SIZE (groups) == ARRAY_SIZE (prefix));
 
