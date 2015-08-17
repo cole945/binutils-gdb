@@ -297,21 +297,33 @@ nds32_remote_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr,
    Map DWARF regnum from GCC to GDB regnum.  */
 
 static int
-nds32_dwarf_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int num)
+nds32_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int num)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   const int DXR = 34;
   const int FSR = 38;
   const int FDR = FSR + 32;
 
-  if (num >= 0 && num < 32)			/* R0 - R31 */
-    return num;
-  else if (num >= DXR && num < DXR + 4)		/* D0/D1 */
-    return num - DXR + NDS32_D0LO_REGNUM;
-  else if (num >= FSR && num < FSR + 32)	/* FS */
-    return num - FSR + tdep->fs0_regnum;
-  else if (num >= FDR && num < FDR + 32)	/* FD */
-    return num - FDR + tdep->fd0_regnum;
+  if (num >= 0 && num < 32)
+    {
+      /* General-purpose registers (R0 - R31).  */
+      return num;
+    }
+  else if (num >= DXR && num < DXR + 4)
+    {
+      /* Special user registers (D0/D1).  */
+      return num - DXR + NDS32_D0LO_REGNUM;
+    }
+  else if (num >= FSR && num < FSR + 32)
+    {
+      /* Single precision floating-point registers (FS0 - FS31).  */
+      return num - FSR + tdep->fs0_regnum;
+    }
+  else if (num >= FDR && num < FDR + 32)
+    {
+      /* Double precision floating-point registers (FD0 - FD31).  */
+      return num - FDR + tdep->fd0_regnum;
+    }
 
   /* No match, return a inaccessible register number.  */
   return -1;
@@ -2303,7 +2315,7 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_unwind_sp (gdbarch, nds32_unwind_sp);
   set_gdbarch_unwind_pc (gdbarch, nds32_unwind_pc);
   set_gdbarch_stack_frame_destroyed_p (gdbarch, nds32_stack_frame_destroyed_p);
-  set_gdbarch_dwarf2_reg_to_regnum (gdbarch, nds32_dwarf_dwarf2_reg_to_regnum);
+  set_gdbarch_dwarf2_reg_to_regnum (gdbarch, nds32_dwarf2_reg_to_regnum);
   set_gdbarch_register_sim_regno (gdbarch, nds32_register_sim_regno);
   set_gdbarch_push_dummy_call (gdbarch, nds32_push_dummy_call);
   set_gdbarch_return_value (gdbarch, nds32_return_value);
