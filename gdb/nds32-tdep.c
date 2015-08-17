@@ -269,57 +269,6 @@ nds32_register_sim_regno (struct gdbarch *gdbarch, int regnum)
   return LEGACY_SIM_REGNO_IGNORE;
 }
 
-/* Implement gdbarch_register_type method.
-
-   Return the GDB type object for the "standard" data type of data in
-   register REGNUM.  It get pretty messy here.  I want to specify a type
-   on a bit-field for better representation, but they cannot be done by
-   tdesc-xml.  */
-
-static struct type *
-nds32_register_type (struct gdbarch *gdbarch, int regnum)
-{
-  int num_regs = gdbarch_num_regs (gdbarch);
-  const struct builtin_type *bt = builtin_type (gdbarch);
-  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-  struct type *type;
-  const char *reg_name;
-
-  /* Type provided by target-description.  */
-  if (tdesc_has_registers (gdbarch_target_desc (gdbarch)))
-    {
-      type = tdesc_register_type (gdbarch, regnum);
-      if (type != NULL)
-	return type;
-    }
-
-  reg_name = user_reg_map_regnum_to_name (gdbarch, regnum);
-  if (reg_name == NULL)
-    reg_name = "";
-
-  /* Floating pointer registers. e.g., fs0 or fd0.  */
-  if (strlen (reg_name) >= 3 && reg_name[0] == 'f' && reg_name[2] >= '0'
-      && reg_name[2] <= '9')
-    {
-      if (reg_name[1] == 's')
-	return bt->builtin_float;
-      else if (reg_name[1] == 'd')
-	return bt->builtin_double;
-    }
-
-  /* GPRs.  */
-  if (regnum == NDS32_PC_REGNUM || regnum == NDS32_LP_REGNUM)
-    return bt->builtin_func_ptr;
-  else if (regnum == NDS32_SP_REGNUM || regnum == NDS32_FP_REGNUM
-	   || regnum == NDS32_GP_REGNUM)
-    return bt->builtin_data_ptr;
-  else if (regnum < 32)
-    return bt->builtin_int32;
-
-  /* We don't know.  Display it in hex-form.  */
-  return bt->builtin_data_ptr;
-}
-
 
 /* nds32 register groups.  */
 static struct reggroup *nds32_cr_reggroup;
@@ -410,6 +359,22 @@ nds32_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
     }
 
   return default_register_reggroup_p (gdbarch, regnum, group);
+}
+
+/* Implement the tdesc_pseudo_register_type method.  */
+
+static struct type *
+nds32_pseudo_register_type (struct gdbarch *gdbarch, int regnum)
+{
+  regnum -= gdbarch_num_regs (gdbarch);
+
+  /* Currently, only FSRs could be defined as pseudo registers.  */
+  if (regnum < gdbarch_num_pseudo_regs (gdbarch))
+    return arch_float_type (gdbarch, -1, "builtin_type_ieee_single",
+			    floatformats_ieee_single);
+
+  warning (_("Unknown nds32 pseudo register %d."), regnum);
+  return NULL;
 }
 
 /* Implement the tdesc_pseudo_register_name method.  */
@@ -2229,6 +2194,7 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
       set_gdbarch_pseudo_register_read (gdbarch, nds32_pseudo_register_read);
       set_gdbarch_pseudo_register_write (gdbarch, nds32_pseudo_register_write);
       set_tdesc_pseudo_register_name (gdbarch, nds32_pseudo_register_name);
+      set_tdesc_pseudo_register_type (gdbarch, nds32_pseudo_register_type);
     }
 
   if (tdep->fpu_freg == -1)
@@ -2282,7 +2248,6 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   /* Override tdesc_register callbacks for system registers.  */
   set_gdbarch_register_reggroup_p (gdbarch, nds32_register_reggroup_p);
-  set_gdbarch_register_type (gdbarch, nds32_register_type);
 
   set_gdbarch_sp_regnum (gdbarch, NDS32_SP_REGNUM);
   set_gdbarch_pc_regnum (gdbarch, NDS32_PC_REGNUM);
