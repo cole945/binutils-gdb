@@ -61,6 +61,8 @@ struct gdbarch_tdep
 {
   /* The guessed FPU configuration.  */
   int fpu_freg;
+  /* FSRs are defined as pseudo registers.  */
+  int use_pseudo_fsrs;
   int fs0_regnum;
   int fd0_regnum;
 

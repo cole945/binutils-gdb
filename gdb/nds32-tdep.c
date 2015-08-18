@@ -2032,6 +2032,92 @@ done:
   return print_insn_nds32 (memaddr, info);
 }
 
+/* Validate and fixed-number registers in target-description.  */
+
+static int
+nds32_preprocess_tdesc_p (const struct target_desc *tdesc,
+			  struct tdesc_arch_data *tdesc_data,
+			  struct gdbarch_tdep *tdep)
+{
+  static const char *const nds32_ta_names[] = { "r15", "ta", NULL };
+  static const char *const nds32_fp_names[] = { "r28", "fp", NULL };
+  static const char *const nds32_gp_names[] = { "r29", "gp", NULL };
+  static const char *const nds32_lp_names[] = { "r30", "lp", NULL };
+  static const char *const nds32_sp_names[] = { "r31", "sp", NULL };
+  const struct tdesc_feature *feature;
+  int i, freg = -1;
+  int valid_p;
+
+  feature = tdesc_find_feature (tdesc, "org.gnu.gdb.nds32.core");
+  if (feature == NULL)
+    return 0;
+
+  valid_p = 1;
+  /* Validate and fixed-number R0-R10.  */
+  for (i = NDS32_R0_REGNUM; i <= NDS32_R0_REGNUM + 10; i++)
+    valid_p &= tdesc_numbered_register (feature, tdesc_data, i,
+					nds32_regnames[i]);
+
+  /* Validate and fixed-number TA, FP, GP, LP, SP, PC.  */
+  valid_p &= tdesc_numbered_register_choices (feature, tdesc_data,
+					      NDS32_TA_REGNUM,
+					      nds32_ta_names);
+  valid_p &= tdesc_numbered_register_choices (feature, tdesc_data,
+					      NDS32_FP_REGNUM,
+					      nds32_fp_names);
+  valid_p &= tdesc_numbered_register_choices (feature, tdesc_data,
+					      NDS32_GP_REGNUM,
+					      nds32_gp_names);
+  valid_p &= tdesc_numbered_register_choices (feature, tdesc_data,
+					      NDS32_LP_REGNUM,
+					      nds32_lp_names);
+  valid_p &= tdesc_numbered_register_choices (feature, tdesc_data,
+					      NDS32_SP_REGNUM,
+					      nds32_sp_names);
+  valid_p &= tdesc_numbered_register (feature, tdesc_data,
+				      NDS32_PC_REGNUM, "pc");
+
+  if (!valid_p)
+    return 0;
+
+  /* Fixed-number R11-R14.  */
+  for (i = NDS32_R0_REGNUM + 11; i <= NDS32_R0_REGNUM + 14; i++)
+    tdesc_numbered_register (feature, tdesc_data, i, nds32_regnames[i]);
+
+  /* Fixed-number R16-R27.  */
+  for (i = NDS32_R0_REGNUM + 16; i <= NDS32_R0_REGNUM + 27; i++)
+    tdesc_numbered_register (feature, tdesc_data, i, nds32_regnames[i]);
+
+  /* Fixed-number D0 and D1.  */
+  for (i = NDS32_D0LO_REGNUM; i <= NDS32_D1HI_REGNUM; i++)
+    tdesc_numbered_register (feature, tdesc_data, i, nds32_regnames[i]);
+
+  /* Guess FPU configuration via existing registers.  */
+  feature = tdesc_find_feature (tdesc, "org.gnu.gdb.nds32.fpu");
+  if (feature != NULL)
+    {
+      if (tdesc_unnumbered_register (feature, "fd31"))
+	freg = 3;
+      else if (tdesc_unnumbered_register (feature, "fd15"))
+	freg = 2;
+      else if (tdesc_unnumbered_register (feature, "fd7"))
+	freg = 1;
+      else if (tdesc_unnumbered_register (feature, "fd3"))
+	freg = 0;
+    }
+
+  /* Record guessed FPU configuration.  */
+  tdep->fpu_freg = freg;
+
+  /* If FS registers are not specified in target-description, make them
+     pseudo registers of FD registers.  */
+  tdep->use_pseudo_fsrs = 0;
+  if (freg != -1 && tdesc_unnumbered_register (feature, "fs0") == 0)
+    tdep->use_pseudo_fsrs = 1;
+
+  return 1;
+}
+
 /* Callback for gdbarch_init.  */
 
 static struct gdbarch *
@@ -2042,7 +2128,7 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   struct gdbarch_list *best_arch;
   struct tdesc_arch_data *tdesc_data = NULL;
   const struct target_desc *tdesc = info.target_desc;
-  int i, maxregs, freg = -1, use_pseudo_fsrs = 0;
+  int i, maxregs;
 
   tdep = XCNEW (struct gdbarch_tdep);
 
@@ -2070,89 +2156,13 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   if (!tdesc_has_registers (tdesc))
     tdesc = tdesc_nds32;
 
+  tdesc_data = tdesc_data_alloc ();
+
+  if (!nds32_preprocess_tdesc_p (tdesc, tdesc_data, tdep))
     {
-      /* Validate and fixed-number registers in target-description.  */
-      int valid_p;
-      static const char *const nds32_ta_names[] = { "r15", "ta", NULL };
-      static const char *const nds32_fp_names[] = { "r28", "fp", NULL };
-      static const char *const nds32_gp_names[] = { "r29", "gp", NULL };
-      static const char *const nds32_lp_names[] = { "r30", "lp", NULL };
-      static const char *const nds32_sp_names[] = { "r31", "sp", NULL };
-      const struct tdesc_feature *feature;
-
-      tdesc_data = tdesc_data_alloc ();
-
-      info.tdep_info = (void *) tdesc_data;
-
-      feature = tdesc_find_feature (tdesc, "org.gnu.gdb.nds32.core");
-      if (feature == NULL)
-	return NULL;
-
-      valid_p = 1;
-      /* Validate and fixed-number R0-R10.  */
-      for (i = NDS32_R0_REGNUM; i <= NDS32_R0_REGNUM + 10; i++)
-	valid_p &= tdesc_numbered_register (feature, tdesc_data, i,
-					    nds32_regnames[i]);
-
-      /* Validate and fixed-number TA, FP, GP, LP, SP, PC.  */
-      valid_p &= tdesc_numbered_register_choices (feature, tdesc_data,
-						  NDS32_TA_REGNUM,
-						  nds32_ta_names);
-      valid_p &= tdesc_numbered_register_choices (feature, tdesc_data,
-						  NDS32_FP_REGNUM,
-						  nds32_fp_names);
-      valid_p &= tdesc_numbered_register_choices (feature, tdesc_data,
-						  NDS32_GP_REGNUM,
-						  nds32_gp_names);
-      valid_p &= tdesc_numbered_register_choices (feature, tdesc_data,
-						  NDS32_LP_REGNUM,
-						  nds32_lp_names);
-      valid_p &= tdesc_numbered_register_choices (feature, tdesc_data,
-						  NDS32_SP_REGNUM,
-						  nds32_sp_names);
-      valid_p &= tdesc_numbered_register (feature, tdesc_data,
-					  NDS32_PC_REGNUM, "pc");
-
-      if (!valid_p)
-	{
-	  tdesc_data_cleanup (tdesc_data);
-	  xfree (tdep);
-	  return NULL;
-	}
-
-      /* Fixed-number R11-R14.  */
-      for (i = NDS32_R0_REGNUM + 11; i <= NDS32_R0_REGNUM + 14; i++)
-	tdesc_numbered_register (feature, tdesc_data, i, nds32_regnames[i]);
-
-      /* Fixed-number R16-R27.  */
-      for (i = NDS32_R0_REGNUM + 16; i <= NDS32_R0_REGNUM + 27; i++)
-	tdesc_numbered_register (feature, tdesc_data, i, nds32_regnames[i]);
-
-      /* Fixed-number D0 and D1.  */
-      for (i = NDS32_D0LO_REGNUM; i <= NDS32_D1HI_REGNUM; i++)
-	tdesc_numbered_register (feature, tdesc_data, i, nds32_regnames[i]);
-
-      /* Guess FPU configuration via existing registers.  */
-      feature = tdesc_find_feature (tdesc, "org.gnu.gdb.nds32.fpu");
-      if (feature != NULL)
-	{
-	  if (tdesc_unnumbered_register (feature, "fd31"))
-	    freg = 3;
-	  else if (tdesc_unnumbered_register (feature, "fd15"))
-	    freg = 2;
-	  else if (tdesc_unnumbered_register (feature, "fd7"))
-	    freg = 1;
-	  else if (tdesc_unnumbered_register (feature, "fd3"))
-	    freg = 0;
-	}
-
-      /* Record guessed FPU configuration.  */
-      tdep->fpu_freg = freg;
-
-      /* If FS registers do not exist, make them pseudo registers
-	 of FD registers.  */
-      if (freg != -1 && tdesc_unnumbered_register (feature, "fs0") == 0)
-	use_pseudo_fsrs = 1;
+      tdesc_data_cleanup (tdesc_data);
+      xfree (tdep);
+      return NULL;
     }
 
   /* If there is already a candidate, use it.  */
@@ -2171,6 +2181,9 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
       if (idep->fpu_freg != tdep->fpu_freg)
 	continue;
 
+      if (idep->use_pseudo_fsrs != tdep->use_pseudo_fsrs)
+	continue;
+
       /* Found a match.  */
       break;
     }
@@ -2185,9 +2198,9 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   /* Allocate space for the new architecture.  */
   gdbarch = gdbarch_alloc (&info, tdep);
 
-  if (use_pseudo_fsrs)
+  if (tdep->use_pseudo_fsrs)
     {
-      int num_fsr_regs = (1 << freg) * 8;
+      int num_fsr_regs = (1 << tdep->fpu_freg) * 8;
 
       if (num_fsr_regs > 32)
 	num_fsr_regs = 32;
@@ -2246,6 +2259,8 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   nds32_add_reggroups (gdbarch);
 
+  /* Hook in ABI-specific overrides, if they have been registered.  */
+  info.tdep_info = (void *) tdesc_data;
   gdbarch_init_osabi (info, gdbarch);
 
   /* Override tdesc_register callbacks for system registers.  */
