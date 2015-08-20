@@ -1194,24 +1194,6 @@ nds32_frame_unwind_cache (struct frame_info *this_frame,
   return info;
 }
 
-/* Implement the gdbarch_read_pc method.  */
-
-static CORE_ADDR
-nds32_read_pc (struct regcache *regcache)
-{
-  ULONGEST pc;
-  regcache_cooked_read_unsigned (regcache, NDS32_PC_REGNUM, &pc);
-  return pc;
-}
-
-/* Implement the gdbarch_write_pc method.  */
-
-static void
-nds32_write_pc (struct regcache *regcache, CORE_ADDR val)
-{
-  regcache_cooked_write_unsigned (regcache, NDS32_PC_REGNUM, val);
-}
-
 /* Implement the gdbarch_unwind_pc method.  */
 
 static CORE_ADDR
@@ -2274,8 +2256,6 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   set_gdbarch_sp_regnum (gdbarch, NDS32_SP_REGNUM);
   set_gdbarch_pc_regnum (gdbarch, NDS32_PC_REGNUM);
-  set_gdbarch_read_pc (gdbarch, nds32_read_pc);
-  set_gdbarch_write_pc (gdbarch, nds32_write_pc);
   set_gdbarch_unwind_sp (gdbarch, nds32_unwind_sp);
   set_gdbarch_unwind_pc (gdbarch, nds32_unwind_pc);
   set_gdbarch_stack_frame_destroyed_p (gdbarch, nds32_stack_frame_destroyed_p);
