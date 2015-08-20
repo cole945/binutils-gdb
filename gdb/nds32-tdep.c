@@ -1194,23 +1194,6 @@ nds32_frame_unwind_cache (struct frame_info *this_frame,
   return info;
 }
 
-/* Implement the gdbarch_skip_permanent_breakpoint method.  */
-
-static void
-nds32_skip_permanent_breakpoint (struct regcache *regcache)
-{
-  gdb_byte insn[2];
-  CORE_ADDR current_pc = regcache_read_pc (regcache);
-
-  target_read_memory (current_pc, insn, sizeof (insn));
-
-  if (memcmp (insn, NDS32_BREAK16, sizeof (insn)) != 0)
-    return;
-
-  current_pc += 2;
-  regcache_write_pc (regcache, current_pc);
-}
-
 /* Implement the gdbarch_read_pc method.  */
 
 static CORE_ADDR
@@ -2312,8 +2295,6 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
      PUSH_DUMMY_CALL, and saved by generic_save_dummy_frame_tos.  */
   set_gdbarch_dummy_id (gdbarch, nds32_dummy_id);
   set_gdbarch_print_insn (gdbarch, gdb_print_insn_nds32);
-  set_gdbarch_skip_permanent_breakpoint (gdbarch,
-					 nds32_skip_permanent_breakpoint);
   /* Support simple overlay manager.  */
   set_gdbarch_overlay_update (gdbarch, nds32_simple_overlay_update);
 
