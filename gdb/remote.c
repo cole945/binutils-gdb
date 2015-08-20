@@ -11145,9 +11145,7 @@ remote_download_tracepoint (struct target_ops *self, struct bp_location *loc)
 	  else
 	    /* If it passed validation at definition but fails now,
 	       something is very wrong.  */
-	    internal_error (__FILE__, __LINE__,
-			    _("Fast tracepoint not "
-			      "valid during download"));
+	    error (_("Fast tracepoint not valid during download"));
 	}
       else
 	/* Fast tracepoints are functionally identical to regular

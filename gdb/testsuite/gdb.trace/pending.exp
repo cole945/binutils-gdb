@@ -65,6 +65,7 @@ proc pending_tracepoint_resolved { trace_type } {
 	global binfile
 	global srcfile
 	global lib_sl1
+	global gdb_prompt
 
 	# Start with a fresh gdb.
 	gdb_exit
@@ -89,12 +90,22 @@ proc pending_tracepoint_resolved { trace_type } {
 	    "breakpoint function"
 
 	gdb_run_cmd
-	gdb_test "" "Breakpoint 2, main.*"
+	set test "Breakpoint 2, main"
+	set yesno "y"
+	gdb_test_multiple "" $test {
+	    -re ".*May not have a fast tracepoint at.*$test.*" {
+		set yesno "n"
+		pass "$test (invalid)"
+	    }
+	    -re "Breakpoint.*main.*at.*$gdb_prompt $" {
+		pass $test
+	    }
+	}
 
 	# Run to main which should resolve a pending tracepoint
 	gdb_test "info trace" \
 	    "Num     Type\[ \]+Disp Enb Address\[ \]+What.*
-\[0-9\]+\[\t \]+\(fast |\)tracepoint\[ \]+keep y.*pendfunc.*" \
+\[0-9\]+\[\t \]+\(fast |\)tracepoint\[ \]+keep $yesno.*pendfunc.*" \
 	    "single tracepoint info"
     }
 }
@@ -151,7 +162,16 @@ proc pending_tracepoint_works { trace_type } {
 		    fail $test
 		}
 	    }
-
+	    -re "No tracepoints enabled.*$gdb_prompt $" {
+		if [string equal $trace_type "ftrace"] {
+		    # There is no valid tracepoint enabled.
+		    pass "$test (no tracepoints)"
+		    # Skip the rest of the tests.
+		    return
+		} else {
+		    fail $test
+		}
+	    }
 	}
 
 	gdb_test "continue" "Continuing.\r\n\r\nBreakpoint.*marker.*at.*$srcfile.*" \
@@ -215,6 +235,18 @@ proc pending_tracepoint_resolved_during_trace { trace_type } \
 		# fast tracepoint (e.g., jump pad too far from
 		# tracepoint).
 		pass "$test (too far)"
+		# Skip the rest of the tests.
+		return
+	    } else {
+		fail $test
+	    }
+	}
+	-re "May not have a fast tracepoint at.*$gdb_prompt $" {
+	    if [string equal $trace_type "ftrace"] {
+		# Expected if the target was unable to install the
+		# fast tracepoint (e.g., the location is invalid for the
+		# tracepoint).
+		pass "$test (invalid)"
 		# Skip the rest of the tests.
 		return
 	    } else {
@@ -288,6 +320,18 @@ proc pending_tracepoint_installed_during_trace { trace_type } \
 		# fast tracepoint (e.g., jump pad too far from
 		# tracepoint).
 		pass "$test (too far)"
+		# Skip the rest of the tests.
+		return
+	    } else {
+		fail $test
+	    }
+	}
+	-re "May not have a fast tracepoint at.*$gdb_prompt $" {
+	    if [string equal $trace_type "ftrace"] {
+		# Expected if the target was unable to install the
+		# fast tracepoint (e.g., the location is invalid for the
+		# tracepoint).
+		pass "$test (invalid)"
 		# Skip the rest of the tests.
 		return
 	    } else {
@@ -474,6 +518,18 @@ proc pending_tracepoint_with_action_resolved { trace_type } \
             } else {
 		fail $test
             }
+	}
+	-re "May not have a fast tracepoint at.*$gdb_prompt $" {
+	    if [string equal $trace_type "ftrace"] {
+		# Expected if the target was unable to install the
+		# fast tracepoint (e.g., the location is invalid for the
+		# tracepoint).
+		pass "$test (invalid)"
+		# Skip the rest of the tests.
+		return
+	    } else {
+		fail $test
+	    }
 	}
 	-re "Continuing.\r\n\r\nBreakpoint.*marker.*at.*$srcfile.*$gdb_prompt $" {
 	    pass "continue to marker 2"

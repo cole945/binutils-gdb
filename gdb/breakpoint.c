@@ -14148,6 +14148,28 @@ update_breakpoint_locations (struct breakpoint *b,
   if (!locations_are_equal (existing_locations, b->loc))
     observer_notify_breakpoint_modified (b);
 
+  /* Check fast tracepoints after symbols have been re-loaded.
+     For example, a pending tracepoint just becomes available after
+     a new shared object being loaded.  We didn't check it before,
+     because we have no idea where it is.  */
+  if (b->type == bp_fast_tracepoint)
+    {
+      TRY
+	{
+	  check_fast_tracepoint_sals (b->gdbarch, &sals);
+	}
+      CATCH (e, RETURN_MASK_ERROR)
+	{
+	  /* If that tracepoint cannot be inserted, disable it,
+	     so update_global_location_list will not install it
+	     to the target.  */
+	  b->enable_state = bp_disabled;
+	  exception_fprintf (gdb_stderr, e, _("Invalid tracepoint %d: "),
+			     b->number);
+	}
+      END_CATCH
+    }
+
   update_global_location_list (UGLL_MAY_INSERT);
 }
 
