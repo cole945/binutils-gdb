@@ -269,9 +269,6 @@ static const gdb_byte *
 nds32_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr,
 			  int *lenptr)
 {
-  gdb_assert (pcptr != NULL);
-  gdb_assert (lenptr != NULL);
-
   /* Always insert 16-bit break instruction.  */
   *lenptr = 2;
   return NDS32_BREAK16;
