@@ -274,22 +274,6 @@ nds32_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr,
   return NDS32_BREAK16;
 }
 
-/* Implement the gdbarch_remote_breakpoint_from_pc method.  */
-
-static void
-nds32_remote_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr,
-				 int *kindptr)
-{
-  if ((*pcptr) & 1)
-    error (_("bad address %p for inserting breakpoint"), (void *) *pcptr);
-
-  /* ICEman/AICE have trouble on reading memory when the pcptr is P/A,
-     but CPU is in V/A mode.  This code prevent GDB from reading memory.
-     ICEman will read memory itself if needed.  */
-
-  *kindptr = 2;
-}
-
 /* Implement the gdbarch_dwarf2_reg_to_regnum method.
    Map DWARF regnum from GCC to GDB regnum.  */
 
@@ -2319,8 +2303,6 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_skip_prologue (gdbarch, nds32_skip_prologue);
   set_gdbarch_inner_than (gdbarch, core_addr_lessthan);
   set_gdbarch_breakpoint_from_pc (gdbarch, nds32_breakpoint_from_pc);
-  set_gdbarch_remote_breakpoint_from_pc (gdbarch,
-					 nds32_remote_breakpoint_from_pc);
 
   set_gdbarch_frame_align (gdbarch, nds32_frame_align);
   frame_base_set_default (gdbarch, &nds32_frame_base);
