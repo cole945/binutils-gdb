@@ -162,7 +162,6 @@ SFILES=	$(srcdir)/gdbreplay.c $(srcdir)/inferiors.c $(srcdir)/dll.c \
 	$(srcdir)/linux-ia64-low.c $(srcdir)/linux-low.c \
 	$(srcdir)/linux-m32r-low.c \
 	$(srcdir)/linux-m68k-low.c $(srcdir)/linux-mips-low.c \
-	$(srcdir)/linux-nds32-low.c \
 	$(srcdir)/linux-nios2-low.c \
 	$(srcdir)/linux-ppc-low.c $(srcdir)/nat/ppc-linux.c \
 	$(srcdir)/linux-s390-low.c \
