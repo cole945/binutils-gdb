@@ -1792,28 +1792,6 @@ static const struct frame_unwind nds32_frame_unwind =
   NULL /* prev_arch */
 };
 
-/* The register in previous frame.  For example, the previous PC is
-   current LP.  */
-
-static struct value *
-nds32_dwarf2_prev_register (struct frame_info *this_frame,
-			    void **this_cache, int regnum)
-{
-  CORE_ADDR lp;
-
-  switch (regnum)
-    {
-    case NDS32_PC_REGNUM:
-      lp = frame_unwind_register_unsigned (this_frame, NDS32_LP_REGNUM);
-      return frame_unwind_got_constant (this_frame, regnum, lp);
-    default:
-      internal_error (__FILE__, __LINE__,
-		      _("Unexpected register %d"), regnum);
-    }
-
-   return NULL;
-}
-
 /* Callback of dwarf2_frame_set_init_reg.  */
 
 static void
@@ -1824,8 +1802,7 @@ nds32_dwarf2_frame_init_reg (struct gdbarch *gdbarch, int regnum,
   switch (regnum)
     {
     case NDS32_PC_REGNUM:
-      reg->how = DWARF2_FRAME_REG_FN;
-      reg->loc.fn = nds32_dwarf2_prev_register;
+      reg->how = DWARF2_FRAME_REG_RA;
       break;
     case NDS32_SP_REGNUM:
       reg->how = DWARF2_FRAME_REG_CFA;
