@@ -1822,6 +1822,18 @@ nds32_frame_prev_register (struct frame_info *this_frame,
   return trad_frame_get_prev_register (this_frame, cache->saved_regs, regnum);
 }
 
+static const struct frame_unwind nds32_frame_unwind =
+{
+  NORMAL_FRAME,
+  default_frame_unwind_stop_reason,
+  nds32_frame_this_id,
+  nds32_frame_prev_register,
+  NULL /* unwind_data */,
+  default_frame_sniffer,
+  NULL /* dealloc_cache */,
+  NULL /* prev_arch */
+};
+
 /* The register in previous frame.  For example, the previous PC is
    current LP.  */
 
@@ -1863,6 +1875,23 @@ nds32_dwarf2_frame_init_reg (struct gdbarch *gdbarch, int regnum,
     }
 }
 
+static CORE_ADDR
+nds32_frame_base_address (struct frame_info *this_frame, void **this_cache)
+{
+  struct nds32_unwind_cache *info
+    = nds32_frame_unwind_cache (this_frame, this_cache);
+
+  return info->base;
+}
+
+static const struct frame_base nds32_frame_base =
+{
+  &nds32_frame_unwind,
+  nds32_frame_base_address,
+  nds32_frame_base_address,
+  nds32_frame_base_address
+};
+
 /* Implement the gdbarch_get_longjmp_target method.  */
 
 static int
@@ -1885,36 +1914,6 @@ nds32_get_longjmp_target (struct frame_info *frame, CORE_ADDR *pc)
 
   return 1;
 }
-
-static const struct frame_unwind nds32_frame_unwind =
-{
-  NORMAL_FRAME,
-  default_frame_unwind_stop_reason,
-  nds32_frame_this_id,
-  nds32_frame_prev_register,
-  NULL /* unwind_data */,
-  default_frame_sniffer,
-  NULL /* dealloc_cache */,
-  NULL /* prev_arch */
-};
-
-static CORE_ADDR
-nds32_frame_base_address (struct frame_info *this_frame, void **this_cache)
-{
-  struct nds32_unwind_cache *info;
-
-  info = nds32_frame_unwind_cache (this_frame, this_cache);
-
-  return info->base;
-}
-
-static const struct frame_base nds32_frame_base =
-{
-  &nds32_frame_unwind,
-  nds32_frame_base_address,
-  nds32_frame_base_address,
-  nds32_frame_base_address
-};
 
 static int
 nds32_epilogue_frame_sniffer (const struct frame_unwind *self,
