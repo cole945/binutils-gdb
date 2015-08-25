@@ -1792,24 +1792,6 @@ static const struct frame_unwind nds32_frame_unwind =
   NULL /* prev_arch */
 };
 
-/* Callback of dwarf2_frame_set_init_reg.  */
-
-static void
-nds32_dwarf2_frame_init_reg (struct gdbarch *gdbarch, int regnum,
-			     struct dwarf2_frame_state_reg *reg,
-			     struct frame_info *this_frame)
-{
-  switch (regnum)
-    {
-    case NDS32_PC_REGNUM:
-      reg->how = DWARF2_FRAME_REG_RA;
-      break;
-    case NDS32_SP_REGNUM:
-      reg->how = DWARF2_FRAME_REG_CFA;
-      break;
-    }
-}
-
 static CORE_ADDR
 nds32_frame_base_address (struct frame_info *this_frame, void **this_cache)
 {
@@ -2260,7 +2242,6 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   /* The order of appending is the order it check frame.  */
   frame_unwind_append_unwinder (gdbarch, &nds32_epilogue_frame_unwind);
-  dwarf2_frame_set_init_reg (gdbarch, nds32_dwarf2_frame_init_reg);
   dwarf2_append_unwinders (gdbarch);
   frame_unwind_append_unwinder (gdbarch, &nds32_frame_unwind);
   frame_base_append_sniffer (gdbarch, dwarf2_frame_base_sniffer);
