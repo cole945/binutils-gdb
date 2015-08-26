@@ -59,7 +59,6 @@ enum nds32_regnum
   NDS32_SIM_NUM_REGS,
 };
 
-struct htab;
 struct gdbarch_tdep
 {
   /* The configuration of FPU FREG.  */
@@ -71,8 +70,5 @@ struct gdbarch_tdep
   int abi_split;
   /* Set if fs0-fs5 are used to pass arguments.  */
   int abi_use_fpr;
-
-  /* Type table for registers.  */
-  struct htab *type_tab;
 };
 #endif
