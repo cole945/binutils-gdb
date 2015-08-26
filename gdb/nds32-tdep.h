@@ -74,9 +74,6 @@ struct gdbarch_tdep
   /* The guessed number of FSRs implemented.  */
   int num_fsr_regs;
 
-  /* Large arguments are split between registers and stack.  */
-  int abi_split;
-  /* Set if fs0-fs5 are used to pass arguments.  */
-  int abi_use_fpr;
+  int abi;
 };
 #endif

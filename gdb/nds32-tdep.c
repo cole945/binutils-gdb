@@ -1266,6 +1266,24 @@ nds32_type_align (struct type *type)
   return align;
 }
 
+/* Helper function for NDS32 ABI.  Return true if FPRs can be used
+   to pass function arguments and return value.  */
+
+static int
+nds32_abi_use_fpr (int abi)
+{
+  return abi == E_NDS_ABI_V2FP_PLUS;
+}
+
+/* Helper function for NDS32 ABI.  Return true if GPRs and stack
+   can be used together to pass an argument.  */
+
+static int
+nds32_abi_split (int abi)
+{
+  return abi == E_NDS_ABI_AABI;
+}
+
 /* Implement the gdbarch_push_dummy_call method.  */
 
 static CORE_ADDR
@@ -1285,8 +1303,10 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int fs0_regnum = -1, fd0_regnum = -1;
   struct type *func_type = value_type (function);
+  int abi_use_fpr = nds32_abi_use_fpr (tdep->abi);
+  int abi_split = nds32_abi_split (tdep->abi);
 
-  if (tdep->abi_use_fpr)
+  if (abi_use_fpr)
     {
       /* Use FP registers to pass arguments.  */
       fs0_regnum = tdep->fs0_regnum;
@@ -1347,7 +1367,7 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 	 and then va_arg fetch arguments in stack.
 	 Therefore, we don't have to handle variadic function specially.  */
 
-      if (TYPE_VARARGS (func_type) && tdep->abi_use_fpr
+      if (TYPE_VARARGS (func_type) && abi_use_fpr
 	  && i >= TYPE_NFIELDS (func_type))
 	{
 	  /* Variadic function is handled differently between ABI2 and ABI2FP+
@@ -1360,7 +1380,7 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 
       /* Once we start using stack, all arguments should go to stack
 	 When use_fpr, all flt must go to fs/fd; otherwise go to stack.  */
-      if (tdep->abi_use_fpr && typecode == TYPE_CODE_FLT)
+      if (abi_use_fpr && typecode == TYPE_CODE_FLT)
 	{
 	  /* Adjust alignment.  */
 	  if ((align >> 2) > 0)
@@ -1368,7 +1388,7 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 
 	  if (foff < REND)
 	    {
-	      if (tdep->abi_use_fpr && fs0_regnum == -1)
+	      if (abi_use_fpr && fs0_regnum == -1)
 		goto error_no_fpr;
 
 	      switch (len)
@@ -1395,7 +1415,7 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 	  /* Adjust alignment, and only adjust one time for one argument.  */
 	  if ((align >> 2) > 0)
 	    goff = align_up (goff, align >> 2);
-	  if (!tdep->abi_split && len > (REND - goff) * 4)
+	  if (!abi_split && len > (REND - goff) * 4)
 	    goff = REND;
 	}
 
@@ -1446,7 +1466,7 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
       while (len > 0)
 	{
 	  if (soff
-	      || (typecode == TYPE_CODE_FLT && tdep->abi_use_fpr && foff == REND)
+	      || (typecode == TYPE_CODE_FLT && abi_use_fpr && foff == REND)
 	      || goff == REND)
 	    {
 	      int rlen = (len > 4) ? 4 : len;
@@ -1493,6 +1513,7 @@ nds32_extract_return_value (struct type *type, struct regcache *regcache,
   int typecode = TYPE_CODE (type);
   struct gdbarch *gdbarch = get_regcache_arch (regcache);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  int abi_use_fpr = nds32_abi_use_fpr (tdep->abi);
 
   /* Although struct are returned in r0/r1 registers, but struct have
      only one single/double floating-point member are returned in FS/FD
@@ -1501,7 +1522,7 @@ nds32_extract_return_value (struct type *type, struct regcache *regcache,
   if (nds32_float_in_struct (type))
     typecode = TYPE_CODE_FLT;
 
-  if (typecode == TYPE_CODE_FLT && tdep->abi_use_fpr)
+  if (typecode == TYPE_CODE_FLT && abi_use_fpr)
     {
       if (len == 4)
 	regcache_cooked_read (regcache, tdep->fs0_regnum, readbuf);
@@ -1586,6 +1607,7 @@ nds32_store_return_value (struct type *type, struct regcache *regcache,
   int typecode = TYPE_CODE (type);
   struct gdbarch *gdbarch = get_regcache_arch (regcache);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  int abi_use_fpr = nds32_abi_use_fpr (tdep->abi);
 
   /* Although struct are returned in r0/r1 registers, but struct have
      only one single/double floating-point member are returned in FS/FD
@@ -1594,7 +1616,7 @@ nds32_store_return_value (struct type *type, struct regcache *regcache,
   if (nds32_float_in_struct (type))
     typecode = TYPE_CODE_FLT;
 
-  if (typecode == TYPE_CODE_FLT && tdep->abi_use_fpr)
+  if (typecode == TYPE_CODE_FLT && abi_use_fpr)
     {
       if (len == 4)
 	regcache_cooked_write (regcache, tdep->fs0_regnum, writebuf);
@@ -2115,25 +2137,12 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   tdep = XCNEW (struct gdbarch_tdep);
 
-  /* Extract the elf_flags, if available.  */
+  /* Extract the elf_flags if available.  */
+  tdep->abi = E_NDS_ABI_AABI;
   if (info.abfd && bfd_get_flavour (info.abfd) == bfd_target_elf_flavour)
     {
       int eflags = elf_elfheader (info.abfd)->e_flags;
-      int nds32_abi = eflags & EF_NDS_ABI;
-
-      /* Split large arguments by default.  */
-      tdep->abi_split = TRUE;
-      /* Do not use FPRs by default.  */
-      tdep->abi_use_fpr = FALSE;
-      switch (nds32_abi)
-	{
-	case E_NDS_ABI_V2FP:
-	case E_NDS_ABI_V2FP_PLUS:
-	  tdep->abi_use_fpr = TRUE;
-	  /* Fall-through.  */
-	case E_NDS_ABI_V2:
-	  tdep->abi_split = FALSE;
-	}
+      tdep->abi = eflags & EF_NDS_ABI;
     }
 
   if (!tdesc_has_registers (tdesc))
@@ -2155,9 +2164,7 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
     {
       struct gdbarch_tdep *idep = gdbarch_tdep (best_arch->gdbarch);
 
-      if (tdep->abi_split != idep->abi_split)
-	continue;
-      if (tdep->abi_use_fpr != idep->abi_use_fpr)
+      if (idep->abi != tdep->abi)
 	continue;
 
       /* Compare FPU configuration.  */
