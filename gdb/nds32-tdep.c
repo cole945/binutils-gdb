@@ -1537,16 +1537,15 @@ error_no_fpr:
   error (_("Fail to call. FS0-FS5 is required."));
 }
 
-/* Extract the value to be returned from REGCACHE and copy it into
-   REGBUF.  */
+/* Read, for architecture GDBARCH, a function return value of TYPE
+   from REGCACHE, and copy that into VALBUF.  */
 
 static void
-nds32_extract_return_value (struct type *type, struct regcache *regcache,
-			    gdb_byte *readbuf)
+nds32_extract_return_value (struct gdbarch *gdbarch, struct type *type,
+			    struct regcache *regcache, gdb_byte *valbuf)
 {
   int len = TYPE_LENGTH (type);
   int typecode = TYPE_CODE (type);
-  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int abi_use_fpr = nds32_abi_use_fpr (tdep->abi);
 
@@ -1560,9 +1559,9 @@ nds32_extract_return_value (struct type *type, struct regcache *regcache,
   if (typecode == TYPE_CODE_FLT && abi_use_fpr)
     {
       if (len == 4)
-	regcache_cooked_read (regcache, tdep->fs0_regnum, readbuf);
+	regcache_cooked_read (regcache, tdep->fs0_regnum, valbuf);
       else if (len == 8)
-	regcache_cooked_read (regcache, tdep->fd0_regnum, readbuf);
+	regcache_cooked_read (regcache, tdep->fd0_regnum, valbuf);
       else
 	internal_error (__FILE__, __LINE__,
 			_("Cannot extract return value of %d bytes "
@@ -1601,10 +1600,10 @@ nds32_extract_return_value (struct type *type, struct regcache *regcache,
 	{
 	  if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
 	    regcache_raw_read_part (regcache, NDS32_R0_REGNUM, 4 - len, len,
-				    readbuf);
+				    valbuf);
 	  else
 	    regcache_raw_read_part (regcache, NDS32_R0_REGNUM, 0, len,
-				    readbuf);
+				    valbuf);
 	}
       else if (len <= 8)
 	{
@@ -1613,16 +1612,16 @@ nds32_extract_return_value (struct type *type, struct regcache *regcache,
 	  if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
 	    {
 	      regcache_raw_read_part (regcache, NDS32_R0_REGNUM, 4 - partial,
-				      partial, readbuf);
+				      partial, valbuf);
 	      regcache_raw_read (regcache, NDS32_R0_REGNUM + 1,
-				 readbuf + partial);
+				 valbuf + partial);
 
 	    }
 	  else
 	    {
-	      regcache_raw_read (regcache, NDS32_R0_REGNUM, readbuf);
+	      regcache_raw_read (regcache, NDS32_R0_REGNUM, valbuf);
 	      regcache_raw_read_part (regcache, NDS32_R0_REGNUM + 1, 0,
-				      partial, readbuf + 4);
+				      partial, valbuf + 4);
 	    }
 	}
       else
@@ -1632,15 +1631,15 @@ nds32_extract_return_value (struct type *type, struct regcache *regcache,
     }
 }
 
-/* Store the return value of TYPE in WRITEBUF into REGCACHE.  */
+/* Write, for architecture GDBARCH, a function return value of TYPE
+   from VALBUF into REGCACHE.  */
 
 static void
-nds32_store_return_value (struct type *type, struct regcache *regcache,
-			  const gdb_byte *writebuf)
+nds32_store_return_value (struct gdbarch *gdbarch, struct type *type,
+			  struct regcache *regcache, const gdb_byte *valbuf)
 {
   int len = TYPE_LENGTH (type);
   int typecode = TYPE_CODE (type);
-  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int abi_use_fpr = nds32_abi_use_fpr (tdep->abi);
 
@@ -1654,9 +1653,9 @@ nds32_store_return_value (struct type *type, struct regcache *regcache,
   if (typecode == TYPE_CODE_FLT && abi_use_fpr)
     {
       if (len == 4)
-	regcache_cooked_write (regcache, tdep->fs0_regnum, writebuf);
+	regcache_cooked_write (regcache, tdep->fs0_regnum, valbuf);
       else if (len == 8)
-	regcache_cooked_write (regcache, tdep->fd0_regnum, writebuf);
+	regcache_cooked_write (regcache, tdep->fd0_regnum, valbuf);
       else
 	internal_error (__FILE__, __LINE__,
 			_("Cannot store return value of %d bytes long "
@@ -1669,10 +1668,10 @@ nds32_store_return_value (struct type *type, struct regcache *regcache,
 	{
 	  if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
 	    regcache_raw_write_part (regcache, NDS32_R0_REGNUM, 4 - len, len,
-				     writebuf);
+				     valbuf);
 	  else
 	    regcache_raw_write_part (regcache, NDS32_R0_REGNUM, 0, len,
-				     writebuf);
+				     valbuf);
 	}
       else if (len <= 8)
 	{
@@ -1681,16 +1680,16 @@ nds32_store_return_value (struct type *type, struct regcache *regcache,
 	  if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
 	    {
 	      regcache_raw_write_part (regcache, NDS32_R0_REGNUM, 4 - partial,
-				       partial, writebuf);
+				       partial, valbuf);
 	      regcache_raw_write (regcache, NDS32_R0_REGNUM + 1,
-				  writebuf + partial);
+				  valbuf + partial);
 
 	    }
 	  else
 	    {
-	      regcache_raw_write (regcache, NDS32_R0_REGNUM, writebuf);
+	      regcache_raw_write (regcache, NDS32_R0_REGNUM, valbuf);
 	      regcache_raw_write_part (regcache, NDS32_R0_REGNUM + 1, 0,
-				       partial, writebuf + 4);
+				       partial, valbuf + 4);
 	    }
 	}
       else
@@ -1700,7 +1699,11 @@ nds32_store_return_value (struct type *type, struct regcache *regcache,
     }
 }
 
-/* Implement the gdbarch_return_value method.  */
+/* Determine, for architecture GDBARCH, how a return value of TYPE
+   should be returned.  If it is supposed to be returned in registers,
+   and READBUF is non-zero, read the appropriate value from REGCACHE,
+   and copy it into READBUF.  If WRITEBUF is non-zero, write the value
+   from WRITEBUF into REGCACHE.  */
 
 static enum return_value_convention
 nds32_return_value (struct gdbarch *gdbarch, struct value *func_type,
@@ -1713,12 +1716,11 @@ nds32_return_value (struct gdbarch *gdbarch, struct value *func_type,
     }
   else
     {
-      /* `readbuf' is used for 'call' to get the return value.
-	 `writebuf' is used for 'return' to set the return value.  */
       if (readbuf != NULL)
-	nds32_extract_return_value (type, regcache, readbuf);
+	nds32_extract_return_value (gdbarch, type, regcache, readbuf);
       if (writebuf != NULL)
-	nds32_store_return_value (type, regcache, writebuf);
+	nds32_store_return_value (gdbarch, type, regcache, writebuf);
+
       return RETURN_VALUE_REGISTER_CONVENTION;
     }
 }
