@@ -1226,25 +1226,29 @@ nds32_unwind_sp (struct gdbarch *gdbarch, struct frame_info *this_frame)
   return frame_unwind_register_unsigned (this_frame, NDS32_SP_REGNUM);
 }
 
-/* If these is exactly one float point type field in the struct,
-   the alignment of the struct is the size of the float pointer type.  */
+/* Floating type and struct type that has only one floating type member
+   can pass value using FPU registers (when FPU ABI is used).  */
 
 static int
-nds32_float_in_struct (struct type *type)
+nds32_check_calling_use_fpr (struct type *type)
 {
-  struct type *actual_type;
+  struct type *t;
+  enum type_code typecode;
 
-  type = check_typedef (type);
-  if (TYPE_CODE (type) != TYPE_CODE_STRUCT || TYPE_NFIELDS (type) != 1)
-    return 0;
-
-  actual_type = check_typedef (TYPE_FIELD_TYPE (type, 0));
-  if (TYPE_CODE (actual_type) == TYPE_CODE_FLT)
+  t = type;
+  while (1)
     {
-      gdb_assert (TYPE_LENGTH (type) == 8 || TYPE_LENGTH (type) == 4);
-      return TYPE_LENGTH (type);
+      t = check_typedef (t);
+      typecode = TYPE_CODE (t);
+      if (typecode != TYPE_CODE_STRUCT)
+	break;
+      else if (TYPE_NFIELDS (t) != 1)
+	return 0;
+      else
+	t = TYPE_FIELD_TYPE (t, 0);
     }
-  return 0;
+
+  return typecode == TYPE_CODE_FLT;
 }
 
 /* Get the alignment of the type.
@@ -1332,7 +1336,6 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   int foff = 0;			/* Current fpr for argument.  */
   int soff = 0;			/* Current stack offset.  */
   int i;
-  enum type_code typecode;
   CORE_ADDR regval;
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
@@ -1387,15 +1390,12 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
       const gdb_byte *val;
       int align, len;
       struct type *type;
+      int calling_use_fpr;
 
       type = value_type (args[i]);
-      typecode = TYPE_CODE (type);
-      align = nds32_float_in_struct (type);
-      if (align)
-	typecode = TYPE_CODE_FLT;
-      else
-	align = nds32_type_align (type);
+      calling_use_fpr = nds32_check_calling_use_fpr (type);
       len = TYPE_LENGTH (type);
+      align = nds32_type_align (type);
 
       /* For current ABI, the caller pushes arguments in registers,
 	 callee stores unnamed arguments in stack,
@@ -1415,7 +1415,7 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 
       /* Once we start using stack, all arguments should go to stack
 	 When use_fpr, all flt must go to fs/fd; otherwise go to stack.  */
-      if (abi_use_fpr && typecode == TYPE_CODE_FLT)
+      if (abi_use_fpr && calling_use_fpr)
 	{
 	  /* Adjust alignment.  */
 	  if ((align >> 2) > 0)
@@ -1501,7 +1501,7 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
       while (len > 0)
 	{
 	  if (soff
-	      || (typecode == TYPE_CODE_FLT && abi_use_fpr && foff == REND)
+	      || (abi_use_fpr && calling_use_fpr && foff == REND)
 	      || goff == REND)
 	    {
 	      int rlen = (len > 4) ? 4 : len;
@@ -1544,19 +1544,16 @@ static void
 nds32_extract_return_value (struct gdbarch *gdbarch, struct type *type,
 			    struct regcache *regcache, gdb_byte *valbuf)
 {
-  int len = TYPE_LENGTH (type);
-  int typecode = TYPE_CODE (type);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int abi_use_fpr = nds32_abi_use_fpr (tdep->abi);
+  int calling_use_fpr;
+  int len;
 
-  /* Although struct are returned in r0/r1 registers, but struct have
-     only one single/double floating-point member are returned in FS/FD
-     registers.  */
-  if (nds32_float_in_struct (type))
-    typecode = TYPE_CODE_FLT;
+  calling_use_fpr = nds32_check_calling_use_fpr (type);
+  len = TYPE_LENGTH (type);
 
-  if (typecode == TYPE_CODE_FLT && abi_use_fpr)
+  if (abi_use_fpr && calling_use_fpr)
     {
       if (len == 4)
 	regcache_cooked_read (regcache, tdep->fs0_regnum, valbuf);
@@ -1628,19 +1625,16 @@ static void
 nds32_store_return_value (struct gdbarch *gdbarch, struct type *type,
 			  struct regcache *regcache, const gdb_byte *valbuf)
 {
-  int len = TYPE_LENGTH (type);
-  int typecode = TYPE_CODE (type);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int abi_use_fpr = nds32_abi_use_fpr (tdep->abi);
+  int calling_use_fpr;
+  int len;
 
-  /* Although struct are returned in r0/r1 registers, but struct have
-     only one single/double floating-point member are returned in FS/FD
-     registers.  */
-  if (nds32_float_in_struct (type))
-    typecode = TYPE_CODE_FLT;
+  calling_use_fpr = nds32_check_calling_use_fpr (type);
+  len = TYPE_LENGTH (type);
 
-  if (typecode == TYPE_CODE_FLT && abi_use_fpr)
+  if (abi_use_fpr && calling_use_fpr)
     {
       if (len == 4)
 	regcache_cooked_write (regcache, tdep->fs0_regnum, valbuf);
