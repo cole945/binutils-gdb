@@ -1379,8 +1379,6 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
       sp = align_down (sp, align);
     }
 
-  /* Allocate 24-byte for ABI V1.  */
-  sp -= 24;
   /* Stack must be 8-byte aligned.  */
   sp = align_down (sp, 8);
 
