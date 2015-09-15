@@ -1261,38 +1261,44 @@ nds32_float_in_struct (struct type *type)
 static int
 nds32_type_align (struct type *type)
 {
-  int align = 0;		/* Current max alignment.  */
-  int i;
+  int n;
+  int align;
+  int falign;
 
-  gdb_assert (type != NULL);
-  if (type == NULL)
-    return 0;
-
-  if (type->main_type->nfields == 0)
-    return type->length;
-
+  type = check_typedef (type);
   switch (TYPE_CODE (type))
     {
-    case TYPE_CODE_ARRAY:
-      return nds32_type_align (TYPE_TARGET_TYPE (type));
+    default:
+      /* Should never happen.  */
+      internal_error (__FILE__, __LINE__, _("unknown type alignment"));
+      return 4;
+
+    case TYPE_CODE_PTR:
     case TYPE_CODE_ENUM:
+    case TYPE_CODE_INT:
+    case TYPE_CODE_FLT:
+    case TYPE_CODE_SET:
+    case TYPE_CODE_RANGE:
+    case TYPE_CODE_REF:
+    case TYPE_CODE_CHAR:
+    case TYPE_CODE_BOOL:
       return TYPE_LENGTH (type);
+
+    case TYPE_CODE_ARRAY:
+    case TYPE_CODE_COMPLEX:
+      return nds32_type_align (TYPE_TARGET_TYPE (type));
+
+    case TYPE_CODE_STRUCT:
+    case TYPE_CODE_UNION:
+      align = 1;
+      for (n = 0; n < TYPE_NFIELDS (type); n++)
+	{
+	  falign = nds32_type_align (TYPE_FIELD_TYPE (type, n));
+	  if (falign > align)
+	    align = falign;
+	}
+      return align;
     }
-
-  /* For structs with only one float/double are treated as float/double.  */
-  align = nds32_float_in_struct (type);
-  if (align != 0)
-    return align;
-
-  for (i = 0; i < TYPE_NFIELDS (type); i++)
-    {
-      int r = nds32_type_align (TYPE_FIELD_TYPE (type, i));
-
-      if (r > align)
-	align = r;
-    }
-
-  return align;
 }
 
 /* Helper function for NDS32 ABI.  Return true if FPRs can be used
