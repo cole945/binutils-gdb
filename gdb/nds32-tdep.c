@@ -451,7 +451,6 @@ nds32_pseudo_register_read (struct gdbarch *gdbarch,
 			    gdb_byte *buf)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-  char name_buf[8];
   gdb_byte reg_buf[8];
   int offset;
   enum register_status status = REG_UNKNOWN;
@@ -489,7 +488,6 @@ nds32_pseudo_register_write (struct gdbarch *gdbarch,
 			     const gdb_byte *buf)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-  char name_buf[8];
   gdb_byte reg_buf[8];
   int offset;
 
