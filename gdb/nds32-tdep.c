@@ -1593,14 +1593,18 @@ nds32_extract_return_value (struct gdbarch *gdbarch, struct type *type,
 
       ULONGEST tmp;
 
-      if (len <= 4)
+      if (len < 4)
 	{
 	  /* By using store_unsigned_integer we avoid having to do
 	     anything special for small big-endian values.  */
 	  regcache_cooked_read_unsigned (regcache, NDS32_R0_REGNUM, &tmp);
 	  store_unsigned_integer (valbuf, len, byte_order, tmp);
 	}
-      else
+      else if (len == 4)
+	{
+	  regcache_cooked_read (regcache, NDS32_R0_REGNUM, valbuf);
+	}
+      else if (len < 8)
 	{
 	  int len1, len2;
 
@@ -1612,6 +1616,11 @@ nds32_extract_return_value (struct gdbarch *gdbarch, struct type *type,
 
 	  regcache_cooked_read_unsigned (regcache, NDS32_R0_REGNUM + 1, &tmp);
 	  store_unsigned_integer (valbuf + len1, len2, byte_order, tmp);
+	}
+      else
+	{
+	  regcache_cooked_read (regcache, NDS32_R0_REGNUM, valbuf);
+	  regcache_cooked_read (regcache, NDS32_R0_REGNUM + 1, valbuf + 4);
 	}
     }
 }
@@ -1647,12 +1656,16 @@ nds32_store_return_value (struct gdbarch *gdbarch, struct type *type,
     {
       ULONGEST regval;
 
-      if (len <= 4)
+      if (len < 4)
 	{
 	  regval = extract_unsigned_integer (valbuf, len, byte_order);
 	  regcache_cooked_write_unsigned (regcache, NDS32_R0_REGNUM, regval);
 	}
-      else
+      else if (len == 4)
+	{
+	  regcache_cooked_write (regcache, NDS32_R0_REGNUM, valbuf);
+	}
+      else if (len < 8)
 	{
 	  int len1, len2;
 
@@ -1663,7 +1676,13 @@ nds32_store_return_value (struct gdbarch *gdbarch, struct type *type,
 	  regcache_cooked_write_unsigned (regcache, NDS32_R0_REGNUM, regval);
 
 	  regval = extract_unsigned_integer (valbuf + len1, len2, byte_order);
-	  regcache_cooked_write_unsigned (regcache, NDS32_R0_REGNUM + 1, regval);
+	  regcache_cooked_write_unsigned (regcache, NDS32_R0_REGNUM + 1,
+					  regval);
+	}
+      else
+	{
+	  regcache_cooked_write (regcache, NDS32_R0_REGNUM, valbuf);
+	  regcache_cooked_write (regcache, NDS32_R0_REGNUM + 1, valbuf + 4);
 	}
     }
 }
