@@ -1331,25 +1331,17 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 		       int nargs, struct value **args, CORE_ADDR sp,
 		       int struct_return, CORE_ADDR struct_addr)
 {
-  const int REND = 6;		/* Max arguments number.  */
-  int goff = 0;			/* Current gpr for argument.  */
-  int foff = 0;			/* Current fpr for argument.  */
-  int soff = 0;			/* Current stack offset.  */
+  const int REND = 6;		/* End for register offset.  */
+  int goff = 0;			/* Current gpr offset for argument.  */
+  int foff = 0;			/* Current fpr offset for argument.  */
+  int soff = 0;			/* Current stack offset for argument.  */
   int i;
-  CORE_ADDR regval;
+  ULONGEST regval;
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-  int fs0_regnum = -1, fd0_regnum = -1;
   struct type *func_type = value_type (function);
   int abi_use_fpr = nds32_abi_use_fpr (tdep->abi);
   int abi_split = nds32_abi_split (tdep->abi);
-
-  if (abi_use_fpr)
-    {
-      /* Use FP registers to pass arguments.  */
-      fs0_regnum = tdep->fs0_regnum;
-      fd0_regnum = tdep->fd0_regnum;
-    }
 
   /* Set the return address.  For the nds32, the return breakpoint is
      always at BP_ADDR.  */
@@ -1389,16 +1381,16 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
       int align, len;
       struct type *type;
       int calling_use_fpr;
+      int use_fpr = 0;
 
       type = value_type (args[i]);
       calling_use_fpr = nds32_check_calling_use_fpr (type);
       len = TYPE_LENGTH (type);
       align = nds32_type_align (type);
+      val = value_contents (args[i]);
 
-      /* For current ABI, the caller pushes arguments in registers,
-	 callee stores unnamed arguments in stack,
-	 and then va_arg fetch arguments in stack.
-	 Therefore, we don't have to handle variadic function specially.  */
+      if (len > 4)
+	len = align_up (len, 4);
 
       if (TYPE_VARARGS (func_type) && abi_use_fpr
 	  && i >= TYPE_NFIELDS (func_type))
@@ -1409,11 +1401,12 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 	  goff = foff = REND;
 	}
 
-      val = value_contents (args[i]);
+      /* Try to use FPRs to pass arguments only when
+	 1. The program is built using toolchain with FPU support.
+	 2. The type of this argument can use FPR to pass value.  */
+      use_fpr = abi_use_fpr && calling_use_fpr;
 
-      /* Once we start using stack, all arguments should go to stack
-	 When use_fpr, all flt must go to fs/fd; otherwise go to stack.  */
-      if (abi_use_fpr && calling_use_fpr)
+      if (use_fpr)
 	{
 	  /* Adjust alignment.  */
 	  if ((align >> 2) > 0)
@@ -1421,7 +1414,10 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 
 	  if (foff < REND)
 	    {
-	      if (abi_use_fpr && fs0_regnum == -1)
+	      int fs0_regnum = tdep->fs0_regnum;
+	      int fd0_regnum = tdep->fd0_regnum;
+
+	      if (fs0_regnum == -1)
 		goto error_no_fpr;
 
 	      switch (len)
@@ -1429,56 +1425,72 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 		case 4:
 		  regcache_cooked_write (regcache, fs0_regnum + foff, val);
 		  foff++;
-		  continue;
+		  break;
 		case 8:
 		  regcache_cooked_write (regcache, fd0_regnum + foff / 2, val);
 		  foff += 2;
-		  continue;
+		  break;
 		default:
-		  /* Long double? */
+		  /* Long double?  */
 		  internal_error (__FILE__, __LINE__,
 				  "Do not know how to handle %d-byte double.\n",
 				  len);
 		  break;
 		}
+	      continue;
 	    }
 	}
-      else if (!soff)
+      else
 	{
-	  /* Adjust alignment, and only adjust one time for one argument.  */
+	  /*
+	    When passing arguments using GPRs,
+
+	    * A composite type not larger than 4 bytes is passed
+	      in $rN. The format is as if the value is loaded with
+	      load instruction of corresponding size. (i.g., LB, LH, LW)
+
+	       For example,
+
+		      r0
+		      31      0
+	      LITTLE: [x x b a]
+		 BIG: [x x a b]
+
+	     * Otherwise, a composite type is passed in consecutive registers.
+	       The size is rounded up to the nearest multiple of 4.
+	       The successive registers hold the parts of the argument as if
+	       were loaded using lmw instructions.
+
+	      For example,
+
+		      r0	r1
+		      31      0 31      0
+	      LITTLE: [d c b a] [x x x e]
+		 BIG: [a b c d] [e x x x]
+	   */
+
+	  /* Adjust alignment.  */
 	  if ((align >> 2) > 0)
 	    goff = align_up (goff, align >> 2);
-	  if (!abi_split && len > (REND - goff) * 4)
-	    goff = REND;
+
+	  if (len <= (REND - goff) * 4 || abi_split)
+	    {
+	      while (len > 0 && goff < REND)
+		{
+		  regval = extract_unsigned_integer (val, (len > 4) ? 4 : len,
+						     byte_order);
+		  regcache_cooked_write_unsigned (regcache,
+						  NDS32_R0_REGNUM + goff,
+						  regval);
+		  len -= 4;
+		  val += 4;
+		  goff++;
+		}
+	    }
 	}
 
+use_stack:
       /*
-	When passing arguments,
-
-	* A composite type not larger than 4 bytes is passed
-	  in $rN. The format is as if the value is loaded with
-	  load instruction of corresponding size. (i.g., LB, LH, LW)
-
-	   For example,
-
-		  r0
-		  31      0
-	  little: [x x b a]
-	     BIG: [x x a b]
-
-	 * Otherwise, a composite type is passed in consective registers.
-	   The size is rounded up to the nearest multiple of 4.
-	   The successive registers hold the parts of the argument as if
-	   were loaded using lmw instructions.
-
-	  For example,
-
-		  r0	     r1
-		  31      0 31	     0
-	  little: [d c b a] [x x x e]
-	     BIG: [a b c d] [e x x x]
-
-
 	When push an argument in stack,
 
 	* A composite type not larger than 4 bytes is copied
@@ -1490,37 +1502,24 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 	     [ - ]  [ a ]
 	     [ b ]  [ - ]
 	     [ a ]  [ - ] lo
-	    little   BIG
+	    LITTLE   BIG
        */
 
-      if (len > 4)
-	len = align_up (len, 4);
+      /* Adjust alignment.  */
+      soff = align_up (soff, align);
 
       while (len > 0)
 	{
-	  if (soff
-	      || (abi_use_fpr && calling_use_fpr && foff == REND)
-	      || goff == REND)
-	    {
-	      int rlen = (len > 4) ? 4 : len;
+	  int rlen = (len > 4) ? 4 : len;
 
-	      if (byte_order == BFD_ENDIAN_BIG)
-		write_memory (sp + soff + 4 - rlen, val, rlen);
-	      else
-		write_memory (sp + soff, val, rlen);
-	      soff += 4;
-	    }
+	  if (byte_order == BFD_ENDIAN_BIG)
+	    write_memory (sp + soff + 4 - rlen, val, rlen);
 	  else
-	    {
-	      regval = extract_unsigned_integer (val, (len > 4) ? 4 : len,
-						 byte_order);
-	      regcache_cooked_write_unsigned (regcache,
-					      goff + NDS32_R0_REGNUM, regval);
-	      goff++;
-	    }
+	    write_memory (sp + soff, val, rlen);
 
-	  len -= register_size (gdbarch, goff);
-	  val += register_size (gdbarch, goff);
+	  len -= 4;
+	  val += 4;
+	  soff += 4;
 	}
     }
 
@@ -1532,7 +1531,7 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 error_no_fpr:
   /* If use_fpr, but no floating-point register exists,
      then it is an error.  */
-  error (_("Fail to call. FS0-FS5 is required."));
+  error (_("Fail to call. FPU registers are required."));
 }
 
 /* Read, for architecture GDBARCH, a function return value of TYPE
