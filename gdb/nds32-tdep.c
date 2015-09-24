@@ -1394,14 +1394,18 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
       if (len > 4)
 	len = align_up (len, 4);
 
-      if (TYPE_VARARGS (func_type) && abi_use_fpr
+      /* Variadic functions are handled differently between AABI and ABI2FP+.
+
+	 For AABI, the caller pushes arguments in registers, callee stores
+	 unnamed arguments in stack, and then va_arg fetch arguments in stack.
+	 Therefore, we don't have to handle variadic functions specially.
+
+	 For ABI2FP+, the caller pushes only named arguments in registers
+	 and pushes all unnamed arguments in stack.  */
+
+      if (abi_use_fpr && TYPE_VARARGS (func_type)
 	  && i >= TYPE_NFIELDS (func_type))
-	{
-	  /* Variadic function is handled differently between ABI2 and ABI2FP+
-	     In ABI2FP+, the caller pushes only named arguments in registers
-	     and pushes all unnamed arguments in stack.  */
-	  goff = foff = REND;
-	}
+	goto use_stack;
 
       /* Try to use FPRs to pass arguments only when
 	 1. The program is built using toolchain with FPU support.
