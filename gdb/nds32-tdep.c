@@ -532,18 +532,18 @@ static CORE_ADDR
 nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 			CORE_ADDR limit_pc)
 {
-  uint32_t insn;
+  uint32_t insn, insn_len;
 
   /* Look up end of prologue.  */
-  for (; pc < limit_pc; )
+  for (; pc < limit_pc; pc += insn_len)
     {
       insn = read_memory_unsigned_integer (pc, 4, BFD_ENDIAN_BIG);
 
       if ((insn & 0x80000000) == 0)
 	{
-	  /* 32-bit instruction.  */
+	  /* 32-bit instruction */
+	  insn_len = 4;
 
-	  pc += 4;
 	  if (insn == N32_ALU1 (ADD, REG_GP, REG_TA, REG_GP))
 	    {
 	      /* add $gp, $ta, $gp */
@@ -630,13 +630,15 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 	      continue;
 	    }
 
-	  pc -= 4;
+	  /* If the a instruction is not accepted,
+	     don't go futher.  */
 	  break;
 	}
       else
 	{
 	  /* 16-bit instruction */
-	  pc += 2;
+	  insn_len = 2;
+
 	  insn >>= 16;
 
 	  /* 1. If the instruction is j/b, then we stop
@@ -680,7 +682,6 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 
 	  /* If the a instruction is not accepted,
 	     don't go futher.  */
-	  pc -= 2;
 	  break;
 	}
     }
@@ -798,7 +799,7 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
   ULONGEST next_base;
   ULONGEST fp_base;
   int i;
-  uint32_t insn;
+  uint32_t insn, insn_len;
   struct nds32_frame_cache *cache;
   struct gdbarch *gdbarch = get_frame_arch (this_frame);
 
@@ -816,7 +817,7 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
   pc = get_frame_func (this_frame);
   limit_pc = get_frame_pc (this_frame);
 
-  for (; pc > 0 && pc < limit_pc; )
+  for (; pc > 0 && pc < limit_pc; pc += insn_len)
     {
       insn = read_memory_unsigned_integer (pc, 4, BFD_ENDIAN_BIG);
 
@@ -824,7 +825,7 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
 	{
 	  /* 32-bit instruction */
 
-	  pc += 4;
+	  insn_len = 4;
 	  if (insn == N32_ALU1 (ADD, REG_GP, REG_TA, REG_GP))
 	    {
 	      /* add $gp, $ta, $gp */
@@ -1051,7 +1052,7 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
       else
 	{
 	  /* 16-bit instruction */
-	  pc += 2;
+	  insn_len = 2;
 	  insn >>= 16;
 
 	  /* 1. If the instruction is j/b, then we stop
@@ -1063,13 +1064,11 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
 	  if (__GF (insn, 13, 2) == 2)
 	    {
 	      /* These are all branch instructions.  */
-	      pc -= 2;
 	      break;
 	    }
 	  else if (__GF (insn, 9, 6) == 0x34)
 	    {
 	      /* beqzs8, bnezs8 */
-	      pc -= 2;
 	      break;
 	    }
 
