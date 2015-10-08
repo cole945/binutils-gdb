@@ -585,23 +585,35 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 
 	  if (N32_OP6 (insn) == N32_OP6_COP && N32_COP_CP (insn) == 0
 	      && (N32_COP_SUB (insn) == N32_FPU_FSS
-		  || N32_COP_SUB (insn) == N32_FPU_FSD)
-	      && (N32_RA5 (insn) == REG_SP || N32_RA5 (insn) == REG_FP))
+		  || N32_COP_SUB (insn) == N32_FPU_FSD))
 	    {
-	      /* CP shoud be CP0 */
-	      /* fs[sd][.bi] $fst, [$sp + ($r0 << sv)] */
-	      continue;
-	    }
+	      /* For FPU insn, CP should be CP0.  */
+	      int ra = N32_RA5 (insn);
 
-	  /* fssi    $fst, [$ra + (imm12s << 2)]
-	     fssi.bi $fst, [$ra], (imm12s << 2)
-	     fsdi    $fdt, [$ra + (imm12s << 2)]
-	     fsdi.bi $fdt, [$ra], (imm12s << 2) */
-	  if ((N32_OP6 (insn) == N32_OP6_SWC || N32_OP6 (insn) == N32_OP6_SDC)
-	      && (N32_RA5 (insn) == REG_SP || N32_RA5 (insn) == REG_FP))
+	      if (ra == REG_SP || ra == REG_FP)
+		{
+		  /* fss FSt, [($sp|$fp) + (Rb << sv)]
+		     fss.bi FSt, [($sp|$fp)], (Rb << sv)
+		     fsd FDt, [($sp|$fp) + (Rb << sv)]
+		     fsd.bi FDt, [($sp|$fp)], (Rb << sv) */
+		  continue;
+		}
+	    }
+	  else if ((N32_OP6 (insn) == N32_OP6_SWC
+		    || N32_OP6 (insn) == N32_OP6_SDC)
+		   && __GF (insn, 13, 2) == 0)
 	    {
-	      /* BI bit is dont-care.  */
-	      continue;
+	      /* For FPU insn, CP should be CP0.  */
+	      int ra = N32_RA5 (insn);
+
+	      if (ra == REG_SP || ra == REG_FP)
+		{
+		  /* fssi FSt, [($sp|$fp) + (imm12s << 2)]
+		     fssi.bi FSt, [($sp|$fp)], (imm12s << 2)
+		     fsdi FDt, [($sp|$fp) + (imm12s << 2)]
+		     fsdi.bi FDt, [($sp|$fp)], (imm12s << 2) */
+		  continue;
+		}
 	    }
 
 	  /* If the a instruction is not accepted,
