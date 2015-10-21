@@ -985,15 +985,11 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
   cache->prev_sp = prev_sp;
   cache->base = this_base;
 
-  /* Adjust all the saved registers so that they contain addresses and
-     not offsets.  */
-  for (i = 0; i < gdbarch_num_regs (gdbarch) - 1; i++)
-    {
-      if (trad_frame_addr_p (cache->saved_regs, i))
-	{
-	  cache->saved_regs[i].addr = cache->prev_sp + cache->saved_regs[i].addr;
-	}
-    }
+  /* Adjust all the saved registers such that they contain addresses
+     instead of offsets.  */
+  for (i = 0; i < NDS32_NUM_REGS; i++)
+    if (trad_frame_addr_p (cache->saved_regs, i))
+      cache->saved_regs[i].addr += cache->prev_sp;
 
   /* The previous frame's SP needed to be computed.
      Save the computed value.  */
