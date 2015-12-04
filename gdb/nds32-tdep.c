@@ -991,6 +991,12 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
     if (trad_frame_addr_p (cache->saved_regs, i))
       cache->saved_regs[i].addr += cache->prev_sp;
 
+  /* The call instruction moves the caller's PC in the callee's LP.
+     Since this is an unwind, do the reverse.  Copy the location of LP
+     into PC (the address / regnum) so that a request for PC will be
+     converted into a request for the LP.  */
+  cache->saved_regs[NDS32_PC_REGNUM] = cache->saved_regs[NDS32_LP_REGNUM];
+
   /* The previous frame's SP needed to be computed.
      Save the computed value.  */
   trad_frame_set_value (cache->saved_regs, NDS32_SP_REGNUM, prev_sp);
@@ -1570,16 +1576,7 @@ static struct value *
 nds32_frame_prev_register (struct frame_info *this_frame, void **this_cache,
 			   int regnum)
 {
-  struct nds32_frame_cache *cache;
-  cache = nds32_frame_cache (this_frame, this_cache);
-
-  if (regnum == NDS32_PC_REGNUM)
-    {
-      CORE_ADDR lr;
-
-      lr = frame_unwind_register_unsigned (this_frame, NDS32_LP_REGNUM);
-      return frame_unwind_got_constant (this_frame, regnum, lr);
-    }
+  struct nds32_frame_cache *cache = nds32_frame_cache (this_frame, this_cache);
 
   return trad_frame_get_prev_register (this_frame, cache->saved_regs, regnum);
 }
