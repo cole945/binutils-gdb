@@ -1002,36 +1002,16 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
   return cache;
 }
 
-/* Implement the gdbarch_unwind_pc method.  */
-
 static CORE_ADDR
-nds32_unwind_pc (struct gdbarch *gdbarch, struct frame_info *this_frame)
+nds32_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
 {
-  /* This snippet code is a mess.
-
-     In most case, LP is the actually register being saved.
-     Hence when unwinding pc for backtrace, LP should be the one.
-     That is, for frames (level > 0), unwinding the PC means
-     unwinding LP from the this_frame.
-
-     However, for a top frame (level==0), unwinding PC means
-     the current program counter (PC).
-     Besides, for dummy frame, PC stored in dummy_frame is the one
-     we want.
-
-     We have to have these cases to make backtrace work properly.  */
-
-  CORE_ADDR pc;
-  pc = frame_unwind_register_unsigned (this_frame, NDS32_PC_REGNUM);
-  return pc;
+  return frame_unwind_register_unsigned (next_frame, NDS32_PC_REGNUM);
 }
 
-/* Implement the gdbarch_unwind_sp method.  */
-
 static CORE_ADDR
-nds32_unwind_sp (struct gdbarch *gdbarch, struct frame_info *this_frame)
+nds32_unwind_sp (struct gdbarch *gdbarch, struct frame_info *next_frame)
 {
-  return frame_unwind_register_unsigned (this_frame, NDS32_SP_REGNUM);
+  return frame_unwind_register_unsigned (next_frame, NDS32_SP_REGNUM);
 }
 
 /* Floating type and struct type that has only one floating type member
