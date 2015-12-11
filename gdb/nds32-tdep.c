@@ -892,28 +892,28 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 static CORE_ADDR
 nds32_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
-  LONGEST return_value;
-  const char *func_name;
-  const int search_limit = 128; /* Magic.  */
   CORE_ADDR func_addr, limit_pc;
 
-  /* See what the symbol table says */
+  /* See if we can determine the end of the prologue via the symbol table.
+     If so, then return either PC, or the PC after the prologue, whichever
+     is greater.  */
   if (find_pc_partial_function (pc, NULL, &func_addr, NULL))
     {
       CORE_ADDR post_prologue_pc
 	= skip_prologue_using_sal (gdbarch, func_addr);
-
       if (post_prologue_pc != 0)
 	return max (pc, post_prologue_pc);
     }
 
+  /* Can't determine prologue from the symbol table, need to examine
+     instructions.  */
+
+  /* Find an upper limit on the function prologue using the debug
+     information.  If the debug information could not be used to provide
+     that bound, then use an arbitrary large number as the upper bound.  */
   limit_pc = skip_prologue_using_sal (gdbarch, pc);
   if (limit_pc == 0)
-    limit_pc = pc + search_limit;
-
-  /* If current instruction is not readable, just quit.  */
-  if (!safe_read_memory_integer (pc, 4, BFD_ENDIAN_BIG, &return_value))
-    return pc;
+    limit_pc = pc + 128;	/* Magic.  */
 
   /* Find the end of prologue.  */
   return nds32_analyze_prologue (gdbarch, pc, limit_pc, NULL);
