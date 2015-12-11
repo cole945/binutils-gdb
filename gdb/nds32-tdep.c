@@ -583,36 +583,19 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 		continue;
 	    }
 
-	  if (N32_OP6 (insn) == N32_OP6_COP && N32_COP_CP (insn) == 0
-	      && (N32_COP_SUB (insn) == N32_FPU_FSS
-		  || N32_COP_SUB (insn) == N32_FPU_FSD))
+	  if ((N32_OP6 (insn) == N32_OP6_SWC || N32_OP6 (insn) == N32_OP6_SDC)
+	      && __GF (insn, 13, 2) == 0)
 	    {
-	      /* For FPU insn, CP should be CP0.  */
-	      int ra = N32_RA5 (insn);
-
-	      if (ra == REG_SP || ra == REG_FP)
+	      /* For FPU insn, CP (bit [13:14]) should be CP0.  */
+	      if (N32_RA5 (insn) == REG_SP)
 		{
-		  /* fss FSt, [($sp|$fp) + (Rb << sv)]
-		     fss.bi FSt, [($sp|$fp)], (Rb << sv)
-		     fsd FDt, [($sp|$fp) + (Rb << sv)]
-		     fsd.bi FDt, [($sp|$fp)], (Rb << sv) */
-		  continue;
-		}
-	    }
-	  else if ((N32_OP6 (insn) == N32_OP6_SWC
-		    || N32_OP6 (insn) == N32_OP6_SDC)
-		   && __GF (insn, 13, 2) == 0)
-	    {
-	      /* For FPU insn, CP should be CP0.  */
-	      int ra = N32_RA5 (insn);
-
-	      if (ra == REG_SP || ra == REG_FP)
-		{
-		  /* fssi FSt, [($sp|$fp) + (imm12s << 2)]
-		     fssi.bi FSt, [($sp|$fp)], (imm12s << 2)
-		     fsdi FDt, [($sp|$fp) + (imm12s << 2)]
-		     fsdi.bi FDt, [($sp|$fp)], (imm12s << 2) */
-		  continue;
+		  if (__GF (insn, 12, 1) == 0)
+		    {
+		      /* normal form */
+		      /* fssi FSt, [$sp + (imm12s << 2)]
+			 fsdi FDt, [$sp + (imm12s << 2)] */
+		      continue;
+		    }
 		}
 	    }
 
@@ -924,45 +907,15 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
 	      continue;
 	    }
 
-	  if (N32_OP6 (insn) == N32_OP6_COP && N32_COP_CP (insn) == 0
-	      && (N32_COP_SUB (insn) == N32_FPU_FSS
-		  || N32_COP_SUB (insn) == N32_FPU_FSD)
-	      && (N32_RA5 (insn) == REG_SP || N32_RA5 (insn) == REG_FP))
+	  if (N32_OP6 (insn) == N32_OP6_SDC && __GF (insn, 12, 3) == 0)
 	    {
-	      /* CP shoud be CP0 */
-	      /* fs[sd][.bi] $fst, [$sp + ($r0 << sv)] */
-	      continue;
-	    }
+	      /* For FPU insns, CP (bit [13:14]) should be CP0,  and only
+		 normal form (bit [12] == 0) is used.  */
 
-	  /* fssi $fst, [$ra + (imm12s << 2)]
-	     fssi.bi $fst, [$ra], (imm12s << 2)
-	     fsdi $fdt, [$ra + (imm12s << 2)]
-	     fsdi.bi $fdt, [$ra], (imm12s << 2) */
-	  if ((N32_OP6 (insn) == N32_OP6_SWC || N32_OP6 (insn) == N32_OP6_SDC)
-	      && (N32_RA5 (insn) == REG_SP || N32_RA5 (insn) == REG_FP))
-	    {
-	      /* fssi and fsdi have the same form.  */
-	      /* Only .bi form should be handled to adjust reg.  */
-	      unsigned int ra5 = 0;
-	      int imm12s = 0;
+	      /* fsdi FDt, [$sp + (imm12s << 2)] */
+	      if (N32_RA5 (insn) == REG_SP)
+		continue;
 
-	      ra5 = N32_RA5 (insn);
-	      imm12s = N32_IMM12S (insn);
-
-	      if (imm12s & 0x800)
-		imm12s = (imm12s - (0x800 << 1));
-
-	      switch (ra5)
-		{
-		case NDS32_FP_REGNUM:
-		  cache->fp_offset += (imm12s << 2);
-		  break;
-		case NDS32_SP_REGNUM:
-		  cache->sp_offset += (imm12s << 2);
-		  break;
-		}
-
-	      continue;
 	    }
 
 	  break;
