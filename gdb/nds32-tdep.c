@@ -62,10 +62,6 @@ N32_TYPE4 (LSMW, 0, 0, 0, 1, (N32_LSMW_ADM << 2) | N32_LSMW_LSMW)
 
 extern void _initialize_nds32_tdep (void);
 
-/* "break16 0" for breakpoint_from_pc.
-   It is always supported now, so always insert break16.  */
-static const gdb_byte NDS32_BREAK16[] = { 0xEA, 0x00 };
-
 /* The standard register names.  */
 static const char *nds32_regnames[] =
 {
@@ -267,15 +263,21 @@ nds32_frame_align (struct gdbarch *gdbarch, CORE_ADDR sp)
   return align_down (sp, 8);
 }
 
-/* Implement the gdbarch_breakpoint_from_pc method.  */
+/* Use the program counter to determine the contents and size of a
+   breakpoint instruction.  Return a pointer to a string of bytes that
+   encode a breakpoint instruction, store the length of the string in
+   *LENPTR and optionally adjust *PCPTR to point to the correct memory
+   location for inserting the breakpoint.  */
 
 static const gdb_byte *
 nds32_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr,
 			  int *lenptr)
 {
-  /* Always insert 16-bit break instruction.  */
-  *lenptr = 2;
-  return NDS32_BREAK16;
+  /* NDS32 uses the same insn machine code for Little-Endian and Big-Endian.  */
+  static const gdb_byte break_insn[] = { 0xEA, 0x00 };
+
+  *lenptr = sizeof (break_insn);
+  return break_insn;
 }
 
 /* Implement the gdbarch_dwarf2_reg_to_regnum method.
