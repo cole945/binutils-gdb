@@ -1589,20 +1589,16 @@ static int
 nds32_get_longjmp_target (struct frame_info *frame, CORE_ADDR *pc)
 {
   gdb_byte buf[4];
-  CORE_ADDR jmp_buf_p;
+  CORE_ADDR jb_addr;
   struct gdbarch *gdbarch = get_frame_arch (frame);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
-  jmp_buf_p = get_frame_register_unsigned (frame, 0);
 
-  /* Key is in setjmp():
-     lmw.bim   r6, [r0], r14
-     lmw.bim  r16, [r0], r19, 0xf */
+  jb_addr = get_frame_register_unsigned (frame, NDS32_R0_REGNUM);
 
-  if (target_read_memory (jmp_buf_p + 15 * 4, buf, 4))
+  if (target_read_memory (jb_addr + 15 * 4, buf, 4))
     return 0;
 
   *pc = extract_unsigned_integer (buf, 4, byte_order);
-
   return 1;
 }
 
