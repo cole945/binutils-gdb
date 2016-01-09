@@ -1514,11 +1514,9 @@ nds32_return_value (struct gdbarch *gdbarch, struct value *func_type,
 static struct frame_id
 nds32_dummy_id (struct gdbarch *gdbarch, struct frame_info *this_frame)
 {
-  CORE_ADDR sp, pc;
+  CORE_ADDR sp = get_frame_register_unsigned (this_frame, NDS32_SP_REGNUM);
 
-  sp = get_frame_register_unsigned (this_frame, NDS32_SP_REGNUM);
-  pc = get_frame_pc (this_frame);
-  return frame_id_build (sp, pc);
+  return frame_id_build (sp, get_frame_pc (this_frame));
 }
 
 /* Implement the "this_id" frame_unwind method.
@@ -1984,8 +1982,11 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_stack_frame_destroyed_p (gdbarch, nds32_stack_frame_destroyed_p);
   set_gdbarch_dwarf2_reg_to_regnum (gdbarch, nds32_dwarf2_reg_to_regnum);
   set_gdbarch_register_sim_regno (gdbarch, nds32_register_sim_regno);
+
   set_gdbarch_push_dummy_call (gdbarch, nds32_push_dummy_call);
   set_gdbarch_return_value (gdbarch, nds32_return_value);
+  set_gdbarch_dummy_id (gdbarch, nds32_dummy_id);
+
   set_gdbarch_skip_prologue (gdbarch, nds32_skip_prologue);
   set_gdbarch_inner_than (gdbarch, core_addr_lessthan);
   set_gdbarch_breakpoint_from_pc (gdbarch, nds32_breakpoint_from_pc);
@@ -1993,7 +1994,6 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_frame_align (gdbarch, nds32_frame_align);
   frame_base_set_default (gdbarch, &nds32_frame_base);
 
-  set_gdbarch_dummy_id (gdbarch, nds32_dummy_id);
   set_gdbarch_print_insn (gdbarch, gdb_print_insn_nds32);
   /* Support simple overlay manager.  */
   set_gdbarch_overlay_update (gdbarch, nds32_simple_overlay_update);
