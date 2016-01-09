@@ -1511,11 +1511,6 @@ nds32_return_value (struct gdbarch *gdbarch, struct value *func_type,
     }
 }
 
-/* Assuming NEXT_FRAME->prev is a dummy, return the frame ID of that
-   dummy frame.  The frame ID's base needs to match the TOS value
-   saved by save_dummy_frame_tos(), and the PC match the dummy frame's
-   breakpoint.  */
-
 static struct frame_id
 nds32_dummy_id (struct gdbarch *gdbarch, struct frame_info *this_frame)
 {
@@ -1998,9 +1993,6 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_frame_align (gdbarch, nds32_frame_align);
   frame_base_set_default (gdbarch, &nds32_frame_base);
 
-  /* Methods for saving / extracting a dummy frame's ID.
-     The ID's stack address must match the SP value returned by
-     PUSH_DUMMY_CALL, and saved by generic_save_dummy_frame_tos.  */
   set_gdbarch_dummy_id (gdbarch, nds32_dummy_id);
   set_gdbarch_print_insn (gdbarch, gdb_print_insn_nds32);
   /* Support simple overlay manager.  */
