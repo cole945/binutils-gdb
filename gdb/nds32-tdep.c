@@ -1712,14 +1712,14 @@ nds32_simple_overlay_update (struct obj_section *osect)
 static int
 gdb_print_insn_nds32 (bfd_vma memaddr, disassemble_info *info)
 {
-  struct obj_section * s = find_pc_section (memaddr);
+  struct obj_section *s = find_pc_section (memaddr);
 
   /* When disassembling ex9 instructions, annotating them with
      the original instructions at the end of line.  For example,
 
 	0x00500122 <+82>:    ex9.it #4		! movi $r13, 10
 
-     Dissembler needs the symbol table to extract the original instruction
+     Disassembler needs the symbol table to extract the original instruction
      in _ITB_BASE_ table.  If the object file is changed, reload symbol
      table.  */
 
