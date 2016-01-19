@@ -2016,7 +2016,6 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   frame_unwind_append_unwinder (gdbarch, &nds32_epilogue_frame_unwind);
   dwarf2_append_unwinders (gdbarch);
   frame_unwind_append_unwinder (gdbarch, &nds32_frame_unwind);
-  frame_base_append_sniffer (gdbarch, dwarf2_frame_base_sniffer);
 
   return gdbarch;
 }
