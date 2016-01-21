@@ -19,7 +19,6 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
-#include <stdint.h>
 #include "frame.h"
 #include "frame-unwind.h"
 #include "frame-base.h"
@@ -38,7 +37,6 @@
 #include "regcache.h"
 #include "trad-frame.h"
 #include "dis-asm.h"
-#include "gdb_assert.h"
 #include "user-regs.h"
 #include "elf-bfd.h"
 #include "dwarf2-frame.h"
