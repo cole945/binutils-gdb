@@ -1595,7 +1595,7 @@ nds32_get_longjmp_target (struct frame_info *frame, CORE_ADDR *pc)
 
   jb_addr = get_frame_register_unsigned (frame, NDS32_R0_REGNUM);
 
-  if (target_read_memory (jb_addr + 15 * 4, buf, 4))
+  if (target_read_memory (jb_addr + 11 * 4, buf, 4))
     return 0;
 
   *pc = extract_unsigned_integer (buf, 4, byte_order);
