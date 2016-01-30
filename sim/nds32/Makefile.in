@@ -32,8 +32,7 @@ SIM_OBJS = \
 	sim-stop.o \
 	sim-reason.o \
 	sim-reg.o \
-	sim-trace.o \
-	$(SIM_EXTRA_OBJS)
+	sim-trace.o
 ## COMMON_POST_CONFIG_FRAG
 
 nds32-syscall.o: nds32-syscall.c targ-vals.h nds32-sim.h nds32-syscall.h
