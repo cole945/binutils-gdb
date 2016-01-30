@@ -2422,12 +2422,6 @@ sim_open (SIM_OPEN_KIND kind, host_callback * callback,
   return sd;
 }
 
-void
-sim_close (SIM_DESC sd, int quitting)
-{
-  sim_module_uninstall (sd);
-}
-
 static int
 sim_dis_read (bfd_vma memaddr, bfd_byte *myaddr, unsigned int length,
 	      struct disassemble_info *dinfo)
