@@ -3775,7 +3775,6 @@ subdirs="$subdirs aarch64"
   subdirs="$subdirs nds32"
 
 
-       sim_testsuite=yes
        ;;
    rl78-*-*)
 

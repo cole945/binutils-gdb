@@ -1890,7 +1890,6 @@ case "${target}" in
        ;;
    nds32*)
        sim_arch=nds32
-       sim_testsuite=yes
        ;;
    rl78-*-*)
        sim_arch=rl78
