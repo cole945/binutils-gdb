@@ -2096,7 +2096,7 @@ sim_engine_run (SIM_DESC sd, int next_cpu_nr, int nr_cpus, int siggnal)
   sim_cpu *cpu;
   SIM_ASSERT (STATE_MAGIC (sd) == SIM_MAGIC_NUMBER);
   cpu = STATE_CPU (sd, 0);
-  cia = CIA_GET (cpu);
+  cia = CPU_PC_GET (cpu);
 
   if (siggnal != 0)
     {
@@ -2157,12 +2157,12 @@ sim_engine_run (SIM_DESC sd, int next_cpu_nr, int nr_cpus, int siggnal)
 	}
 
       /* Sync registers.  */
-      CIA_SET (cpu, cia);
+      CPU_PC_SET (cpu, cia);
 
       /* process any events */
       if (sim_events_tick (sd))
 	{
-	  CIA_SET (cpu, cia);
+	  CPU_PC_SET (cpu, cia);
 	  sim_events_process (sd);
 	}
     }
