@@ -26,9 +26,6 @@ SIM_OBJS = \
 	nds32-syscall.o \
 	sim-hload.o \
 	sim-resume.o \
-	sim-stop.o \
-	sim-reason.o \
-	sim-reg.o \
 	sim-trace.o
 ## COMMON_POST_CONFIG_FRAG
 
