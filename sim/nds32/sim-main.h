@@ -27,7 +27,6 @@
 #include "sim-signal.h"
 
 typedef struct _sim_cpu SIM_CPU; /* sim-reg.c needs this. */
-typedef unsigned32 sim_cia;
 
 #include "sim-base.h"
 
