@@ -25,9 +25,6 @@
 
 #include "sim-basics.h"
 #include "sim-signal.h"
-
-typedef struct _sim_cpu SIM_CPU; /* sim-reg.c needs this. */
-
 #include "sim-base.h"
 
 typedef union {
