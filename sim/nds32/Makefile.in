@@ -24,7 +24,6 @@ SIM_OBJS = \
 	interp.o \
 	nds32-cop0.o \
 	nds32-syscall.o \
-	sim-cpu.o \
 	sim-hload.o \
 	sim-resume.o \
 	sim-stop.o \
