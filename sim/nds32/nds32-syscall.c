@@ -24,6 +24,7 @@
 
 #include "gdb/callback.h"
 #include "targ-vals.h"
+#include "sim-main.h"
 #include "sim-syscall.h"
 
 #ifdef HAVE_SYS_TIME_H
