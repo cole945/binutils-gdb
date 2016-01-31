@@ -2378,7 +2378,7 @@ sim_open (SIM_OPEN_KIND kind, host_callback * callback,
       return 0;
     }
 
-  /* Handle target sim arguments. */
+  /* The parser will print an error message for us, so we silently return.  */
   if (sim_parse_args (sd, argv) != SIM_RC_OK)
     {
       nds32_free_state (sd);
