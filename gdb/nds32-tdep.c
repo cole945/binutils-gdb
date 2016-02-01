@@ -62,7 +62,6 @@ N32_TYPE4 (LSMW, 0, 0, 0, 1, (N32_LSMW_ADM << 2) | N32_LSMW_LSMW)
 
 extern void _initialize_nds32_tdep (void);
 
-/* The standard register names.  */
 static const char *nds32_regnames[] =
 {
   /* 32 GPRs.  */
@@ -254,7 +253,7 @@ value_of_nds32_reg (struct frame_info *frame, const void *baton)
   return value_of_register ((int) baton, frame);
 }
 
-/* Implement the gdbarch_frame_align method.  */
+/* Implement the "frame_align" gdbarch method.  */
 
 static CORE_ADDR
 nds32_frame_align (struct gdbarch *gdbarch, CORE_ADDR sp)
@@ -263,7 +262,9 @@ nds32_frame_align (struct gdbarch *gdbarch, CORE_ADDR sp)
   return align_down (sp, 8);
 }
 
-/* Use the program counter to determine the contents and size of a
+/* Implement the "breakpoint_from_pc" gdbarch method.
+
+   Use the program counter to determine the contents and size of a
    breakpoint instruction.  Return a pointer to a string of bytes that
    encode a breakpoint instruction, store the length of the string in
    *LENPTR and optionally adjust *PCPTR to point to the correct memory
@@ -273,15 +274,14 @@ static const gdb_byte *
 nds32_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr,
 			  int *lenptr)
 {
-  /* NDS32 uses the same insn machine code for Little-Endian and Big-Endian.  */
+  /* The same insn machine code is used for little-endian and big-endian.  */
   static const gdb_byte break_insn[] = { 0xEA, 0x00 };
 
   *lenptr = sizeof (break_insn);
   return break_insn;
 }
 
-/* Implement the gdbarch_dwarf2_reg_to_regnum method.
-   Map DWARF regnum from GCC to GDB regnum.  */
+/* Implement the "dwarf2_reg_to_regnum" gdbarch method.  */
 
 static int
 nds32_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int num)
@@ -316,13 +316,11 @@ nds32_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int num)
   return -1;
 }
 
-/* Implement gdbarch_register_sim_regno method.  */
+/* Implement the "register_sim_regno" gdbarch method.  */
 
 static int
 nds32_register_sim_regno (struct gdbarch *gdbarch, int regnum)
 {
-  /* Use target-descriptions for register mapping. */
-
   /* Only makes sense to supply raw registers.  */
   gdb_assert (regnum >= 0 && regnum < gdbarch_num_regs (gdbarch));
 
@@ -359,7 +357,6 @@ static struct reggroup *nds32_secur_reggroup;
 static void
 nds32_init_reggroups (void)
 {
-  /* gpr usr sr */
   nds32_cr_reggroup = reggroup_new ("cr", USER_REGGROUP);
   nds32_ir_reggroup = reggroup_new ("ir", USER_REGGROUP);
   nds32_mr_reggroup = reggroup_new ("mr", USER_REGGROUP);
@@ -396,7 +393,7 @@ nds32_add_reggroups (struct gdbarch *gdbarch)
   reggroup_add (gdbarch, nds32_secur_reggroup);
 }
 
-/* Implement the gdbarch_register_reggroup_p method.  */
+/* Implement the "register_reggroup_p" gdbarch method.  */
 
 static int
 nds32_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
@@ -431,7 +428,7 @@ nds32_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
   return !strncmp (regname, groupname, strlen (groupname));
 }
 
-/* Implement the tdesc_pseudo_register_type method.  */
+/* Implement the "pseudo_register_type" tdesc_arch_data method.  */
 
 static struct type *
 nds32_pseudo_register_type (struct gdbarch *gdbarch, int regnum)
@@ -447,7 +444,7 @@ nds32_pseudo_register_type (struct gdbarch *gdbarch, int regnum)
   return NULL;
 }
 
-/* Implement the tdesc_pseudo_register_name method.  */
+/* Implement the "pseudo_register_name" tdesc_arch_data method.  */
 
 static const char *
 nds32_pseudo_register_name (struct gdbarch *gdbarch, int regnum)
@@ -462,7 +459,7 @@ nds32_pseudo_register_name (struct gdbarch *gdbarch, int regnum)
   return NULL;
 }
 
-/* Implement the gdbarch_pseudo_register_read method.  */
+/* Implement the "pseudo_register_read" gdbarch method.  */
 
 static enum register_status
 nds32_pseudo_register_read (struct gdbarch *gdbarch,
@@ -498,7 +495,7 @@ nds32_pseudo_register_read (struct gdbarch *gdbarch,
   return status;
 }
 
-/* Implement the gdbarch_pseudo_register_write method.  */
+/* Implement the "pseudo_register_write" gdbarch method.  */
 
 static void
 nds32_pseudo_register_write (struct gdbarch *gdbarch,
@@ -887,7 +884,7 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
   return pc;
 }
 
-/* Implement the gdbarch_skip_prologue method.
+/* Implement the "skip_prologue" gdbarch method.
 
    Find the end of function prologue.  */
 
@@ -921,7 +918,7 @@ nds32_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
   return nds32_analyze_prologue (gdbarch, pc, limit_pc, NULL);
 }
 
-/* Implement the stack_frame_destroyed_p gdbarch method.  */
+/* Implement the "stack_frame_destroyed_p" gdbarch method.  */
 
 static int
 nds32_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR addr)
@@ -1004,11 +1001,15 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
   return cache;
 }
 
+/* Implement the "unwind_pc" gdbarch method.  */
+
 static CORE_ADDR
 nds32_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
 {
   return frame_unwind_register_unsigned (next_frame, NDS32_PC_REGNUM);
 }
+
+/* Implement the "unwind_sp" gdbarch method.  */
 
 static CORE_ADDR
 nds32_unwind_sp (struct gdbarch *gdbarch, struct frame_info *next_frame)
@@ -1041,16 +1042,7 @@ nds32_check_calling_use_fpr (struct type *type)
   return typecode == TYPE_CODE_FLT;
 }
 
-/* Get the alignment of the type.
-
-   The alignment requirement of a structure is the largest alignment
-   requirement of its member, so we should traverse every member to
-   find the largest alignment.
-
-   For example,
-     struct { int a; int b; char c } is 4-byte aligned,
-   and
-     struct {long long a; char c} is 8-byte aligned.  */
+/* Return the alignment (in bytes) of the given type.  */
 
 static int
 nds32_type_align (struct type *type)
@@ -1095,7 +1087,7 @@ nds32_type_align (struct type *type)
     }
 }
 
-/* Implement the gdbarch_push_dummy_call method.  */
+/* Implement the "push_dummy_call" gdbarch method.  */
 
 static CORE_ADDR
 nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
@@ -1115,7 +1107,7 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   int abi_use_fpr = nds32_abi_use_fpr (tdep->abi);
   int abi_split = nds32_abi_split (tdep->abi);
 
-  /* Set the return address.  For the nds32, the return breakpoint is
+  /* Set the return address.  For the NDS32, the return breakpoint is
      always at BP_ADDR.  */
   regcache_cooked_write_unsigned (regcache, NDS32_LP_REGNUM, bp_addr);
 
@@ -1485,7 +1477,9 @@ nds32_store_return_value (struct gdbarch *gdbarch, struct type *type,
     }
 }
 
-/* Determine, for architecture GDBARCH, how a return value of TYPE
+/* Implement the "return_value" gdbarch method.
+
+   Determine, for architecture GDBARCH, how a return value of TYPE
    should be returned.  If it is supposed to be returned in registers,
    and READBUF is non-zero, read the appropriate value from REGCACHE,
    and copy it into READBUF.  If WRITEBUF is non-zero, write the value
@@ -1510,6 +1504,8 @@ nds32_return_value (struct gdbarch *gdbarch, struct value *func_type,
       return RETURN_VALUE_REGISTER_CONVENTION;
     }
 }
+
+/* Implement the "dummy_id" gdbarch method.  */
 
 static struct frame_id
 nds32_dummy_id (struct gdbarch *gdbarch, struct frame_info *this_frame)
@@ -1537,7 +1533,7 @@ nds32_frame_this_id (struct frame_info *this_frame, void **this_cache,
   *this_id = frame_id_build (cache->prev_sp, cache->pc);
 }
 
-/* Get the value of register REGNUM in previous frame.  */
+/* Implement the "prev_register" frame_unwind method.  */
 
 static struct value *
 nds32_frame_prev_register (struct frame_info *this_frame, void **this_cache,
@@ -1560,6 +1556,8 @@ static const struct frame_unwind nds32_frame_unwind =
   NULL /* prev_arch */
 };
 
+/* Return the frame base address of *THIS_FRAME.  */
+
 static CORE_ADDR
 nds32_frame_base_address (struct frame_info *this_frame, void **this_cache)
 {
@@ -1576,7 +1574,7 @@ static const struct frame_base nds32_frame_base =
   nds32_frame_base_address
 };
 
-/* Implement the gdbarch_get_longjmp_target method.  */
+/* Implement the "get_longjmp_target" gdbarch method.  */
 
 static int
 nds32_get_longjmp_target (struct frame_info *frame, CORE_ADDR *pc)
@@ -1594,6 +1592,8 @@ nds32_get_longjmp_target (struct frame_info *frame, CORE_ADDR *pc)
   *pc = extract_unsigned_integer (buf, 4, byte_order);
   return 1;
 }
+
+/* Implement the "sniffer" frame_unwind method.  */
 
 static int
 nds32_epilogue_frame_sniffer (const struct frame_unwind *self,
@@ -1636,6 +1636,8 @@ nds32_epilogue_frame_cache (struct frame_info *this_frame, void **this_cache)
   return cache;
 }
 
+/* Implement the "stop_reason" frame_unwind method.  */
+
 static enum unwind_stop_reason
 nds32_epilogue_frame_unwind_stop_reason (struct frame_info *this_frame,
 					 void **this_cache)
@@ -1648,6 +1650,8 @@ nds32_epilogue_frame_unwind_stop_reason (struct frame_info *this_frame,
 
   return UNWIND_NO_REASON;
 }
+
+/* Implement the "this_id" frame_unwind method.  */
 
 static void
 nds32_epilogue_frame_this_id (struct frame_info *this_frame, void **this_cache,
@@ -1665,6 +1669,8 @@ nds32_epilogue_frame_this_id (struct frame_info *this_frame, void **this_cache,
   else
     (*this_id) = frame_id_build (base + 8, func);
 }
+
+/* Implement the "prev_register" frame_unwind method.  */
 
 static struct value *
 nds32_epilogue_frame_prev_register (struct frame_info *this_frame,
@@ -1685,7 +1691,7 @@ static const struct frame_unwind nds32_epilogue_frame_unwind = {
     nds32_epilogue_frame_sniffer
 };
 
-/* Implement the gdbarch_overlay_update method.  */
+/* Implement the "overlay_update" gdbarch method.  */
 
 static void
 nds32_simple_overlay_update (struct obj_section *osect)
@@ -1707,7 +1713,7 @@ nds32_simple_overlay_update (struct obj_section *osect)
   simple_overlay_update (osect);
 }
 
-/* Implement gdbarch_print_insn method.  */
+/* Implement the "print_insn" gdbarch method.  */
 
 static int
 gdb_print_insn_nds32 (bfd_vma memaddr, disassemble_info *info)
@@ -1853,7 +1859,12 @@ nds32_preprocess_tdesc_p (const struct target_desc *tdesc,
   return 1;
 }
 
-/* Callback for gdbarch_init.  */
+/* Initialize the current architecture based on INFO.  If possible,
+   re-use an architecture from ARCHES, which is a list of
+   architectures already created during this debugging session.
+
+   Called e.g. at program startup, when reading a core file, and when
+   reading a binary file.  */
 
 static struct gdbarch *
 nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)

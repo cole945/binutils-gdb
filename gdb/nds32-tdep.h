@@ -18,23 +18,21 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef __NDS32_TDEP_H__
-#define __NDS32_TDEP_H__
+#ifndef NDS32_TDEP_H
+#define NDS32_TDEP_H
 
-/* NDS32 virtual registers layout for GDB.  */
 enum nds32_regnum
 {
   /* General purpose registers.  */
   NDS32_R0_REGNUM = 0,
   NDS32_R5_REGNUM = 5,
-  NDS32_TA_REGNUM = 15,		/* Temporary register for assembler.  */
-  NDS32_FP_REGNUM = 28,		/* Frame pointer / Saved by callee.  */
+  NDS32_TA_REGNUM = 15,		/* Temporary register.  */
+  NDS32_FP_REGNUM = 28,		/* Frame pointer.  */
   NDS32_GP_REGNUM = 29,		/* Global pointer.  */
   NDS32_LP_REGNUM = 30,		/* Link pointer.  */
-  NDS32_SP_REGNUM = 31,		/* Stack pointer -- Address of stack top.  */
+  NDS32_SP_REGNUM = 31,		/* Stack pointer.  */
 
-  /* Pseudo PC.  */
-  NDS32_PC_REGNUM = 32,
+  NDS32_PC_REGNUM = 32,		/* Program counter.  */
 
   /* D0/D1 User Registers.  */
   NDS32_D0LO_REGNUM = 33,
@@ -76,4 +74,4 @@ struct gdbarch_tdep
 
   int abi;
 };
-#endif
+#endif /* NDS32_TDEP_H */
