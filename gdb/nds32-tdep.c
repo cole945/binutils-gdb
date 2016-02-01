@@ -222,7 +222,7 @@ nds32_dwarf_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int num)
     return num - FDR + tdep->fd0_regnum;
 
   /* No match, return a inaccessible register number.  */
-  return gdbarch_num_regs (gdbarch) + gdbarch_num_pseudo_regs (gdbarch);
+  return -1;
 }
 
 /* Implement gdbarch_register_sim_regno method.  */
