@@ -80,9 +80,8 @@ static const char *const nds32_register_names[] =
   "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15",
   "r16", "r17", "r18", "r19", "r20", "r21", "r22", "r23",
   "r24", "r25", "r26", "r27", "fp", "gp", "lp", "sp",
-
-  /* 5 User Registers. */
-  "pc", "d0lo", "d0hi", "d1lo", "d1hi",
+  /* PC.  */
+  "pc",
 };
 
 static const char *const nds32_fdr_register_names[] =
@@ -298,7 +297,6 @@ static int
 nds32_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int num)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-  const int DXR = 34;
   const int FSR = 38;
   const int FDR = FSR + 32;
 
@@ -306,11 +304,6 @@ nds32_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int num)
     {
       /* General-purpose registers (R0 - R31).  */
       return num;
-    }
-  else if (num >= DXR && num < DXR + 4)
-    {
-      /* Special user registers (D0/D1).  */
-      return num - DXR + NDS32_D0LO_REGNUM;
     }
   else if (num >= FSR && num < FSR + 32)
     {
@@ -1956,10 +1949,6 @@ nds32_preprocess_tdesc_p (const struct target_desc *tdesc,
 
   /* Fixed-number R11-R27.  */
   for (i = NDS32_R0_REGNUM + 11; i <= NDS32_R0_REGNUM + 27; i++)
-    tdesc_numbered_register (feature, tdesc_data, i, nds32_register_names[i]);
-
-  /* Fixed-number D0 and D1.  */
-  for (i = NDS32_D0LO_REGNUM; i <= NDS32_D1HI_REGNUM; i++)
     tdesc_numbered_register (feature, tdesc_data, i, nds32_register_names[i]);
 
   /* Guess FPU configuration via existing registers.  */

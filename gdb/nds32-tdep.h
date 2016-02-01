@@ -34,12 +34,6 @@ enum nds32_regnum
 
   NDS32_PC_REGNUM = 32,		/* Program counter.  */
 
-  /* D0/D1 User Registers.  */
-  NDS32_D0LO_REGNUM = 33,
-  NDS32_D0HI_REGNUM = 34,
-  NDS32_D1LO_REGNUM = 35,
-  NDS32_D1HI_REGNUM = 36,
-
   NDS32_NUM_REGS,
 
   /* Double precision floating-point registers.  */

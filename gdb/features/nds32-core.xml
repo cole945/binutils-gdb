@@ -41,9 +41,4 @@
   <reg name="sp" bitsize="32" type="data_ptr"/>
 
   <reg name="pc" bitsize="32" type="code_ptr"/>
-
-  <reg name="d0lo" bitsize="32"/>
-  <reg name="d0hi" bitsize="32"/>
-  <reg name="d1lo" bitsize="32"/>
-  <reg name="d1hi" bitsize="32"/>
 </feature>

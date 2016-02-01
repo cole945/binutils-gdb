@@ -2190,18 +2190,6 @@ nds32_fetch_register (sim_cpu *cpu, int rn, unsigned char *memory, int length)
     case SIM_NDS32_PC_REGNUM:
       val = cpu->reg_usr[USR0_PC].u;
       goto do_fetch;
-    case SIM_NDS32_D0LO_REGNUM:
-      val = cpu->reg_usr[USR0_D0LO].u;
-      goto do_fetch;
-    case SIM_NDS32_D0HI_REGNUM:
-      val = cpu->reg_usr[USR0_D0HI].u;
-      goto do_fetch;
-    case SIM_NDS32_D1LO_REGNUM:
-      val = cpu->reg_usr[USR0_D1LO].u;
-      goto do_fetch;
-    case SIM_NDS32_D1HI_REGNUM:
-      val = cpu->reg_usr[USR0_D1HI].u;
-      goto do_fetch;
     case SIM_NDS32_ITB_REGNUM:
       val = cpu->reg_usr[USR0_ITB].u;
       goto do_fetch;
@@ -2258,18 +2246,6 @@ nds32_store_register (sim_cpu *cpu, int rn, unsigned char *memory, int length)
     {
     case SIM_NDS32_PC_REGNUM:
       cpu->reg_usr[USR0_PC].u = val;
-      return 4;
-    case SIM_NDS32_D0LO_REGNUM:
-      cpu->reg_usr[USR0_D0LO].u = val;
-      return 4;
-    case SIM_NDS32_D0HI_REGNUM:
-      cpu->reg_usr[USR0_D0HI].u = val;
-      return 4;
-    case SIM_NDS32_D1LO_REGNUM:
-      cpu->reg_usr[USR0_D1LO].u = val;
-      return 4;
-    case SIM_NDS32_D1HI_REGNUM:
-      cpu->reg_usr[USR0_D1HI].u = val;
       return 4;
     case SIM_NDS32_ITB_REGNUM:
       cpu->reg_usr[USR0_ITB].u = val;
