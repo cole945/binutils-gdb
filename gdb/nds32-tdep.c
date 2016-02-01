@@ -281,7 +281,6 @@ static struct reggroup *nds32_dmar_reggroup;
 static struct reggroup *nds32_racr_reggroup;
 static struct reggroup *nds32_idr_reggroup;
 static struct reggroup *nds32_secur_reggroup;
-static struct reggroup *nds32_audio_reggroup;
 
 static void
 nds32_init_reggroups (void)
@@ -297,8 +296,6 @@ nds32_init_reggroups (void)
   nds32_racr_reggroup = reggroup_new ("racr", USER_REGGROUP);
   nds32_idr_reggroup = reggroup_new ("idr", USER_REGGROUP);
   nds32_secur_reggroup = reggroup_new ("secur", USER_REGGROUP);
-
-  nds32_audio_reggroup = reggroup_new ("audio", USER_REGGROUP);
 }
 
 static void
