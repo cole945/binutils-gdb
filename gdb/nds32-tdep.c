@@ -2046,7 +2046,7 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   int i, maxregs;
 
   /* Allocate space for the new architecture.  */
-  tdep = xcalloc (1, sizeof (struct gdbarch_tdep));
+  tdep = XCNEW (struct gdbarch_tdep);
   gdbarch = gdbarch_alloc (&info, tdep);
 
   if (tdesc_has_registers (info.target_desc))
