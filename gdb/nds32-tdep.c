@@ -809,7 +809,7 @@ nds32_frame_unwind_cache (struct frame_info *this_frame,
   struct gdbarch *gdbarch = get_frame_arch (this_frame);
 
   if ((*this_prologue_cache))
-    return (*this_prologue_cache);
+    return (struct nds32_unwind_cache *) *this_prologue_cache;
 
   info = nds32_alloc_frame_cache (this_frame);
 
@@ -1899,7 +1899,7 @@ nds32_epilogue_frame_cache (struct frame_info *this_frame, void **this_cache)
   CORE_ADDR sp;
 
   if (*this_cache)
-    return *this_cache;
+    return (struct nds32_unwind_cache *) *this_cache;
 
   cache = nds32_alloc_frame_cache (this_frame);
   *this_cache = cache;
@@ -2024,7 +2024,7 @@ gdb_print_insn_nds32 (bfd_vma memaddr, disassemble_info *info)
 	goto done;
 
       info->section = s->the_bfd_section;
-      info->symtab = xmalloc (storage);
+      info->symtab = (asymbol **) xmalloc (storage);
       info->symtab_size =
 	bfd_canonicalize_symtab (s->the_bfd_section->owner, info->symtab);
     }
