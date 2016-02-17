@@ -1475,9 +1475,26 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 	  if ((align >> 2) > 0)
 	    goff = align_up (goff, align >> 2);
 
-	  if (len <= (REND - goff) * 4 || abi_split)
+	  if (len <= (REND - goff) * 4)
 	    {
-	      while (len > 0 && goff < REND)
+	      /* This argument can be passed wholly via GPRs.  */
+	      while (len > 0)
+		{
+		  regval = extract_unsigned_integer (val, (len > 4) ? 4 : len,
+						     byte_order);
+		  regcache_cooked_write_unsigned (regcache,
+						  NDS32_R0_REGNUM + goff,
+						  regval);
+		  len -= 4;
+		  val += 4;
+		  goff++;
+		}
+	      continue;
+	    }
+	  else if (abi_split)
+	    {
+	      /* Some parts of this argument can be passed via GPRs.  */
+	      while (goff < REND)
 		{
 		  regval = extract_unsigned_integer (val, (len > 4) ? 4 : len,
 						     byte_order);
