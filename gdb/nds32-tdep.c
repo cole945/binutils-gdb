@@ -956,8 +956,7 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
   struct nds32_frame_cache *cache;
   CORE_ADDR current_pc;
   ULONGEST prev_sp;
-  ULONGEST sp_base;
-  ULONGEST fp_base;
+  ULONGEST this_base;
   int i;
 
   if (*this_cache)
@@ -974,20 +973,17 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
      frame's ID's stack address), and this frame's base pointer.  */
   if (cache->use_frame)
     {
-      /* Try to use FP if possible. */
-      fp_base = get_frame_register_unsigned (this_frame, NDS32_FP_REGNUM);
-      prev_sp = fp_base - cache->fp_offset;
-      cache->base = fp_base;
+      this_base = get_frame_register_unsigned (this_frame, NDS32_FP_REGNUM);
+      prev_sp = this_base - cache->fp_offset;
     }
   else
     {
-      sp_base = get_frame_register_unsigned (this_frame, NDS32_SP_REGNUM);
-      prev_sp = sp_base - cache->sp_offset;
-      cache->base = sp_base;
+      this_base = get_frame_register_unsigned (this_frame, NDS32_SP_REGNUM);
+      prev_sp = this_base - cache->sp_offset;
     }
 
-  /* Convert that SP/BASE into real addresses.  */
   cache->prev_sp = prev_sp;
+  cache->base = this_base;
 
   /* Adjust all the saved registers so that they contain addresses and
      not offsets.  */
