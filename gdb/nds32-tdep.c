@@ -1389,6 +1389,8 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
       align = nds32_type_align (type);
       val = value_contents (args[i]);
 
+      /* The size of a composite type larger than 4 bytes will be rounded
+	 up to the nearest multiple of 4.  */
       if (len > 4)
 	len = align_up (len, 4);
 
@@ -1443,30 +1445,30 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
       else
 	{
 	  /*
-	    When passing arguments using GPRs,
+	     When passing arguments using GPRs,
 
-	    * A composite type not larger than 4 bytes is passed
-	      in $rN. The format is as if the value is loaded with
-	      load instruction of corresponding size. (i.g., LB, LH, LW)
+	     * A composite type not larger than 4 bytes is passed in $rN.
+	       The format is as if the value is loaded with load instruction
+	       of corresponding size (e.g., LB, LH, LW).
 
 	       For example,
 
-		      r0
-		      31      0
-	      LITTLE: [x x b a]
-		 BIG: [x x a b]
+		       r0
+		       31      0
+	       LITTLE: [x x b a]
+		  BIG: [x x a b]
 
 	     * Otherwise, a composite type is passed in consecutive registers.
 	       The size is rounded up to the nearest multiple of 4.
 	       The successive registers hold the parts of the argument as if
 	       were loaded using lmw instructions.
 
-	      For example,
+	       For example,
 
-		      r0	r1
-		      31      0 31      0
-	      LITTLE: [d c b a] [x x x e]
-		 BIG: [a b c d] [e x x x]
+		       r0	r1
+		       31      0 31      0
+	       LITTLE: [d c b a] [x x x e]
+		  BIG: [a b c d] [e x x x]
 	   */
 
 	  /* Adjust alignment.  */
@@ -1491,18 +1493,22 @@ nds32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 
 use_stack:
       /*
-	When push an argument in stack,
+	 When pushing (split parts of) an argument into stack,
 
-	* A composite type not larger than 4 bytes is copied
-	  to memory at the next free space, in little-endian.
-	  In big-endian, the last byte of the argument is aligned
-	  at the next word address.  For example,
+	 * A composite type not larger than 4 bytes is copied to different
+	   base address.
+	   In little-endian, the first byte of this argument is aligned
+	   at the low address of the next free word.
+	   In big-endian, the last byte of this argument is aligned
+	   at the high address of the next free word.
 
-	  sp [ - ]  [ b ] hi
-	     [ - ]  [ a ]
-	     [ b ]  [ - ]
-	     [ a ]  [ - ] lo
-	    LITTLE   BIG
+	   For example,
+
+	   sp [ - ]  [ c ] hi
+	      [ c ]  [ b ]
+	      [ b ]  [ a ]
+	      [ a ]  [ - ] lo
+	     LITTLE   BIG
        */
 
       /* Adjust alignment.  */
