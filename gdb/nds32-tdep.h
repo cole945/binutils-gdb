@@ -61,7 +61,7 @@ enum nds32_regnum
 
 struct gdbarch_tdep
 {
-  /* The configuration of FPU FREG.  */
+  /* The guessed FPU configuration.  */
   int fpu_freg;
   int fs0_regnum;
   int fd0_regnum;

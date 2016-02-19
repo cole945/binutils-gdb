@@ -2041,7 +2041,7 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   struct gdbarch_list *best_arch;
   const struct target_desc *tdesc = NULL;
   struct tdesc_arch_data *tdesc_data = NULL;
-  int i, maxregs, fpregs = -1, use_pseudo_fsrs = 0;
+  int i, maxregs, freg = -1, use_pseudo_fsrs = 0;
 
   tdep = XCNEW (struct gdbarch_tdep);
 
@@ -2117,24 +2117,26 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
       for (i = NDS32_D0LO_REGNUM; i <= NDS32_D1HI_REGNUM; i++)
 	tdesc_numbered_register (feature, tdesc_data, i, nds32_regnames[i]);
 
-      /* Find register configuration of FPU.  */
+      /* Guess FPU configuration via existing registers.  */
       feature = tdesc_find_feature (tdesc, "org.gnu.gdb.nds32.fpu");
       if (feature != NULL)
 	{
 	  if (tdesc_unnumbered_register (feature, "fd31"))
-	    fpregs = 3;
+	    freg = 3;
 	  else if (tdesc_unnumbered_register (feature, "fd15"))
-	    fpregs = 2;
+	    freg = 2;
 	  else if (tdesc_unnumbered_register (feature, "fd7"))
-	    fpregs = 1;
+	    freg = 1;
 	  else if (tdesc_unnumbered_register (feature, "fd3"))
-	    fpregs = 0;
+	    freg = 0;
 	}
-      tdep->fpu_freg = fpregs;
+
+      /* Record guessed FPU configuration.  */
+      tdep->fpu_freg = freg;
 
       /* If FS registers do not exist, make them pseudo registers
 	 of FD registers.  */
-      if (fpregs != -1 && tdesc_unnumbered_register (feature, "fs0") == 0)
+      if (freg != -1 && tdesc_unnumbered_register (feature, "fs0") == 0)
 	use_pseudo_fsrs = 1;
     }
 
@@ -2150,7 +2152,7 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
       if (tdep->abi_use_fpr != idep->abi_use_fpr)
 	continue;
 
-      /* Check FPU registers.  */
+      /* Compare FPU configuration.  */
       if (idep->fpu_freg != tdep->fpu_freg)
 	continue;
 
@@ -2173,12 +2175,12 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
     {
       if (use_pseudo_fsrs)
 	{
-	  int fsregs = (fpregs + 1) * 8;
+	  int num_fsr_regs = (freg + 1) * 8;
 
-	  if (fsregs > 32)
-	    fsregs = 32;
+	  if (num_fsr_regs > 32)
+	    num_fsr_regs = 32;
 
-	  set_gdbarch_num_pseudo_regs (gdbarch, fsregs);
+	  set_gdbarch_num_pseudo_regs (gdbarch, num_fsr_regs);
 	  set_gdbarch_pseudo_register_read (gdbarch, nds32_pseudo_register_read);
 	  set_gdbarch_pseudo_register_write (gdbarch, nds32_pseudo_register_write);
 	  set_tdesc_pseudo_register_name (gdbarch, nds32_register_name);
