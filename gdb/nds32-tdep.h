@@ -59,8 +59,6 @@ enum nds32_regnum
   NDS32_SIM_PSW_REGNUM = NDS32_SIM_FD0_REGNUM + 32,
   NDS32_SIM_ITB_REGNUM,
   NDS32_SIM_IFCLP_REGNUM,
-
-  NDS32_SIM_NUM_REGS,
 };
 
 struct gdbarch_tdep

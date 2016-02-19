@@ -412,46 +412,16 @@ nds32_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
   return default_register_reggroup_p (gdbarch, regnum, group);
 }
 
-/* Implement the tdesc_pseudo_register_name method.
-
-   This function is called when
-   1. Target-description is used, and the register is pseudo.
-   2. Target-description is NOT used, because
-       i. the target is simulator,
-      ii. or the target is legacy target, so tdesc is not supported.  */
+/* Implement the tdesc_pseudo_register_name method.  */
 
 static const char *
-nds32_register_name (struct gdbarch *gdbarch, int regnum)
+nds32_pseudo_register_name (struct gdbarch *gdbarch, int regnum)
 {
-  static const char *fpu_pseudo_names[] =
-  {
-    "fs0", "fs1", "fs2", "fs3", "fs4", "fs5", "fs6", "fs7",
-    "fs8", "fs9", "fs10", "fs11", "fs12", "fs13", "fs14", "fs15",
-    "fs16", "fs17", "fs18", "fs19", "fs20", "fs21", "fs22", "fs23",
-    "fs24", "fs25", "fs26", "fs27", "fs28", "fs29", "fs30", "fs31"
-  };
-  static const char *sim_names[] =
-  {
-    "fd0", "fd1", "fd2", "fd3", "fd4", "fd5", "fd6", "fd7",
-    "fd8", "fd9", "fd10", "fd11", "fd12", "fd13", "fd14", "fd15",
-    "fd16", "fd17", "fd18", "fd19", "fd20", "fd21", "fd22", "fd23",
-    "fd24", "fd25", "fd26", "fd27", "fd28", "fd29", "fd30", "fd31",
-    "ir0", "itb", "ifclp"
-  };
-  int num_regs = gdbarch_num_regs (gdbarch);
+  regnum -= gdbarch_num_regs (gdbarch);
 
-  /* Currently, only pseudo FSR are supported.  */
-  if (regnum >= num_regs && regnum < num_regs + 32)
-    return fpu_pseudo_names[regnum - num_regs];
-
-  /* GPRs.  */
-  if (regnum < (int) ARRAY_SIZE (nds32_regnames))
-    return nds32_regnames[regnum];
-
-  /* Registers between NUM_REGS and SMI_NUM_REGS are
-     simulator registers.  */
-  if (regnum >= NDS32_NUM_REGS && regnum < NDS32_SIM_NUM_REGS)
-    return sim_names[regnum - NDS32_NUM_REGS];
+  /* Currently, only FSRs could be defined as pseudo registers.  */
+  if (regnum < gdbarch_num_pseudo_regs (gdbarch))
+    return nds32_fsr_regnames[regnum];
 
   warning (_("Unknown nds32 pseudo register %d."), regnum);
   return NULL;
@@ -2258,7 +2228,7 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
       set_gdbarch_num_pseudo_regs (gdbarch, tdep->num_fsr_regs);
       set_gdbarch_pseudo_register_read (gdbarch, nds32_pseudo_register_read);
       set_gdbarch_pseudo_register_write (gdbarch, nds32_pseudo_register_write);
-      set_tdesc_pseudo_register_name (gdbarch, nds32_register_name);
+      set_tdesc_pseudo_register_name (gdbarch, nds32_pseudo_register_name);
     }
 
   if (tdep->fpu_freg == -1)
