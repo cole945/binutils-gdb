@@ -392,10 +392,7 @@ nds32_pseudo_register_name (struct gdbarch *gdbarch, int regnum)
   return NULL;
 }
 
-/* Implement the gdbarch_pseudo_register_read method.
-
-   For legacy target, target-description and FPRs are not support.
-   Use Rcmd to access FPU registers.  */
+/* Implement the gdbarch_pseudo_register_read method.  */
 
 static enum register_status
 nds32_pseudo_register_read (struct gdbarch *gdbarch,
@@ -404,20 +401,19 @@ nds32_pseudo_register_read (struct gdbarch *gdbarch,
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   gdb_byte reg_buf[8];
-  int offset;
+  int offset, fd_regnum;
   enum register_status status = REG_UNKNOWN;
 
   /* Sanity check.  */
-  regnum -= gdbarch_num_regs (gdbarch);
-  if (regnum > gdbarch_num_pseudo_regs (gdbarch))
+  if (tdep->fpu_freg == -1 || tdep->use_pseudo_fsrs == 0)
     return status;
 
-  /* Currently, only FSR are supported.  */
-  if (regnum < 32)
-    {
-      int fd_regnum;
+  regnum -= gdbarch_num_regs (gdbarch);
 
-      /* fs0 is always the high-part of fd0.  */
+  /* Currently, only FSRs could be defined as pseudo registers.  */
+  if (regnum < gdbarch_num_pseudo_regs (gdbarch))
+    {
+      /* fs0 is always the most significant half of fd0.  */
       if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
 	offset = (regnum & 1) ? 4 : 0;
       else
@@ -441,19 +437,18 @@ nds32_pseudo_register_write (struct gdbarch *gdbarch,
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   gdb_byte reg_buf[8];
-  int offset;
+  int offset, fd_regnum;
 
   /* Sanity check.  */
-  regnum -= gdbarch_num_regs (gdbarch);
-  if (regnum > gdbarch_num_pseudo_regs (gdbarch))
+  if (tdep->fpu_freg == -1 || tdep->use_pseudo_fsrs == 0)
     return;
 
-  /* Currently, only FSR are supported.  */
-  if (regnum < 32)
-    {
-      int fd_regnum;
+  regnum -= gdbarch_num_regs (gdbarch);
 
-      /* fs0 is always the high-part of fd0.  */
+  /* Currently, only FSRs could be defined as pseudo registers.  */
+  if (regnum < gdbarch_num_pseudo_regs (gdbarch))
+    {
+      /* fs0 is always the most significant half of fd0.  */
       if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
 	offset = (regnum & 1) ? 4 : 0;
       else
@@ -464,8 +459,6 @@ nds32_pseudo_register_write (struct gdbarch *gdbarch,
       memcpy (reg_buf + offset, buf, 4);
       regcache_raw_write (regcache, fd_regnum, reg_buf);
     }
-
-  return;
 }
 
 /* Skip prologue should be conservative, and frame-unwind should be
