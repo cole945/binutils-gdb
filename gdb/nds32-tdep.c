@@ -2269,6 +2269,15 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
     set_gdbarch_num_regs (gdbarch, NDS32_FS0_REGNUM + tdep->num_fsr_regs);
   tdesc_use_registers (gdbarch, tdesc, tdesc_data);
 
+  /* Cache the register number of fs0 and fd0.  */
+  tdep->fs0_regnum = -1;
+  tdep->fd0_regnum = -1;
+  if (tdep->fpu_freg != -1)
+    {
+      tdep->fs0_regnum = user_reg_map_name_to_regnum (gdbarch, "fs0", -1);
+      tdep->fd0_regnum = user_reg_map_name_to_regnum (gdbarch, "fd0", -1);
+    }
+
   /* Add nds32 register aliases.  */
   maxregs = (gdbarch_num_regs (gdbarch) + gdbarch_num_pseudo_regs (gdbarch));
   for (i = 0; i < (int) ARRAY_SIZE (nds32_register_aliases); i++)
@@ -2293,23 +2302,6 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
       user_reg_add (gdbarch, nds32_register_aliases[i].alias,
 		    nds32_value_of_reg, nds32_register_aliases[i].name);
-    }
-
-  /* Find the register number of fs0 and fd0.  */
-  tdep->fs0_regnum = -1;
-  tdep->fd0_regnum = -1;
-  for (i = 0; i < maxregs; i++)
-    {
-      const char *regname = gdbarch_register_name (gdbarch, i);
-
-      if (regname == NULL || regname[0] != 'f' || regname[2] != '0' ||
-	  regname[3] != '\0')
-	continue;
-
-      if (regname[1] == 's')
-	tdep->fs0_regnum = i;
-      else if (regname[1] == 'd')
-	tdep->fd0_regnum = i;
     }
 
   nds32_add_reggroups (gdbarch);
