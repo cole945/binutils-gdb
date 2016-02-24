@@ -2167,13 +2167,6 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
       if (idep->abi != tdep->abi)
 	continue;
 
-      /* Compare FPU configuration.  */
-      if (idep->fpu_freg != tdep->fpu_freg)
-	continue;
-
-      if (idep->use_pseudo_fsrs != tdep->use_pseudo_fsrs)
-	continue;
-
       /* Found a match.  */
       break;
     }
