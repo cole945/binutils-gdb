@@ -2145,18 +2145,6 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
       tdep->abi = eflags & EF_NDS_ABI;
     }
 
-  if (!tdesc_has_registers (tdesc))
-    tdesc = tdesc_nds32;
-
-  tdesc_data = tdesc_data_alloc ();
-
-  if (!nds32_preprocess_tdesc_p (tdesc, tdesc_data, tdep))
-    {
-      tdesc_data_cleanup (tdesc_data);
-      xfree (tdep);
-      return NULL;
-    }
-
   /* If there is already a candidate, use it.  */
   for (best_arch = gdbarch_list_lookup_by_info (arches, &info);
        best_arch != NULL;
@@ -2173,9 +2161,20 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   if (best_arch != NULL)
     {
-      tdesc_data_cleanup (tdesc_data);
       xfree (tdep);
       return best_arch->gdbarch;
+    }
+
+  if (!tdesc_has_registers (tdesc))
+    tdesc = tdesc_nds32;
+
+  tdesc_data = tdesc_data_alloc ();
+
+  if (!nds32_preprocess_tdesc_p (tdesc, tdesc_data, tdep))
+    {
+      tdesc_data_cleanup (tdesc_data);
+      xfree (tdep);
+      return NULL;
     }
 
   /* Allocate space for the new architecture.  */
