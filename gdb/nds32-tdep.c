@@ -2040,8 +2040,8 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   struct gdbarch *gdbarch;
   struct gdbarch_tdep *tdep;
   struct gdbarch_list *best_arch;
-  const struct target_desc *tdesc = info.target_desc;
   struct tdesc_arch_data *tdesc_data = NULL;
+  const struct target_desc *tdesc = info.target_desc;
   int i, maxregs, freg = -1, use_pseudo_fsrs = 0;
 
   tdep = XCNEW (struct gdbarch_tdep);
@@ -2070,8 +2070,8 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   if (!tdesc_has_registers (tdesc))
     tdesc = tdesc_nds32;
 
-  if (tdesc_has_registers (tdesc))
     {
+      /* Validate and initialize target-description here.  */
       int valid_p;
       static const char *const nds32_fp_names[] = { "r28", "fp", NULL };
       static const char *const nds32_gp_names[] = { "r29", "gp", NULL };
@@ -2165,8 +2165,7 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   if (best_arch != NULL)
     {
-      if (tdesc_data != NULL)
-	tdesc_data_cleanup (tdesc_data);
+      tdesc_data_cleanup (tdesc_data);
       xfree (tdep);
       return best_arch->gdbarch;
     }
@@ -2174,24 +2173,21 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   /* Allocate space for the new architecture.  */
   gdbarch = gdbarch_alloc (&info, tdep);
 
-  if (tdesc_data)
+  if (use_pseudo_fsrs)
     {
-      if (use_pseudo_fsrs)
-	{
-	  int num_fsr_regs = (freg + 1) * 8;
+      int num_fsr_regs = (1 << freg) * 8;
 
-	  if (num_fsr_regs > 32)
-	    num_fsr_regs = 32;
+      if (num_fsr_regs > 32)
+	num_fsr_regs = 32;
 
-	  set_gdbarch_num_pseudo_regs (gdbarch, num_fsr_regs);
-	  set_gdbarch_pseudo_register_read (gdbarch, nds32_pseudo_register_read);
-	  set_gdbarch_pseudo_register_write (gdbarch, nds32_pseudo_register_write);
-	  set_tdesc_pseudo_register_name (gdbarch, nds32_register_name);
-	}
-
-      set_gdbarch_num_regs (gdbarch, NDS32_NUM_REGS);
-      tdesc_use_registers (gdbarch, tdesc, tdesc_data);
+      set_gdbarch_num_pseudo_regs (gdbarch, num_fsr_regs);
+      set_gdbarch_pseudo_register_read (gdbarch, nds32_pseudo_register_read);
+      set_gdbarch_pseudo_register_write (gdbarch, nds32_pseudo_register_write);
+      set_tdesc_pseudo_register_name (gdbarch, nds32_register_name);
     }
+
+  set_gdbarch_num_regs (gdbarch, NDS32_NUM_REGS);
+  tdesc_use_registers (gdbarch, tdesc, tdesc_data);
 
   /* Add nds32 register aliases.  */
   maxregs = (gdbarch_num_regs (gdbarch) + gdbarch_num_pseudo_regs (gdbarch));
