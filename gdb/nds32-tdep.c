@@ -75,6 +75,14 @@ static const char *nds32_regnames[] =
   "pc", "d0lo", "d0hi", "d1lo", "d1hi",
 };
 
+static const char *nds32_fdr_regnames[] =
+{
+  "fd0", "fd1", "fd2", "fd3", "fd4", "fd5", "fd6", "fd7",
+  "fd8", "fd9", "fd10", "fd11", "fd12", "fd13", "fd14", "fd15",
+  "fd16", "fd17", "fd18", "fd19", "fd20", "fd21", "fd22", "fd23",
+  "fd24", "fd25", "fd26", "fd27", "fd28", "fd29", "fd30", "fd31"
+};
+
 /* Mnemonic names for registers.  */
 struct nds32_register_alias
 {
@@ -2109,6 +2117,21 @@ nds32_preprocess_tdesc_p (const struct target_desc *tdesc,
   /* Record guessed FPU configuration.  */
   tdep->fpu_freg = freg;
 
+  if (freg != -1)
+    {
+      int num_fdr_regs = (1 << freg) * 4;
+
+      /* Validate and fixed-number required FDRs.  */
+      for (i = 0; i < num_fdr_regs; i++)
+	valid_p &= tdesc_numbered_register (feature, tdesc_data,
+					    NDS32_FD0_REGNUM + i,
+					    nds32_fdr_regnames[i]);
+      tdep->num_fdr_regs = num_fdr_regs;
+    }
+
+  if (!valid_p)
+    return 0;
+
   /* If FS registers are not specified in target-description, make them
      pseudo registers of FD registers.  */
   tdep->use_pseudo_fsrs = 0;
@@ -2211,7 +2234,10 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
       set_tdesc_pseudo_register_name (gdbarch, nds32_register_name);
     }
 
-  set_gdbarch_num_regs (gdbarch, NDS32_NUM_REGS);
+  if (tdep->fpu_freg == -1)
+    set_gdbarch_num_regs (gdbarch, NDS32_NUM_REGS);
+  else
+    set_gdbarch_num_regs (gdbarch, NDS32_FD0_REGNUM + tdep->num_fdr_regs);
   tdesc_use_registers (gdbarch, tdesc, tdesc_data);
 
   /* Add nds32 register aliases.  */

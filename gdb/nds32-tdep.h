@@ -44,6 +44,9 @@ enum nds32_regnum
 
   NDS32_NUM_REGS,
 
+  /* Double precision floating-point registers.  */
+  NDS32_FD0_REGNUM = NDS32_NUM_REGS,
+
   /* These are only used by simulator.  */
   NDS32_SIM_FD0_REGNUM = NDS32_NUM_REGS,
   /* There are General purpose floating-point registers.
@@ -65,6 +68,8 @@ struct gdbarch_tdep
   int use_pseudo_fsrs;
   int fs0_regnum;
   int fd0_regnum;
+  /* The guessed number of FDRs implemented.  */
+  int num_fdr_regs;
 
   /* Large arguments are split between registers and stack.  */
   int abi_split;
