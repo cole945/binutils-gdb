@@ -47,16 +47,6 @@ enum nds32_regnum
 
   /* Single precision floating-point registers.  */
   NDS32_FS0_REGNUM = NDS32_FD0_REGNUM + 32,
-
-  /* These are only used by simulator.  */
-  NDS32_SIM_FD0_REGNUM = NDS32_NUM_REGS,
-  /* There are General purpose floating-point registers.
-     The number of registers depends on configuration
-     Check FPCFG (Floating-Point Unit Configuration).
-     Anyway, the maximum usage is thirty-two.  */
-  NDS32_SIM_PSW_REGNUM = NDS32_SIM_FD0_REGNUM + 32,
-  NDS32_SIM_ITB_REGNUM,
-  NDS32_SIM_IFCLP_REGNUM,
 };
 
 struct gdbarch_tdep

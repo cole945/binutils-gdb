@@ -38,8 +38,6 @@
 #include "dwarf2-frame.h"
 #include "remote.h"
 #include "target-descriptions.h"
-#include "sim-regno.h"
-#include "gdb/sim-nds32.h"
 
 #include "nds32-tdep.h"
 #include "elf/nds32.h"
@@ -328,31 +326,6 @@ nds32_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int num)
 
   /* No match, return a inaccessible register number.  */
   return -1;
-}
-
-/* Implement the "register_sim_regno" gdbarch method.  */
-
-static int
-nds32_register_sim_regno (struct gdbarch *gdbarch, int regnum)
-{
-  /* Only makes sense to supply raw registers.  */
-  gdb_assert (regnum >= 0 && regnum < gdbarch_num_regs (gdbarch));
-
-  if (regnum < NDS32_NUM_REGS)
-    return regnum;
-  if (regnum >= NDS32_SIM_FD0_REGNUM && regnum < NDS32_SIM_FD0_REGNUM + 32)
-    return SIM_NDS32_FD0_REGNUM + regnum - NDS32_SIM_FD0_REGNUM;
-  switch (regnum)
-    {
-    case NDS32_SIM_PSW_REGNUM:
-      return SIM_NDS32_PSW_REGNUM;
-    case NDS32_SIM_ITB_REGNUM:
-      return SIM_NDS32_ITB_REGNUM;
-    case NDS32_SIM_IFCLP_REGNUM:
-      return SIM_NDS32_IFCLP_REGNUM;
-    }
-
-  return LEGACY_SIM_REGNO_IGNORE;
 }
 
 
@@ -2250,7 +2223,6 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_unwind_pc (gdbarch, nds32_unwind_pc);
   set_gdbarch_stack_frame_destroyed_p (gdbarch, nds32_stack_frame_destroyed_p);
   set_gdbarch_dwarf2_reg_to_regnum (gdbarch, nds32_dwarf2_reg_to_regnum);
-  set_gdbarch_register_sim_regno (gdbarch, nds32_register_sim_regno);
 
   set_gdbarch_push_dummy_call (gdbarch, nds32_push_dummy_call);
   set_gdbarch_return_value (gdbarch, nds32_return_value);
