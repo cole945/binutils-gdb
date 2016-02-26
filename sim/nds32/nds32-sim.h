@@ -77,7 +77,7 @@ void __nds32_st (sim_cpu *cpu, SIM_ADDR addr, int size, uint64_t  val, int align
 #define nds32_ld_unaligned(CPU, ADDR, SIZE)		__nds32_ld (CPU, ADDR, SIZE, 0)
 #define nds32_st_unaligned(CPU, ADDR, SIZE, VAL)	__nds32_st (CPU, ADDR, SIZE, VAL, 0)
 
-void nds32_init_libgloss (SIM_DESC sd, struct bfd *abfd, char **argv, char **env);
+void nds32_init_libgloss (SIM_DESC sd, struct bfd *abfd, char * const *argv, char * const *env);
 void nds32_init_linux (SIM_DESC sd, struct bfd *abfd, char **argv, char **env);
 
 sim_cia nds32_decode32_lwc (sim_cpu *cpu, const uint32_t insn, sim_cia cia);

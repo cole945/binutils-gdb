@@ -2433,7 +2433,8 @@ sim_dis_read (bfd_vma memaddr, bfd_byte *myaddr, unsigned int length,
 }
 
 void
-nds32_init_libgloss (SIM_DESC sd, struct bfd *abfd, char **argv, char **env)
+nds32_init_libgloss (SIM_DESC sd, struct bfd *abfd,
+		     char * const *argv, char * const *env)
 {
   int len, mlen, i;
 
