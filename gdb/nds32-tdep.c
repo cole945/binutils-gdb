@@ -83,6 +83,14 @@ static const char *nds32_fdr_regnames[] =
   "fd24", "fd25", "fd26", "fd27", "fd28", "fd29", "fd30", "fd31"
 };
 
+static const char *nds32_fsr_regnames[] =
+{
+  "fs0", "fs1", "fs2", "fs3", "fs4", "fs5", "fs6", "fs7",
+  "fs8", "fs9", "fs10", "fs11", "fs12", "fs13", "fs14", "fs15",
+  "fs16", "fs17", "fs18", "fs19", "fs20", "fs21", "fs22", "fs23",
+  "fs24", "fs25", "fs26", "fs27", "fs28", "fs29", "fs30", "fs31"
+};
+
 /* Mnemonic names for registers.  */
 struct nds32_register_alias
 {
@@ -2132,11 +2140,35 @@ nds32_preprocess_tdesc_p (const struct target_desc *tdesc,
   if (!valid_p)
     return 0;
 
-  /* If FS registers are not specified in target-description, make them
-     pseudo registers of FD registers.  */
   tdep->use_pseudo_fsrs = 0;
-  if (freg != -1 && tdesc_unnumbered_register (feature, "fs0") == 0)
-    tdep->use_pseudo_fsrs = 1;
+  if (freg != -1)
+    {
+      int num_fsr_regs = (1 << freg) * 8;
+
+      if (num_fsr_regs > 32)
+	num_fsr_regs = 32;
+
+      tdep->num_fsr_regs = num_fsr_regs;
+
+      /* Assume that when FSRs are specified in target description, FS0 must
+	 exist.  */
+      if (tdesc_unnumbered_register (feature, "fs0") == 0)
+	{
+	  /* If FSRs are not specified in target-description, make them
+	     pseudo registers of FDRs.  */
+	  tdep->use_pseudo_fsrs = 1;
+	}
+      else
+	{
+	  /* Validate and fixed-number required FSRs.  */
+	  for (i = 0; i < num_fsr_regs; i++)
+	    valid_p &= tdesc_numbered_register (feature, tdesc_data,
+						NDS32_FS0_REGNUM + i,
+						nds32_fsr_regnames[i]);
+	  if (!valid_p)
+	    return 0;
+	}
+    }
 
   return 1;
 }
@@ -2223,12 +2255,7 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   if (tdep->use_pseudo_fsrs)
     {
-      int num_fsr_regs = (1 << tdep->fpu_freg) * 8;
-
-      if (num_fsr_regs > 32)
-	num_fsr_regs = 32;
-
-      set_gdbarch_num_pseudo_regs (gdbarch, num_fsr_regs);
+      set_gdbarch_num_pseudo_regs (gdbarch, tdep->num_fsr_regs);
       set_gdbarch_pseudo_register_read (gdbarch, nds32_pseudo_register_read);
       set_gdbarch_pseudo_register_write (gdbarch, nds32_pseudo_register_write);
       set_tdesc_pseudo_register_name (gdbarch, nds32_register_name);
@@ -2236,8 +2263,10 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   if (tdep->fpu_freg == -1)
     set_gdbarch_num_regs (gdbarch, NDS32_NUM_REGS);
-  else
+  else if (tdep->use_pseudo_fsrs == 1)
     set_gdbarch_num_regs (gdbarch, NDS32_FD0_REGNUM + tdep->num_fdr_regs);
+  else
+    set_gdbarch_num_regs (gdbarch, NDS32_FS0_REGNUM + tdep->num_fsr_regs);
   tdesc_use_registers (gdbarch, tdesc, tdesc_data);
 
   /* Add nds32 register aliases.  */
