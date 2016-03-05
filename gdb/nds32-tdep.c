@@ -2052,6 +2052,7 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
       int valid_p;
       int fpregs = -1;
       static const char *const nds32_fp_names[] = { "r28", "fp", NULL };
+      static const char *const nds32_gp_names[] = { "r29", "gp", NULL };
       static const char *const nds32_lp_names[] = { "r30", "lp", NULL };
       static const char *const nds32_sp_names[] = { "r31", "sp", NULL };
       const struct tdesc_feature *feature;
@@ -2066,11 +2067,14 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
       if (!feature)
 	return 0;
 
-      /* Validate  for FP, LP, GP, PC.  */
+      /* Validate for FP, GP, LP, SP, PC.  */
       valid_p = 1;
       valid_p &= tdesc_numbered_register_choices (feature, tdesc_data,
 						  NDS32_FP_REGNUM,
 						  nds32_fp_names);
+      valid_p &= tdesc_numbered_register_choices (feature, tdesc_data,
+						  NDS32_GP_REGNUM,
+						  nds32_gp_names);
       valid_p &= tdesc_numbered_register_choices (feature, tdesc_data,
 						  NDS32_LP_REGNUM,
 						  nds32_lp_names);
