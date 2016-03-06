@@ -42,8 +42,6 @@ enum nds32_regnum
   NDS32_D1LO_REGNUM = 35,
   NDS32_D1HI_REGNUM = 36,
 
-  /* If target-description is not supported, only assume above
-     registers are supported.  */
   NDS32_NUM_REGS,
 
   /* These are only used by simulator.  */
@@ -52,9 +50,9 @@ enum nds32_regnum
      The number of registers depends on configuration
      Check FPCFG (Floating-Point Unit Configuration).
      Anyway, the maximum usage is thirty-two.  */
-  NDS32_SIM_IFCLP_REGNUM = NDS32_SIM_FD0_REGNUM + 32,
+  NDS32_SIM_PSW_REGNUM = NDS32_SIM_FD0_REGNUM + 32,
   NDS32_SIM_ITB_REGNUM,
-  NDS32_SIM_PSW_REGNUM,
+  NDS32_SIM_IFCLP_REGNUM,
 
   NDS32_SIM_NUM_REGS,
 };

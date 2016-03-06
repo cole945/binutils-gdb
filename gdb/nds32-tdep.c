@@ -51,6 +51,7 @@
 #include "nds32-tdep.h"
 #include "elf/nds32.h"
 #include "opcode/nds32.h"
+#include "features/nds32.c"
 
 /* Simple macro for chop LSB immediate bits from an instruction.  */
 #define CHOP_BITS(insn, n)	(insn & ~__MASK (n))
@@ -241,12 +242,12 @@ nds32_register_sim_regno (struct gdbarch *gdbarch, int regnum)
     return SIM_NDS32_FD0_REGNUM + regnum - NDS32_SIM_FD0_REGNUM;
   switch (regnum)
     {
-    case NDS32_SIM_IFCLP_REGNUM:
-      return SIM_NDS32_IFCLP_REGNUM;
-    case NDS32_SIM_ITB_REGNUM:
-      return SIM_NDS32_ITB_REGNUM;
     case NDS32_SIM_PSW_REGNUM:
       return SIM_NDS32_PSW_REGNUM;
+    case NDS32_SIM_ITB_REGNUM:
+      return SIM_NDS32_ITB_REGNUM;
+    case NDS32_SIM_IFCLP_REGNUM:
+      return SIM_NDS32_IFCLP_REGNUM;
     }
 
   return LEGACY_SIM_REGNO_IGNORE;
@@ -419,7 +420,7 @@ nds32_register_name (struct gdbarch *gdbarch, int regnum)
     "fd8", "fd9", "fd10", "fd11", "fd12", "fd13", "fd14", "fd15",
     "fd16", "fd17", "fd18", "fd19", "fd20", "fd21", "fd22", "fd23",
     "fd24", "fd25", "fd26", "fd27", "fd28", "fd29", "fd30", "fd31",
-    "ifclp", "itb", "ir0"
+    "ir0", "itb", "ifclp"
   };
   int num_regs = gdbarch_num_regs (gdbarch);
 
@@ -2039,7 +2040,7 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   struct gdbarch *gdbarch;
   struct gdbarch_tdep *tdep;
   struct gdbarch_list *best_arch;
-  const struct target_desc *tdesc = NULL;
+  const struct target_desc *tdesc = info.target_desc;
   struct tdesc_arch_data *tdesc_data = NULL;
   int i, maxregs, freg = -1, use_pseudo_fsrs = 0;
 
@@ -2066,7 +2067,10 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 	}
     }
 
-  if (tdesc_has_registers (info.target_desc))
+  if (!tdesc_has_registers (tdesc))
+    tdesc = tdesc_nds32;
+
+  if (tdesc_has_registers (tdesc))
     {
       int valid_p;
       static const char *const nds32_fp_names[] = { "r28", "fp", NULL };
@@ -2076,7 +2080,6 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
       const struct tdesc_feature *feature;
 
       /* Validate and initialize target-description here.  */
-      tdesc = info.target_desc;
       tdesc_data = tdesc_data_alloc ();
 
       info.tdep_info = (void *) tdesc_data;
@@ -2189,19 +2192,6 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
       set_gdbarch_num_regs (gdbarch, NDS32_NUM_REGS);
       tdesc_use_registers (gdbarch, tdesc, tdesc_data);
     }
-  else
-    {
-      /* Simulator or legacy target.  */
-
-      /* Physical 32 FD registers.  */
-      set_gdbarch_num_regs (gdbarch, NDS32_SIM_NUM_REGS);
-      set_gdbarch_register_name (gdbarch, nds32_register_name);
-
-      /* Pseudo 32 FS registers.  */
-      set_gdbarch_num_pseudo_regs (gdbarch, 32);
-      set_gdbarch_pseudo_register_read (gdbarch, nds32_pseudo_register_read);
-      set_gdbarch_pseudo_register_write (gdbarch, nds32_pseudo_register_write);
-    }
 
   /* Add nds32 register aliases.  */
   maxregs = (gdbarch_num_regs (gdbarch) + gdbarch_num_pseudo_regs (gdbarch));
@@ -2303,6 +2293,7 @@ _initialize_nds32_tdep (void)
   /* Initialize gdbarch.  */
   register_gdbarch_init (bfd_arch_nds32, nds32_gdbarch_init);
 
+  initialize_tdesc_nds32 ();
   nds32_init_reggroups ();
 
   register_remote_support_xml ("nds32");
