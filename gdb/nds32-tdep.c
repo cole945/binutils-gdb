@@ -270,7 +270,7 @@ nds32_register_sim_regno (struct gdbarch *gdbarch, int regnum)
 }
 
 
-/* nds32 register groups.  */
+/* NDS32 register groups.  */
 static struct reggroup *nds32_cr_reggroup;
 static struct reggroup *nds32_ir_reggroup;
 static struct reggroup *nds32_mr_reggroup;
@@ -301,15 +301,15 @@ nds32_init_reggroups (void)
 static void
 nds32_add_reggroups (struct gdbarch *gdbarch)
 {
-  /* Target-independent groups.  */
+  /* Add pre-defined register groups.  */
   reggroup_add (gdbarch, general_reggroup);
   reggroup_add (gdbarch, float_reggroup);
-  reggroup_add (gdbarch, all_reggroup);
   reggroup_add (gdbarch, system_reggroup);
+  reggroup_add (gdbarch, all_reggroup);
   reggroup_add (gdbarch, save_reggroup);
   reggroup_add (gdbarch, restore_reggroup);
 
-  /* System register groups.  */
+  /* Add NDS32 register groups.  */
   reggroup_add (gdbarch, nds32_cr_reggroup);
   reggroup_add (gdbarch, nds32_ir_reggroup);
   reggroup_add (gdbarch, nds32_mr_reggroup);
@@ -328,43 +328,33 @@ static int
 nds32_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 			   struct reggroup *group)
 {
-  int i;
-  struct reggroup *groups[] =
-    {
-      nds32_cr_reggroup, nds32_ir_reggroup, nds32_mr_reggroup,
-      nds32_dr_reggroup, nds32_pfr_reggroup, nds32_hspr_reggroup,
-      nds32_dmar_reggroup, nds32_racr_reggroup, nds32_idr_reggroup,
-      nds32_secur_reggroup
-    };
-  static const char *prefix[] =
-    {
-      "cr", "ir", "mr", "dr", "pfr", "hspr", "dmar", "racr", "idr", "secur"
-    };
+  const char *regname = gdbarch_register_name (gdbarch, regnum);
+  const char *groupname;
 
-  gdb_assert (ARRAY_SIZE (groups) == ARRAY_SIZE (prefix));
+  if (regname == NULL || *regname == '\0')
+    return 0;
 
-  /* GPRs. */
+  if (group == all_reggroup)
+    return 1;
+
+  /* General reggroup contains only GPRs and PC.  */
   if (group == general_reggroup)
     return regnum <= NDS32_PC_REGNUM;
 
-  /* System Registers are grouped by prefix.  */
-  else if (group == system_reggroup)
+  if (group == float_reggroup)
+    return TYPE_CODE (register_type (gdbarch, regnum)) == TYPE_CODE_FLT;
+
+  if (group == system_reggroup)
     return (regnum > NDS32_PC_REGNUM)
-	   && TYPE_CODE (register_type (gdbarch, regnum)) != TYPE_CODE_FLT;
+	    && TYPE_CODE (register_type (gdbarch, regnum)) != TYPE_CODE_FLT;
 
-  for (i = 0; i < (int) ARRAY_SIZE (groups); i++)
-    {
-      if (group == groups[i])
-	{
-	  const char *regname = tdesc_register_name (gdbarch, regnum);
+  if (group == save_reggroup || group == restore_reggroup)
+    return regnum < gdbarch_num_regs (gdbarch);
 
-	  if (!regname)
-	    return 0;
-	  return strstr (regname, prefix[i]) == regname;
-	}
-    }
-
-  return default_register_reggroup_p (gdbarch, regnum, group);
+  /* The NDS32 reggroup contains registers whose name is prefixed
+     by reggroup name.  */
+  groupname = reggroup_name (group);
+  return !strncmp (regname, groupname, strlen (groupname));
 }
 
 /* Implement the tdesc_pseudo_register_type method.  */
