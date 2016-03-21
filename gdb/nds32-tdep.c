@@ -56,7 +56,7 @@ N32_TYPE4 (LSMW, 0, 0, 0, 1, (N32_LSMW_ADM << 2) | N32_LSMW_LSMW)
 
 extern void _initialize_nds32_tdep (void);
 
-static const char *nds32_regnames[] =
+static const char *const nds32_register_names[] =
 {
   /* 32 GPRs.  */
   "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
@@ -68,7 +68,7 @@ static const char *nds32_regnames[] =
   "pc", "d0lo", "d0hi", "d1lo", "d1hi",
 };
 
-static const char *nds32_fdr_regnames[] =
+static const char *const nds32_fd_register_names[] =
 {
   "fd0", "fd1", "fd2", "fd3", "fd4", "fd5", "fd6", "fd7",
   "fd8", "fd9", "fd10", "fd11", "fd12", "fd13", "fd14", "fd15",
@@ -76,7 +76,7 @@ static const char *nds32_fdr_regnames[] =
   "fd24", "fd25", "fd26", "fd27", "fd28", "fd29", "fd30", "fd31"
 };
 
-static const char *nds32_fsr_regnames[] =
+static const char *const nds32_fs_register_names[] =
 {
   "fs0", "fs1", "fs2", "fs3", "fs4", "fs5", "fs6", "fs7",
   "fs8", "fs9", "fs10", "fs11", "fs12", "fs13", "fs14", "fs15",
@@ -447,7 +447,7 @@ nds32_pseudo_register_name (struct gdbarch *gdbarch, int regnum)
 
   /* Currently, only FSRs could be defined as pseudo registers.  */
   if (regnum < gdbarch_num_pseudo_regs (gdbarch))
-    return nds32_fsr_regnames[regnum];
+    return nds32_fs_register_names[regnum];
 
   warning (_("Unknown nds32 pseudo register %d."), regnum);
   return NULL;
@@ -1766,27 +1766,27 @@ nds32_preprocess_tdesc_p (const struct target_desc *tdesc,
   /* Validate and fixed-number R0-R10.  */
   for (i = NDS32_R0_REGNUM; i <= NDS32_R0_REGNUM + 10; i++)
     valid_p &= tdesc_numbered_register (feature, tdesc_data, i,
-					nds32_regnames[i]);
+					nds32_register_names[i]);
 
   /* Validate R15, and it will be fix-numbered later.  */
   valid_p &= tdesc_unnumbered_register (feature,
-					nds32_regnames[NDS32_TA_REGNUM]);
+					nds32_register_names[NDS32_TA_REGNUM]);
 
   /* Validate and fixed-number FP, GP, LP, SP, PC.  */
   for (i = NDS32_FP_REGNUM; i <= NDS32_PC_REGNUM; i++)
     valid_p &= tdesc_numbered_register (feature, tdesc_data, i,
-					nds32_regnames[i]);
+					nds32_register_names[i]);
 
   if (!valid_p)
     return 0;
 
   /* Fixed-number R11-R27.  */
   for (i = NDS32_R0_REGNUM + 11; i <= NDS32_R0_REGNUM + 27; i++)
-    tdesc_numbered_register (feature, tdesc_data, i, nds32_regnames[i]);
+    tdesc_numbered_register (feature, tdesc_data, i, nds32_register_names[i]);
 
   /* Fixed-number D0 and D1.  */
   for (i = NDS32_D0LO_REGNUM; i <= NDS32_D1HI_REGNUM; i++)
-    tdesc_numbered_register (feature, tdesc_data, i, nds32_regnames[i]);
+    tdesc_numbered_register (feature, tdesc_data, i, nds32_register_names[i]);
 
   /* Guess FPU configuration via existing registers.  */
   feature = tdesc_find_feature (tdesc, "org.gnu.gdb.nds32.fpu");
@@ -1813,7 +1813,7 @@ nds32_preprocess_tdesc_p (const struct target_desc *tdesc,
       for (i = 0; i < num_fdr_regs; i++)
 	valid_p &= tdesc_numbered_register (feature, tdesc_data,
 					    NDS32_FD0_REGNUM + i,
-					    nds32_fdr_regnames[i]);
+					    nds32_fd_register_names[i]);
       tdep->num_fdr_regs = num_fdr_regs;
     }
 
@@ -1844,7 +1844,7 @@ nds32_preprocess_tdesc_p (const struct target_desc *tdesc,
 	  for (i = 0; i < num_fsr_regs; i++)
 	    valid_p &= tdesc_numbered_register (feature, tdesc_data,
 						NDS32_FS0_REGNUM + i,
-						nds32_fsr_regnames[i]);
+						nds32_fs_register_names[i]);
 	  if (!valid_p)
 	    return 0;
 	}
