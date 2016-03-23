@@ -629,6 +629,8 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int abi_use_fpr = nds32_abi_use_fpr (tdep->abi);
+  /* Current scanning status.  */
+  int in_prologue_bb = 0;
   int val_ta = 0;
   uint32_t insn, insn_len;
 
@@ -651,6 +653,7 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 		  if (cache != NULL)
 		    cache->sp_offset += imm15s;
 
+		  in_prologue_bb = 1;
 		  continue;
 		}
 	    }
@@ -667,6 +670,7 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 		      cache->use_frame = 1;
 		    }
 
+		  in_prologue_bb = 1;
 		  continue;
 		}
 	    }
@@ -678,6 +682,7 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 		nds32_push_multiple_words (cache, N32_RT5 (insn),
 					   N32_RB5 (insn),
 					   N32_LSMW_ENABLE4 (insn));
+	      in_prologue_bb = 1;
 	      continue;
 	    }
 	  else if (insn == N32_ALU1 (ADD, REG_SP, REG_SP, REG_TA)
@@ -690,6 +695,7 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 		  if (cache != NULL)
 		    cache->sp_offset += val_ta;
 
+		  in_prologue_bb = 1;
 		  continue;
 		}
 	    }
@@ -730,22 +736,42 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 	    {
 	      /* add $gp, $ta, $gp */
 	      /* add $gp, $gp, $ta */
+	      in_prologue_bb = 1;
 	      continue;
 	    }
 	  else if (CHOP_BITS (insn, 20) == N32_TYPE1 (MOVI, REG_GP, 0))
 	    {
 	      /* movi $gp, imm20s */
+	      in_prologue_bb = 1;
 	      continue;
 	    }
 	  else if (CHOP_BITS (insn, 20) == N32_TYPE1 (SETHI, REG_GP, 0))
 	    {
 	      /* sethi $gp, imm20u */
+	      in_prologue_bb = 1;
 	      continue;
 	    }
 	  else if (CHOP_BITS (insn, 15) == N32_TYPE2 (ORI, REG_GP, REG_GP, 0))
 	    {
 	      /* ori $gp, $gp, imm15u */
+	      in_prologue_bb = 1;
 	      continue;
+	    }
+	  else
+	    {
+	      /* Jump/Branch insns never appear in prologue basic block.
+		 The loop can be escaped early when these insns are met.  */
+	      if (in_prologue_bb == 1)
+		{
+		  int op = N32_OP6 (insn);
+
+		  if (op == N32_OP6_JI
+		      || op == N32_OP6_JREG
+		      || op == N32_OP6_BR1
+		      || op == N32_OP6_BR2
+		      || op == N32_OP6_BR3)
+		    break;
+		}
 	    }
 
 	  if (abi_use_fpr && N32_OP6 (insn) == N32_OP6_SDC
@@ -784,6 +810,8 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 		{
 		  if (cache != NULL)
 		    cache->sp_offset += imm10s;
+
+		  in_prologue_bb = 1;
 		  continue;
 		}
 	    }
@@ -802,17 +830,44 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 		  /* Operation 2 -- sp = sp - (imm5u << 3) */
 		  cache->sp_offset -= imm8u;
 		}
+
+	      in_prologue_bb = 1;
 	      continue;
 	    }
 	  else if (insn == N16_TYPE5 (ADD5PC, REG_GP))
 	    {
 	      /* add5.pc $gp */
+	      in_prologue_bb = 1;
 	      continue;
 	    }
 	  else if (CHOP_BITS (insn, 5) == N16_TYPE55 (MOVI55, REG_GP, 0))
 	    {
 	      /* movi55 $gp, imm5s */
+	      in_prologue_bb = 1;
 	      continue;
+	    }
+	  else
+	    {
+	      /* Jump/Branch insns never appear in prologue basic block.
+		 The loop can be escaped early when these insns are met.  */
+	      if (in_prologue_bb == 1)
+		{
+		  uint32_t insn5 = CHOP_BITS (insn, 5);
+		  uint32_t insn8 = CHOP_BITS (insn, 8);
+		  uint32_t insn38 = CHOP_BITS (insn, 11);
+
+		  if (insn5 == N16_TYPE5 (JR5, 0)
+		      || insn5 == N16_TYPE5 (JRAL5, 0)
+		      || insn5 == N16_TYPE5 (RET5, 0)
+		      || insn8 == N16_TYPE8 (J8, 0)
+		      || insn8 == N16_TYPE8 (BEQZS8, 0)
+		      || insn8 == N16_TYPE8 (BNEZS8, 0)
+		      || insn38 == N16_TYPE38 (BEQZ38, 0, 0)
+		      || insn38 == N16_TYPE38 (BNEZ38, 0, 0)
+		      || insn38 == N16_TYPE38 (BEQS38, 0, 0)
+		      || insn38 == N16_TYPE38 (BNES38, 0, 0))
+		    break;
+		}
 	    }
 
 	  /* The optimizer might shove anything into the prologue, if
