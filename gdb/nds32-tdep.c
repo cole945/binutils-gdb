@@ -630,7 +630,7 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 	    }
 	  else if (CHOP_BITS (insn, 15) == N32_TYPE2 (ADDI, REG_SP, REG_SP, 0))
 	    {
-	      /* addi $sp, $sp, imm15 */
+	      /* addi $sp, $sp, imm15s */
 	      if (cache != NULL)
 		cache->sp_offset += N32_IMM15S (insn);
 
@@ -638,7 +638,7 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 	    }
 	  else if (CHOP_BITS (insn, 15) == N32_TYPE2 (ADDI, REG_FP, REG_SP, 0))
 	    {
-	      /* addi $fp, $sp, imm15 */
+	      /* addi $fp, $sp, imm15s */
 	      if (cache != NULL)
 		{
 		  cache->fp_offset = cache->sp_offset + N32_IMM15S (insn);
@@ -657,12 +657,12 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 	    }
 	  else if (CHOP_BITS (insn, 20) == N32_TYPE1 (SETHI, REG_GP, 0))
 	    {
-	      /* sethi $gp, imm20 */
+	      /* sethi $gp, imm20u */
 	      continue;
 	    }
 	  else if (CHOP_BITS (insn, 15) == N32_TYPE2 (ORI, REG_GP, REG_GP, 0))
 	    {
-	      /* ori $gp, $gp, imm15 */
+	      /* ori $gp, $gp, imm15u */
 	      continue;
 	    }
 	  else if (CHOP_BITS (insn, 20) == N32_TYPE1 (MOVI, REG_GP, 0))
@@ -738,7 +738,7 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 
 	  if (CHOP_BITS (insn, 10) == N16_TYPE10 (ADDI10S, 0))
 	    {
-	      /* addi10s */
+	      /* addi10s.sp */
 	      if (cache != NULL)
 		cache->sp_offset += N16_IMM10S (insn);
 	      continue;
@@ -762,7 +762,7 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 	    }
 	  else if (insn == N16_TYPE55 (MOV55, REG_FP, REG_SP))
 	    {
-	      /* mov55 fp, sp */
+	      /* mov55 $fp, $sp */
 	      if (cache != NULL)
 		{
 		  cache->fp_offset = cache->sp_offset;
