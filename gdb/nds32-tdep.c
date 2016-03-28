@@ -734,7 +734,7 @@ nds32_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
   return nds32_analyze_prologue (gdbarch, pc, scan_limit);
 }
 
-struct nds32_unwind_cache
+struct nds32_frame_cache
 {
   /* The previous frame's inner most stack address.
      Used as this frame ID's stack_addr.  */
@@ -755,12 +755,12 @@ struct nds32_unwind_cache
   struct trad_frame_saved_reg *saved_regs;
 };
 
-static struct nds32_unwind_cache *
+static struct nds32_frame_cache *
 nds32_alloc_frame_cache (struct frame_info *this_frame)
 {
-  struct nds32_unwind_cache *cache;
+  struct nds32_frame_cache *cache;
 
-  cache = FRAME_OBSTACK_ZALLOC (struct nds32_unwind_cache);
+  cache = FRAME_OBSTACK_ZALLOC (struct nds32_frame_cache);
   cache->saved_regs = trad_frame_alloc_saved_regs (this_frame);
   cache->size = 0;
   cache->sp_offset = 0;
@@ -802,7 +802,7 @@ nds32_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR addr)
    in the stack frame.  sp is even more special: the address we return
    for it IS the sp for the next frame.  */
 
-static struct nds32_unwind_cache *
+static struct nds32_frame_cache *
 nds32_frame_unwind_cache (struct frame_info *this_frame,
 			  void **this_prologue_cache)
 {
@@ -812,11 +812,11 @@ nds32_frame_unwind_cache (struct frame_info *this_frame,
   ULONGEST fp_base;
   int i;
   uint32_t insn;
-  struct nds32_unwind_cache *info;
+  struct nds32_frame_cache *info;
   struct gdbarch *gdbarch = get_frame_arch (this_frame);
 
   if ((*this_prologue_cache))
-    return (struct nds32_unwind_cache *) *this_prologue_cache;
+    return (struct nds32_frame_cache *) *this_prologue_cache;
 
   info = nds32_alloc_frame_cache (this_frame);
 
@@ -1761,7 +1761,7 @@ static void
 nds32_frame_this_id (struct frame_info *this_frame,
 		     void **this_prologue_cache, struct frame_id *this_id)
 {
-  struct nds32_unwind_cache *info;
+  struct nds32_frame_cache *info;
   CORE_ADDR base;
   CORE_ADDR func;
   struct frame_id id;
@@ -1788,7 +1788,7 @@ static struct value *
 nds32_frame_prev_register (struct frame_info *this_frame,
 			   void **this_prologue_cache, int regnum)
 {
-  struct nds32_unwind_cache *cache;
+  struct nds32_frame_cache *cache;
   cache = nds32_frame_unwind_cache (this_frame, this_prologue_cache);
 
   if (regnum == NDS32_PC_REGNUM)
@@ -1817,7 +1817,7 @@ static const struct frame_unwind nds32_frame_unwind =
 static CORE_ADDR
 nds32_frame_base_address (struct frame_info *this_frame, void **this_cache)
 {
-  struct nds32_unwind_cache *info
+  struct nds32_frame_cache *info
     = nds32_frame_unwind_cache (this_frame, this_cache);
 
   return info->base;
@@ -1866,14 +1866,14 @@ nds32_epilogue_frame_sniffer (const struct frame_unwind *self,
     return 0;
 }
 
-static struct nds32_unwind_cache *
+static struct nds32_frame_cache *
 nds32_epilogue_frame_cache (struct frame_info *this_frame, void **this_cache)
 {
-  struct nds32_unwind_cache *cache;
+  struct nds32_frame_cache *cache;
   CORE_ADDR sp;
 
   if (*this_cache)
-    return (struct nds32_unwind_cache *) *this_cache;
+    return (struct nds32_frame_cache *) *this_cache;
 
   cache = nds32_alloc_frame_cache (this_frame);
   *this_cache = cache;
@@ -1900,7 +1900,7 @@ static enum unwind_stop_reason
 nds32_epilogue_frame_unwind_stop_reason (struct frame_info *this_frame,
 					 void **this_cache)
 {
-  struct nds32_unwind_cache *cache =
+  struct nds32_frame_cache *cache =
     nds32_epilogue_frame_cache (this_frame, this_cache);
 
   if (!cache->prev_sp)
@@ -1914,7 +1914,7 @@ nds32_epilogue_frame_this_id (struct frame_info *this_frame,
 			      void **this_cache, struct frame_id *this_id)
 {
   CORE_ADDR func, base;
-  struct nds32_unwind_cache *cache =
+  struct nds32_frame_cache *cache =
     nds32_epilogue_frame_cache (this_frame, this_cache);
 
   base = cache->prev_sp;
