@@ -53,8 +53,12 @@
 #include "opcode/nds32.h"
 #include "features/nds32.c"
 
-/* Simple macro for chop LSB immediate bits from an instruction.  */
+/* Simple macros for instruction analysis.  */
 #define CHOP_BITS(insn, n)	(insn & ~__MASK (n))
+#define N32_LSMW_ENABLE4(insn)	(((insn) >> 6) & 0xf)
+#define N32_SMW_ADM \
+N32_TYPE4 (LSMW, 0, 0, 0, 1, (N32_LSMW_ADM << 2) | N32_LSMW_LSMW)
+
 
 extern void _initialize_nds32_tdep (void);
 
@@ -737,6 +741,39 @@ nds32_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR addr)
   return r > 0;
 }
 
+/* Helper function for instructions used to push multiple words.  */
+
+static void
+nds32_push_multiple_words (struct nds32_frame_cache *cache, int rb, int re,
+			   int enable4)
+{
+  LONGEST sp_offset = cache->sp_offset;
+  int i;
+
+  /* Check LP, GP, FP in enable4.  */
+  for (i = 1; i <= 3; i++)
+    {
+      if ((enable4 >> i) & 0x1)
+	{
+	  sp_offset -= 4;
+	  cache->saved_regs[NDS32_SP_REGNUM - i].addr = sp_offset;
+	}
+    }
+
+  /* Skip case where re == rb == sp.  */
+  if ((rb < REG_FP) && (re < REG_FP))
+    {
+      for (i = re; i >= rb; i--)
+	{
+	  sp_offset -= 4;
+	  cache->saved_regs[i].addr = sp_offset;
+	}
+    }
+
+  /* For sp, update the offset.  */
+  cache->sp_offset = sp_offset;
+}
+
 /* Put here the code to store, into fi->saved_regs, the addresses of
    the saved registers of frame described by FRAME_INFO.  This
    includes special registers such as pc and fp saved in special ways
@@ -819,92 +856,14 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
 	      /* ori $gp, $gp, imm15 */
 	      continue;
 	    }
-	  if (N32_OP6 (insn) == N32_OP6_LSMW && (insn & __BIT (5)))
+	  if ((insn & ~(__MASK (19) << 6)) == N32_SMW_ADM
+	      && N32_RA5 (insn) == REG_SP)
 	    {
-	      /* smwa?.(a|b)(d|i)m? rb,[ra],re,enable4 */
-
-	      int rb, re, ra, enable4, i;
-	      int aligned;
-	      int m = 0;
-	      int di;	   /* dec=-1 or inc=1 */
-	      int rn;	   /* number of registers.  */
-	      char enb4map[2][4] = {
-		  {0, 1, 2, 3} /* smw */,
-		  {3, 1, 2, 0} /* smwa */ };
-	      /* `base' is the highest/last address for access memory.
-		 e.g., [ lp ] ___ base shoule be here.
-		       [ fp ]
-		       [ r6 ] */
-	      ULONGEST base = -1;
-
-	      rb = N32_RT5 (insn);
-	      ra = N32_RA5 (insn);
-	      re = N32_RB5 (insn);
-	      enable4 = (insn >> 6) & 0x0F;
-	      aligned = (insn & 3) ? 1 : 0;
-	      di = (insn & (1 << 3)) ? -1 : 1;
-
-	      rn = 0;
-	      rn += (enable4 & 0x1) ? 1 : 0;
-	      rn += (enable4 & 0x2) ? 1 : 0;
-	      rn += (enable4 & 0x4) ? 1 : 0;
-	      rn += (enable4 & 0x8) ? 1 : 0;
-	      if (rb < NDS32_FP_REGNUM && re < NDS32_FP_REGNUM)
-		{
-		  /* reg-list should not include fp,gp,lp,sp
-		     ie, the rb==re==sp case, anyway... */
-		  rn += (re - rb) + 1;
-		}
-
-	      /* Let's consider how Ra should update.  */
-	      if (insn & (1 << 0x2))    /* m-bit is set */
-		{
-		  m = rn * 4;			/* 4*TNReg */
-		}
-	      else
-		m = 0;	  /* don't update Ra */
-
-	      if (ra == REG_SP)
-		{
-		  base = cache->sp_offset;
-		  cache->sp_offset += m * di;
-		}
-	      else
-		break;	  /* Exit the loop.  */
-
-	      if (insn & (1 << 0x4))	/* b:0, a:1 */
-		base += 4 * di;		/* a: use Ra+4 (for i),
-					      or Ra-4 (for d) */
-	      /* else base = base;	b use Ra */
-
-	      /* We should consider both increasing and decreasing case.
-
-		 Either case stores registers in the same order.
-		 To simplify the code (yes, the loops),
-		 I used the same pushing order, but from different side.  */
-
-	      if (di == 1)		/* Increasing.  */
-		base += (rn * 4 - 4);
-	      /* else, in des case, we already are on the top */
-
-	      for (i = 0; i < 4; i++)
-		{
-		  if (enable4 & (1 << enb4map[aligned][i]))
-		    {
-		      cache->saved_regs[NDS32_SP_REGNUM -
-				       (enb4map[aligned][i])].addr = base;
-		      base -= 4;
-		    }
-		}
-
-	      /* Skip re == rb == sp > fp.  */
-	      for (i = re; i >= rb && rb < NDS32_FP_REGNUM; i--)
-		{
-		  cache->saved_regs[i].addr = base;
-		  base -= 4;
-		}
-
-	      continue;
+	      /* smw.adm Rb, [$sp], Re, enable4 */
+	      nds32_push_multiple_words (cache, N32_RT5 (insn),
+					 N32_RB5 (insn),
+					 N32_LSMW_ENABLE4 (insn));
+		  continue;
 	    }
 
 	  if (N32_OP6 (insn) == N32_OP6_SDC && __GF (insn, 12, 3) == 0)
@@ -954,36 +913,16 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
 	    {
 	      /* push25 */
 	      int imm8u = (insn & 0x1f) << 3;
-	      int re = ((insn & 0x60) >> 5) & 0x3;
-	      int m[] = {4, 6, 8, 12};
+	      int re = (insn >> 5) & 0x3;
+	      int reg_map[] = { 6, 8, 10, 14 };
 
-	      /* Operation 1 - smw.adm R6, [sp], Re, #0xe */
-	      cache->saved_regs[NDS32_LP_REGNUM].addr = cache->sp_offset - 0x4;
-	      cache->saved_regs[NDS32_GP_REGNUM].addr = cache->sp_offset - 0x8;
-	      cache->saved_regs[NDS32_FP_REGNUM].addr = cache->sp_offset - 0xC;
-	      cache->sp_offset -= m[re] * 4;
+	      /* Operation 1 -- smw.adm R6, [$sp], Re, #0xe */
+	      nds32_push_multiple_words (cache, 6, reg_map[re], 0xe);
 
-	      switch (re)
-		{
-		  case 3:
-		    cache->saved_regs[14].addr = cache->sp_offset + 0x20;
-		    cache->saved_regs[13].addr = cache->sp_offset + 0x1C;
-		    cache->saved_regs[12].addr = cache->sp_offset + 0x18;
-		    cache->saved_regs[11].addr = cache->sp_offset + 0x14;
-		  case 2:
-		    cache->saved_regs[10].addr = cache->sp_offset + 0x10;
-		    cache->saved_regs[9].addr = cache->sp_offset + 0xC;
-		  case 1:
-		    cache->saved_regs[8].addr = cache->sp_offset + 0x8;
-		    cache->saved_regs[7].addr = cache->sp_offset + 0x4;
-		  case 0:
-		    cache->saved_regs[6].addr = cache->sp_offset;
-		}
-
-	      /* Operation 2 - sp = sp - imm5u<<3 */
+	      /* Operation 2 -- sp = sp - (imm5u << 3) */
 	      cache->sp_offset -= imm8u;
 
-	      /* Operation 3 - if (Re >= 1) R8 = concat (PC(31,2), 2`b0) */
+	      /* Operation 3 -- if (Re >= 1) R8 = concat (PC(31,2), 2`b0) */
 	      continue;
 	    }
 
