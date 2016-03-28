@@ -529,6 +529,24 @@ nds32_pseudo_register_write (struct gdbarch *gdbarch,
     }
 }
 
+/* Helper function for NDS32 ABI.  Return true if FPRs can be used
+   to pass function arguments and return value.  */
+
+static int
+nds32_abi_use_fpr (int abi)
+{
+  return abi == E_NDS_ABI_V2FP_PLUS;
+}
+
+/* Helper function for NDS32 ABI.  Return true if GPRs and stack
+   can be used together to pass an argument.  */
+
+static int
+nds32_abi_split (int abi)
+{
+  return abi == E_NDS_ABI_AABI;
+}
+
 struct nds32_frame_cache
 {
   /* The previous frame's inner most stack address.
@@ -609,6 +627,8 @@ static CORE_ADDR
 nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 			CORE_ADDR limit_pc, struct nds32_frame_cache *cache)
 {
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  int abi_use_fpr = nds32_abi_use_fpr (tdep->abi);
   int val_ta = 0;
   uint32_t insn, insn_len;
 
@@ -715,7 +735,8 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 	      continue;
 	    }
 
-	  if (N32_OP6 (insn) == N32_OP6_SDC && __GF (insn, 12, 3) == 0)
+	  if (abi_use_fpr && N32_OP6 (insn) == N32_OP6_SDC
+	      && __GF (insn, 12, 3) == 0)
 	    {
 	      /* For FPU insns, CP (bit [13:14]) should be CP0,  and only
 		 normal form (bit [12] == 0) is used.  */
@@ -1036,24 +1057,6 @@ nds32_type_align (struct type *type)
 	}
       return align;
     }
-}
-
-/* Helper function for NDS32 ABI.  Return true if FPRs can be used
-   to pass function arguments and return value.  */
-
-static int
-nds32_abi_use_fpr (int abi)
-{
-  return abi == E_NDS_ABI_V2FP_PLUS;
-}
-
-/* Helper function for NDS32 ABI.  Return true if GPRs and stack
-   can be used together to pass an argument.  */
-
-static int
-nds32_abi_split (int abi)
-{
-  return abi == E_NDS_ABI_AABI;
 }
 
 /* Implement the gdbarch_push_dummy_call method.  */
