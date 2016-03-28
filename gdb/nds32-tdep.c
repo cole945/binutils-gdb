@@ -559,11 +559,6 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 	      /* addi $fp, $sp, imm15 */
 	      continue;
 	    }
-	  else if (insn == N32_ALU2 (MFUSR, REG_TA, 31, 0))
-	    {
-	      /* mfusr $ta, PC  ; group=0, sub=0x20=mfusr */
-	      continue;
-	    }
 	  else if (CHOP_BITS (insn, 20) == N32_TYPE1 (MOVI, REG_TA, 0))
 	    {
 	      /* movi $ta, imm20s */
@@ -579,34 +574,13 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 	      /* ori $gp, $gp, imm15 */
 	      continue;
 	    }
-	  else if (CHOP_BITS (insn, 15) == N32_TYPE2 (SWI, REG_LP, REG_FP, 0))
-	    {
-	      /* Unlike swi, we should stop when lwi.  */
-	      /* swi $lp, [$sp + (imm15s<<2)] */
-	      continue;
-	    }
-	  else if (CHOP_BITS (insn, 15) == N32_TYPE2 (SWI_BI, REG_LP, REG_FP, 0))
-	    {
-	      /* swi.bi $rt, [$sp], (imm15s<<2) */
-	      continue;
-	    }
 	  else if (N32_OP6 (insn) == N32_OP6_LSMW && (insn & __BIT (5)))
 	    {
 	      /* bit-5 for SMW */
 
 	      /* smwa?.(a|b)(d|i)m? rb,[ra],re,enable4 */
-	      int ra;
-
-	      ra = N32_RA5 (insn);
-
-	      switch (ra)
-		{
-		case NDS32_FP_REGNUM:
-		case NDS32_SP_REGNUM:
-		  continue; /* found and continue */
-		default:
-		  break;
-		}
+	      if (N32_RA5 (insn) == REG_SP)
+		continue;
 	    }
 
 	  if (N32_OP6 (insn) == N32_OP6_COP && N32_COP_CP (insn) == 0
@@ -662,23 +636,6 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 	      /* mov55 fp, sp */
 	      continue;
 	    }
-
-	  /* swi450 */
-	  switch (insn & ~__MF (-1, 5, 4))
-	    {
-	      case N16_TYPE45 (SWI450, 0, REG_SP):
-	      case N16_TYPE45 (SWI450, 0, REG_FP):
-		break;
-	    }
-	  /* swi37 - implied fp */
-	  if (__GF (insn, 11, 4) == N16_T37_XWI37
-	      && (insn & __BIT (7)))
-	    continue;
-
-	  /* swi37sp - implied */
-	  if (__GF (insn, 11, 4) == N16_T37_XWI37SP
-	      && (insn & __BIT (7)))
-	    continue;
 
 	  /* If the a instruction is not accepted,
 	     don't go futher.  */
@@ -852,12 +809,6 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
 		/* Prevent stop analyzing form iframe.  */
 		continue;
 	    }
-
-	  if (insn == N32_ALU2 (MFUSR, REG_TA, 31, 0))
-	    {
-	      /* mfusr $ta, PC  ; group=0, sub=0x20=mfusr */
-	      continue;
-	    }
 	  if (CHOP_BITS (insn, 20) == N32_TYPE1 (MOVI, REG_TA, 0))
 	    {
 	      /* movi $ta, imm20s */
@@ -918,22 +869,12 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
 	      else
 		m = 0;	  /* don't update Ra */
 
-	      switch (ra)
+	      if (ra == REG_SP)
 		{
-		case NDS32_FP_REGNUM:
-		  base = cache->fp_offset;
-		  cache->fp_offset += m * di;
-		  break;
-		case NDS32_SP_REGNUM:
 		  base = cache->sp_offset;
 		  cache->sp_offset += m * di;
-		  break;
-		default:
-		  /* Only RA is FP or SP is handled.  */
-		  base = -1;
-		  break;
 		}
-	      if (base == -1)
+	      else
 		break;	  /* Exit the loop.  */
 
 	      if (insn & (1 << 0x4))	/* b:0, a:1 */
@@ -968,41 +909,6 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
 		  base -= 4;
 		}
 
-	      continue;
-	    }
-	  /* swi $lp, [$sp + (imm15s << 2)] */
-	  /* We must check if $rt is $lp to determine it is
-	     in prologue or not.  */
-	  if (CHOP_BITS (insn, 15) == N32_TYPE2 (SWI, REG_LP, REG_FP, 0))
-	    {
-	      int imm15s;
-
-	      /* swi $lp, [$sp + (imm15s<<2)] */
-	      imm15s = N32_IMM15S (insn);
-	      cache->saved_regs[NDS32_LP_REGNUM].addr = cache->sp_offset
-						       + (imm15s << 2);
-	      continue;
-	    }
-	  /* swi.bi $rt, [$sp], (imm15s << 2) */
-	  if (CHOP_BITS (insn, 15) == N32_TYPE2 (SWI_BI, REG_LP, REG_FP, 0))
-	    {
-	      unsigned int rt5 = 0;
-	      unsigned int ra5 = 0;
-	      int imm15s = 0;
-	      rt5 = N32_RT5 (insn);
-	      ra5 = N32_RA5 (insn);
-	      imm15s = N32_IMM15S (insn);
-
-	      if (ra5 == NDS32_SP_REGNUM)
-		{
-		  cache->saved_regs[rt5].addr = cache->sp_offset;
-		  cache->sp_offset += (imm15s << 2);
-		}
-	      else if (ra5 == NDS32_FP_REGNUM)
-		{
-		  cache->saved_regs[rt5].addr = cache->fp_offset;
-		  cache->fp_offset += (imm15s << 2);
-		}
 	      continue;
 	    }
 
@@ -1123,25 +1029,9 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
 		cache->use_frame = 1;
 		continue;
 	    }
-	  /* swi450 */
-	  switch (insn & ~__MF (-1, 5, 4))
-	    {
-	      case N16_TYPE45 (SWI450, 0, REG_SP):
-	      case N16_TYPE45 (SWI450, 0, REG_FP):
-		break;
-	    }
-	  /* swi37 - implied fp */
-	  if (__GF (insn, 11, 4) == N16_T37_XWI37
-	      && (insn & __BIT (7)))
-	    continue;
-
-	  /* swi37sp - implied */
-	  if (__GF (insn, 11, 4) == N16_T37_XWI37SP
-	      && (insn & __BIT (7)))
-	    continue;
 
 	  break;
-	  }
+	}
     }
 
   cache->size = -cache->sp_offset;
