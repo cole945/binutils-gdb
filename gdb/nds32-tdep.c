@@ -601,8 +601,9 @@ nds32_push_multiple_words (struct nds32_frame_cache *cache, int rb, int re,
 }
 
 /* Analyze the instructions within the given address range.  If CACHE
-   is non-NULL, fill it in.  Return the first address not recognized
-   as a prologue instruction.  */
+   is non-NULL, fill it in.  Return the first address beyond the given
+   address range.  If CACHE is NULL, return the first address not
+   recognized as a prologue instruction.  */
 
 static CORE_ADDR
 nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
@@ -611,7 +612,6 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
   int val_ta = 0;
   uint32_t insn, insn_len;
 
-  /* Look up end of prologue.  */
   for (; pc < limit_pc; pc += insn_len)
     {
       insn = read_memory_unsigned_integer (pc, 4, BFD_ENDIAN_BIG);
@@ -725,9 +725,14 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 		continue;
 	    }
 
-	  /* If the a instruction is not accepted,
-	     don't go futher.  */
-	  break;
+	  /* The optimizer might shove anything into the prologue, if
+	     we build up cache (cache != NULL) from analyzing prologue,
+	     we just skip what we don't recognize and analyze further to
+	     make cache as complete as possible.  However, if we skip
+	     prologue, we'll stop immediately on unrecognized
+	     instruction.  */
+	  if (cache == NULL)
+	    break;
 	}
       else
 	{
@@ -782,9 +787,14 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 	      continue;
 	    }
 
-	  /* If the a instruction is not accepted,
-	     don't go futher.  */
-	  break;
+	  /* The optimizer might shove anything into the prologue, if
+	     we build up cache (cache != NULL) from analyzing prologue,
+	     we just skip what we don't recognize and analyze further to
+	     make cache as complete as possible.  However, if we skip
+	     prologue, we'll stop immediately on unrecognized
+	     instruction.  */
+	  if (cache == NULL)
+	    break;
 	}
     }
 
