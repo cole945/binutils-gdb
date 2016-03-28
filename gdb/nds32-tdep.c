@@ -529,12 +529,84 @@ nds32_pseudo_register_write (struct gdbarch *gdbarch,
     }
 }
 
-/* Skip prologue should be conservative, and frame-unwind should be
-   relative-aggressive.*/
+struct nds32_frame_cache
+{
+  /* The previous frame's inner most stack address.
+     Used as this frame ID's stack_addr.  */
+  CORE_ADDR prev_sp;
+
+  /* The frame's base, optionally used by the high-level debug info.  */
+  CORE_ADDR base;
+  int size;
+
+  /* How far the SP and FP have been offset from the start of
+     the stack frame (as defined by the previous frame's stack
+     pointer).  */
+  LONGEST sp_offset;
+  LONGEST fp_offset;
+  int use_frame;
+
+  /* Table indicating the location of each and every register.  */
+  struct trad_frame_saved_reg *saved_regs;
+};
+
+static struct nds32_frame_cache *
+nds32_alloc_frame_cache (struct frame_info *this_frame)
+{
+  struct nds32_frame_cache *cache;
+
+  cache = FRAME_OBSTACK_ZALLOC (struct nds32_frame_cache);
+  cache->saved_regs = trad_frame_alloc_saved_regs (this_frame);
+  cache->size = 0;
+  cache->sp_offset = 0;
+  cache->fp_offset = 0;
+  cache->use_frame = 0;
+  cache->base = 0;
+  cache->prev_sp = -1;
+
+  return cache;
+}
+
+/* Helper function for instructions used to push multiple words.  */
+
+static void
+nds32_push_multiple_words (struct nds32_frame_cache *cache, int rb, int re,
+			   int enable4)
+{
+  LONGEST sp_offset = cache->sp_offset;
+  int i;
+
+  /* Check LP, GP, FP in enable4.  */
+  for (i = 1; i <= 3; i++)
+    {
+      if ((enable4 >> i) & 0x1)
+	{
+	  sp_offset -= 4;
+	  cache->saved_regs[NDS32_SP_REGNUM - i].addr = sp_offset;
+	}
+    }
+
+  /* Skip case where re == rb == sp.  */
+  if ((rb < REG_FP) && (re < REG_FP))
+    {
+      for (i = re; i >= rb; i--)
+	{
+	  sp_offset -= 4;
+	  cache->saved_regs[i].addr = sp_offset;
+	}
+    }
+
+  /* For sp, update the offset.  */
+  cache->sp_offset = sp_offset;
+}
+
+/* Analyze the instructions within the given address range.  If CACHE
+   is non-NULL, fill it in.  Return the first address not recognized
+   as a prologue instruction.  */
 
 static CORE_ADDR
 nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
-			CORE_ADDR limit_pc)
+			CORE_ADDR limit_pc, struct nds32_frame_cache *cache)
 {
   uint32_t insn, insn_len;
 
@@ -556,11 +628,20 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 	  else if (CHOP_BITS (insn, 15) == N32_TYPE2 (ADDI, REG_SP, REG_SP, 0))
 	    {
 	      /* addi $sp, $sp, imm15 */
+	      if (cache != NULL)
+		cache->sp_offset += N32_IMM15S (insn);
+
 	      continue;
 	    }
 	  else if (CHOP_BITS (insn, 15) == N32_TYPE2 (ADDI, REG_FP, REG_SP, 0))
 	    {
 	      /* addi $fp, $sp, imm15 */
+	      if (cache != NULL)
+		{
+		  cache->fp_offset = cache->sp_offset + N32_IMM15S (insn);
+		  cache->use_frame = 1;
+		}
+
 	      continue;
 	    }
 	  else if (CHOP_BITS (insn, 20) == N32_TYPE1 (MOVI, REG_TA, 0))
@@ -578,29 +659,25 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 	      /* ori $gp, $gp, imm15 */
 	      continue;
 	    }
-	  else if (N32_OP6 (insn) == N32_OP6_LSMW && (insn & __BIT (5)))
+	  else if ((insn & ~(__MASK (19) << 6)) == N32_SMW_ADM
+		   && N32_RA5 (insn) == REG_SP)
 	    {
-	      /* bit-5 for SMW */
-
-	      /* smwa?.(a|b)(d|i)m? rb,[ra],re,enable4 */
-	      if (N32_RA5 (insn) == REG_SP)
-		continue;
+	      /* smw.adm Rb, [$sp], Re, enable4 */
+	      if (cache != NULL)
+		nds32_push_multiple_words (cache, N32_RT5 (insn),
+					   N32_RB5 (insn),
+					   N32_LSMW_ENABLE4 (insn));
+	      continue;
 	    }
 
-	  if ((N32_OP6 (insn) == N32_OP6_SWC || N32_OP6 (insn) == N32_OP6_SDC)
-	      && __GF (insn, 13, 2) == 0)
+	  if (N32_OP6 (insn) == N32_OP6_SDC && __GF (insn, 12, 3) == 0)
 	    {
-	      /* For FPU insn, CP (bit [13:14]) should be CP0.  */
+	      /* For FPU insns, CP (bit [13:14]) should be CP0,  and only
+		 normal form (bit [12] == 0) is used.  */
+
+	      /* fsdi FDt, [$sp + (imm12s << 2)] */
 	      if (N32_RA5 (insn) == REG_SP)
-		{
-		  if (__GF (insn, 12, 1) == 0)
-		    {
-		      /* normal form */
-		      /* fssi FSt, [$sp + (imm12s << 2)]
-			 fsdi FDt, [$sp + (imm12s << 2)] */
-		      continue;
-		    }
-		}
+		continue;
 	    }
 
 	  /* If the a instruction is not accepted,
@@ -614,25 +691,39 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 
 	  insn >>= 16;
 
-	  /* 1. If the instruction is j/b, then we stop
-		i.e., OP starts with 10, and beqzs8, bnezs8.
-	     2. If the operations will change sp/fp or based on sp/fp,
-		then we are in the prologue.
-	     3. If we don't know what's it, then stop.  */
-
 	  if (CHOP_BITS (insn, 10) == N16_TYPE10 (ADDI10S, 0))
 	    {
 	      /* addi10s */
+	      if (cache != NULL)
+		cache->sp_offset += N16_IMM10S (insn);
 	      continue;
 	    }
 	  else if (__GF (insn, 7, 8) == N16_T25_PUSH25)
 	    {
 	      /* push25 */
+	      if (cache != NULL)
+		{
+		  int imm8u = (insn & 0x1f) << 3;
+		  int re = (insn >> 5) & 0x3;
+		  int reg_map[] = { 6, 8, 10, 14 };
+
+		  /* Operation 1 -- smw.adm R6, [$sp], Re, #0xe */
+		  nds32_push_multiple_words (cache, 6, reg_map[re], 0xe);
+
+		  /* Operation 2 -- sp = sp - (imm5u << 3) */
+		  cache->sp_offset -= imm8u;
+		}
 	      continue;
 	    }
 	  else if (insn == N16_TYPE55 (MOV55, REG_FP, REG_SP))
 	    {
 	      /* mov55 fp, sp */
+	      if (cache != NULL)
+		{
+		  cache->fp_offset = cache->sp_offset;
+		  cache->use_frame = 1;
+		}
+
 	      continue;
 	    }
 
@@ -676,45 +767,7 @@ nds32_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
     return pc;
 
   /* Find the end of prologue.  */
-  return nds32_analyze_prologue (gdbarch, pc, limit_pc);
-}
-
-struct nds32_frame_cache
-{
-  /* The previous frame's inner most stack address.
-     Used as this frame ID's stack_addr.  */
-  CORE_ADDR prev_sp;
-
-  /* The frame's base, optionally used by the high-level debug info.  */
-  CORE_ADDR base;
-  int size;
-
-  /* How far the SP and FP have been offset from the start of
-     the stack frame (as defined by the previous frame's stack
-     pointer).  */
-  LONGEST sp_offset;
-  LONGEST fp_offset;
-  int use_frame;
-
-  /* Table indicating the location of each and every register.  */
-  struct trad_frame_saved_reg *saved_regs;
-};
-
-static struct nds32_frame_cache *
-nds32_alloc_frame_cache (struct frame_info *this_frame)
-{
-  struct nds32_frame_cache *cache;
-
-  cache = FRAME_OBSTACK_ZALLOC (struct nds32_frame_cache);
-  cache->saved_regs = trad_frame_alloc_saved_regs (this_frame);
-  cache->size = 0;
-  cache->sp_offset = 0;
-  cache->fp_offset = 0;
-  cache->use_frame = 0;
-  cache->base = 0;
-  cache->prev_sp = -1;
-
-  return cache;
+  return nds32_analyze_prologue (gdbarch, pc, limit_pc, NULL);
 }
 
 /* Implement the stack_frame_destroyed_p gdbarch method.  */
@@ -739,39 +792,6 @@ nds32_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR addr)
     r = 3;
 
   return r > 0;
-}
-
-/* Helper function for instructions used to push multiple words.  */
-
-static void
-nds32_push_multiple_words (struct nds32_frame_cache *cache, int rb, int re,
-			   int enable4)
-{
-  LONGEST sp_offset = cache->sp_offset;
-  int i;
-
-  /* Check LP, GP, FP in enable4.  */
-  for (i = 1; i <= 3; i++)
-    {
-      if ((enable4 >> i) & 0x1)
-	{
-	  sp_offset -= 4;
-	  cache->saved_regs[NDS32_SP_REGNUM - i].addr = sp_offset;
-	}
-    }
-
-  /* Skip case where re == rb == sp.  */
-  if ((rb < REG_FP) && (re < REG_FP))
-    {
-      for (i = re; i >= rb; i--)
-	{
-	  sp_offset -= 4;
-	  cache->saved_regs[i].addr = sp_offset;
-	}
-    }
-
-  /* For sp, update the offset.  */
-  cache->sp_offset = sp_offset;
 }
 
 /* Put here the code to store, into fi->saved_regs, the addresses of
