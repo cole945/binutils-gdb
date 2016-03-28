@@ -554,7 +554,7 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 	      /* addi $sp, $sp, imm15 */
 	      continue;
 	    }
-	  else if (CHOP_BITS (insn, 15) == N32_TYPE2 (ADDI, REG_FP, REG_FP, 0))
+	  else if (CHOP_BITS (insn, 15) == N32_TYPE2 (ADDI, REG_FP, REG_SP, 0))
 	    {
 	      /* addi $fp, $sp, imm15 */
 	      continue;
