@@ -967,9 +967,6 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
   cache->base = get_frame_register_unsigned (this_frame, NDS32_FP_REGNUM);
   *this_cache = cache;
 
-  if (cache->base == 0)
-    return cache;
-
   pc = get_frame_func (this_frame);
   current_pc = get_frame_pc (this_frame);
   nds32_analyze_prologue (gdbarch, pc, current_pc, cache);
