@@ -555,7 +555,6 @@ struct nds32_frame_cache
 
   /* The frame's base, optionally used by the high-level debug info.  */
   CORE_ADDR base;
-  int size;
 
   /* How far the SP and FP have been offset from the start of
      the stack frame (as defined by the previous frame's stack
@@ -575,7 +574,6 @@ nds32_alloc_frame_cache (struct frame_info *this_frame)
 
   cache = FRAME_OBSTACK_ZALLOC (struct nds32_frame_cache);
   cache->saved_regs = trad_frame_alloc_saved_regs (this_frame);
-  cache->size = 0;
   cache->sp_offset = 0;
   cache->fp_offset = 0;
   cache->use_frame = 0;
@@ -955,7 +953,7 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
   struct nds32_frame_cache *cache;
   CORE_ADDR pc, current_pc;
   ULONGEST prev_sp;
-  ULONGEST next_base;
+  ULONGEST sp_base;
   ULONGEST fp_base;
   int i;
 
@@ -971,14 +969,11 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
   current_pc = get_frame_pc (this_frame);
   nds32_analyze_prologue (gdbarch, pc, current_pc, cache);
 
-  cache->size = -cache->sp_offset;
   /* Compute the previous frame's stack pointer (which is also the
      frame's ID's stack address), and this frame's base pointer.
 
      Assume that the FP is this frame's SP but with that pushed
      stack space added back.  */
-  next_base = get_frame_register_unsigned (this_frame, NDS32_SP_REGNUM);
-  prev_sp = next_base + cache->size;
   fp_base = get_frame_register_unsigned (this_frame, NDS32_FP_REGNUM);
   if (cache->use_frame && fp_base > 0)
     {
@@ -987,7 +982,11 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
       cache->base = fp_base;
     }
   else
-    cache->base = next_base;
+    {
+      sp_base = get_frame_register_unsigned (this_frame, NDS32_SP_REGNUM);
+      prev_sp = sp_base - cache->sp_offset;
+      cache->base = sp_base;
+    }
 
   /* Convert that SP/BASE into real addresses.  */
   cache->prev_sp = prev_sp;
