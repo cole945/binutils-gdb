@@ -530,13 +530,13 @@ nds32_pseudo_register_write (struct gdbarch *gdbarch,
 
 static CORE_ADDR
 nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
-			CORE_ADDR scan_limit)
+			CORE_ADDR limit_pc)
 {
   uint32_t insn;
   CORE_ADDR cpc = -1;		/* Candidate PC if no suitable PC is found.  */
 
   /* Look up end of prologue.  */
-  for (; pc < scan_limit; )
+  for (; pc < limit_pc; )
     {
       insn = read_memory_unsigned_integer (pc, 4, BFD_ENDIAN_BIG);
 
@@ -689,9 +689,9 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 	}
     }
 
-  if (pc >= scan_limit)
+  if (pc >= limit_pc)
     {
-      /* If we can not find end of prologue before scan_limit,
+      /* If we can not find end of prologue before limit_pc,
 	 we assume that end of prologue is on pc_after_stack_adject. */
       if (cpc != -1)
 	pc = cpc;
@@ -710,7 +710,7 @@ nds32_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
   LONGEST return_value;
   const char *func_name;
   const int search_limit = 128; /* Magic.  */
-  CORE_ADDR func_addr, scan_limit;
+  CORE_ADDR func_addr, limit_pc;
 
   /* See what the symbol table says */
   if (find_pc_partial_function (pc, NULL, &func_addr, NULL))
@@ -722,16 +722,16 @@ nds32_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 	return max (pc, post_prologue_pc);
     }
 
-  scan_limit = skip_prologue_using_sal (gdbarch, pc);
-  if (scan_limit == 0)
-    scan_limit = pc + search_limit;
+  limit_pc = skip_prologue_using_sal (gdbarch, pc);
+  if (limit_pc == 0)
+    limit_pc = pc + search_limit;
 
   /* If current instruction is not readable, just quit.  */
   if (!safe_read_memory_integer (pc, 4, BFD_ENDIAN_BIG, &return_value))
     return pc;
 
   /* Find the end of prologue.  */
-  return nds32_analyze_prologue (gdbarch, pc, scan_limit);
+  return nds32_analyze_prologue (gdbarch, pc, limit_pc);
 }
 
 struct nds32_frame_cache
@@ -805,7 +805,7 @@ nds32_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR addr)
 static struct nds32_frame_cache *
 nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
 {
-  CORE_ADDR pc, scan_limit;
+  CORE_ADDR pc, limit_pc;
   ULONGEST prev_sp;
   ULONGEST next_base;
   ULONGEST fp_base;
@@ -826,9 +826,9 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
     return cache;
 
   pc = get_frame_func (this_frame);
-  scan_limit = get_frame_pc (this_frame);
+  limit_pc = get_frame_pc (this_frame);
 
-  for (; pc > 0 && pc < scan_limit; )
+  for (; pc > 0 && pc < limit_pc; )
     {
       insn = read_memory_unsigned_integer (pc, 4, BFD_ENDIAN_BIG);
 
