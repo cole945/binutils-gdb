@@ -621,14 +621,7 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 	  /* 32-bit instruction */
 	  insn_len = 4;
 
-	  if (insn == N32_ALU1 (ADD, REG_GP, REG_TA, REG_GP)
-	      || insn == N32_ALU1 (ADD, REG_GP, REG_GP, REG_TA))
-	    {
-	      /* add $gp, $ta, $gp */
-	      /* add $gp, $gp, $ta */
-	      continue;
-	    }
-	  else if (CHOP_BITS (insn, 15) == N32_TYPE2 (ADDI, REG_SP, REG_SP, 0))
+	  if (CHOP_BITS (insn, 15) == N32_TYPE2 (ADDI, REG_SP, REG_SP, 0))
 	    {
 	      /* addi $sp, $sp, imm15s */
 	      if (cache != NULL)
@@ -647,27 +640,32 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 
 	      continue;
 	    }
+	  else if ((insn & ~(__MASK (19) << 6)) == N32_SMW_ADM
+		   && N32_RA5 (insn) == REG_SP)
+	    {
+	      /* smw.adm Rb, [$sp], Re, enable4 */
+	      if (cache != NULL)
+		nds32_push_multiple_words (cache, N32_RT5 (insn),
+					   N32_RB5 (insn),
+					   N32_LSMW_ENABLE4 (insn));
+	      continue;
+	    }
+	  else if (insn == N32_ALU1 (ADD, REG_SP, REG_SP, REG_TA)
+		   || insn == N32_ALU1 (ADD, REG_SP, REG_TA, REG_SP))
+	    {
+	      /* add $sp, $sp, $ta */
+	      /* add $sp, $ta, $sp */
+	      if (cache != NULL)
+		cache->sp_offset += val_ta;
+
+	      continue;
+	    }
 	  else if (CHOP_BITS (insn, 20) == N32_TYPE1 (MOVI, REG_TA, 0))
 	    {
 	      /* movi $ta, imm20s */
 	      if (cache != NULL)
 		val_ta = N32_IMM20S (insn);
 
-	      continue;
-	    }
-	  else if (CHOP_BITS (insn, 20) == N32_TYPE1 (SETHI, REG_GP, 0))
-	    {
-	      /* sethi $gp, imm20u */
-	      continue;
-	    }
-	  else if (CHOP_BITS (insn, 15) == N32_TYPE2 (ORI, REG_GP, REG_GP, 0))
-	    {
-	      /* ori $gp, $gp, imm15u */
-	      continue;
-	    }
-	  else if (CHOP_BITS (insn, 20) == N32_TYPE1 (MOVI, REG_GP, 0))
-	    {
-	      /* movi $gp, imm20s */
 	      continue;
 	    }
 	  else if (CHOP_BITS (insn, 20) == N32_TYPE1 (SETHI, REG_TA, 0))
@@ -694,24 +692,26 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 
 	      continue;
 	    }
-	  else if (insn == N32_ALU1 (ADD, REG_SP, REG_SP, REG_TA)
-		   || insn == N32_ALU1 (ADD, REG_SP, REG_TA, REG_SP))
+	  if (insn == N32_ALU1 (ADD, REG_GP, REG_TA, REG_GP)
+	      || insn == N32_ALU1 (ADD, REG_GP, REG_GP, REG_TA))
 	    {
-	      /* add $sp, $sp, $ta */
-	      /* add $sp, $ta, $sp */
-	      if (cache != NULL)
-		cache->sp_offset += val_ta;
-
+	      /* add $gp, $ta, $gp */
+	      /* add $gp, $gp, $ta */
 	      continue;
 	    }
-	  else if ((insn & ~(__MASK (19) << 6)) == N32_SMW_ADM
-		   && N32_RA5 (insn) == REG_SP)
+	  else if (CHOP_BITS (insn, 20) == N32_TYPE1 (MOVI, REG_GP, 0))
 	    {
-	      /* smw.adm Rb, [$sp], Re, enable4 */
-	      if (cache != NULL)
-		nds32_push_multiple_words (cache, N32_RT5 (insn),
-					   N32_RB5 (insn),
-					   N32_LSMW_ENABLE4 (insn));
+	      /* movi $gp, imm20s */
+	      continue;
+	    }
+	  else if (CHOP_BITS (insn, 20) == N32_TYPE1 (SETHI, REG_GP, 0))
+	    {
+	      /* sethi $gp, imm20u */
+	      continue;
+	    }
+	  else if (CHOP_BITS (insn, 15) == N32_TYPE2 (ORI, REG_GP, REG_GP, 0))
+	    {
+	      /* ori $gp, $gp, imm15u */
 	      continue;
 	    }
 
@@ -771,14 +771,14 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 
 	      continue;
 	    }
-	  else if (CHOP_BITS (insn, 5) == N16_TYPE55 (MOVI55, REG_GP, 0))
-	    {
-	      /* movi55 $gp, imm5s */
-	      continue;
-	    }
 	  else if (insn == N16_TYPE5 (ADD5PC, REG_GP))
 	    {
 	      /* add5.pc $gp */
+	      continue;
+	    }
+	  else if (CHOP_BITS (insn, 5) == N16_TYPE55 (MOVI55, REG_GP, 0))
+	    {
+	      /* movi55 $gp, imm5s */
 	      continue;
 	    }
 
