@@ -961,8 +961,6 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
     return (struct nds32_frame_cache *) *this_cache;
 
   cache = nds32_alloc_frame_cache (this_frame);
-
-  cache->base = get_frame_register_unsigned (this_frame, NDS32_FP_REGNUM);
   *this_cache = cache;
 
   pc = get_frame_func (this_frame);
@@ -970,14 +968,11 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
   nds32_analyze_prologue (gdbarch, pc, current_pc, cache);
 
   /* Compute the previous frame's stack pointer (which is also the
-     frame's ID's stack address), and this frame's base pointer.
-
-     Assume that the FP is this frame's SP but with that pushed
-     stack space added back.  */
-  fp_base = get_frame_register_unsigned (this_frame, NDS32_FP_REGNUM);
-  if (cache->use_frame && fp_base > 0)
+     frame's ID's stack address), and this frame's base pointer.  */
+  if (cache->use_frame)
     {
       /* Try to use FP if possible. */
+      fp_base = get_frame_register_unsigned (this_frame, NDS32_FP_REGNUM);
       prev_sp = fp_base - cache->fp_offset;
       cache->base = fp_base;
     }
