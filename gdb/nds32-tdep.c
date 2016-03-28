@@ -533,7 +533,6 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 			CORE_ADDR limit_pc)
 {
   uint32_t insn;
-  CORE_ADDR cpc = -1;		/* Candidate PC if no suitable PC is found.  */
 
   /* Look up end of prologue.  */
   for (; pc < limit_pc; )
@@ -553,13 +552,11 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 	  else if (CHOP_BITS (insn, 15) == N32_TYPE2 (ADDI, REG_SP, REG_SP, 0))
 	    {
 	      /* addi $sp, $sp, imm15 */
-	      cpc = pc;
 	      continue;
 	    }
 	  else if (CHOP_BITS (insn, 15) == N32_TYPE2 (ADDI, REG_FP, REG_FP, 0))
 	    {
 	      /* addi $fp, $sp, imm15 */
-	      cpc = pc;
 	      continue;
 	    }
 	  else if (insn == N32_ALU2 (MFUSR, REG_TA, 31, 0))
@@ -606,7 +603,6 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 		{
 		case NDS32_FP_REGNUM:
 		case NDS32_SP_REGNUM:
-		  cpc = pc;
 		  continue; /* found and continue */
 		default:
 		  break;
@@ -687,14 +683,6 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 	  pc -= 2;
 	  break;
 	}
-    }
-
-  if (pc >= limit_pc)
-    {
-      /* If we can not find end of prologue before limit_pc,
-	 we assume that end of prologue is on pc_after_stack_adject. */
-      if (cpc != -1)
-	pc = cpc;
     }
 
   return pc;
