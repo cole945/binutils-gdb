@@ -68,7 +68,7 @@ static const char *const nds32_register_names[] =
   "pc", "d0lo", "d0hi", "d1lo", "d1hi",
 };
 
-static const char *const nds32_fd_register_names[] =
+static const char *const nds32_fdr_register_names[] =
 {
   "fd0", "fd1", "fd2", "fd3", "fd4", "fd5", "fd6", "fd7",
   "fd8", "fd9", "fd10", "fd11", "fd12", "fd13", "fd14", "fd15",
@@ -76,7 +76,7 @@ static const char *const nds32_fd_register_names[] =
   "fd24", "fd25", "fd26", "fd27", "fd28", "fd29", "fd30", "fd31"
 };
 
-static const char *const nds32_fs_register_names[] =
+static const char *const nds32_fsr_register_names[] =
 {
   "fs0", "fs1", "fs2", "fs3", "fs4", "fs5", "fs6", "fs7",
   "fs8", "fs9", "fs10", "fs11", "fs12", "fs13", "fs14", "fs15",
@@ -447,7 +447,7 @@ nds32_pseudo_register_name (struct gdbarch *gdbarch, int regnum)
 
   /* Currently, only FSRs could be defined as pseudo registers.  */
   if (regnum < gdbarch_num_pseudo_regs (gdbarch))
-    return nds32_fs_register_names[regnum];
+    return nds32_fsr_register_names[regnum];
 
   warning (_("Unknown nds32 pseudo register %d."), regnum);
   return NULL;
@@ -462,7 +462,7 @@ nds32_pseudo_register_read (struct gdbarch *gdbarch,
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   gdb_byte reg_buf[8];
-  int offset, fd_regnum;
+  int offset, fdr_regnum;
   enum register_status status = REG_UNKNOWN;
 
   /* Sanity check.  */
@@ -480,8 +480,8 @@ nds32_pseudo_register_read (struct gdbarch *gdbarch,
       else
 	offset = (regnum & 1) ? 0 : 4;
 
-      fd_regnum = tdep->fd0_regnum + (regnum >> 1);
-      status = regcache_raw_read (regcache, fd_regnum, reg_buf);
+      fdr_regnum = tdep->fd0_regnum + (regnum >> 1);
+      status = regcache_raw_read (regcache, fdr_regnum, reg_buf);
       if (status == REG_VALID)
 	memcpy (buf, reg_buf + offset, 4);
     }
@@ -498,7 +498,7 @@ nds32_pseudo_register_write (struct gdbarch *gdbarch,
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   gdb_byte reg_buf[8];
-  int offset, fd_regnum;
+  int offset, fdr_regnum;
 
   /* Sanity check.  */
   if (tdep->fpu_freg == -1 || tdep->use_pseudo_fsrs == 0)
@@ -515,10 +515,10 @@ nds32_pseudo_register_write (struct gdbarch *gdbarch,
       else
 	offset = (regnum & 1) ? 0 : 4;
 
-      fd_regnum = tdep->fd0_regnum + (regnum >> 1);
-      regcache_raw_read (regcache, fd_regnum, reg_buf);
+      fdr_regnum = tdep->fd0_regnum + (regnum >> 1);
+      regcache_raw_read (regcache, fdr_regnum, reg_buf);
       memcpy (reg_buf + offset, buf, 4);
-      regcache_raw_write (regcache, fd_regnum, reg_buf);
+      regcache_raw_write (regcache, fdr_regnum, reg_buf);
     }
 }
 
@@ -1813,7 +1813,7 @@ nds32_preprocess_tdesc_p (const struct target_desc *tdesc,
       for (i = 0; i < num_fdr_regs; i++)
 	valid_p &= tdesc_numbered_register (feature, tdesc_data,
 					    NDS32_FD0_REGNUM + i,
-					    nds32_fd_register_names[i]);
+					    nds32_fdr_register_names[i]);
       tdep->num_fdr_regs = num_fdr_regs;
     }
 
@@ -1844,7 +1844,7 @@ nds32_preprocess_tdesc_p (const struct target_desc *tdesc,
 	  for (i = 0; i < num_fsr_regs; i++)
 	    valid_p &= tdesc_numbered_register (feature, tdesc_data,
 						NDS32_FS0_REGNUM + i,
-						nds32_fs_register_names[i]);
+						nds32_fsr_register_names[i]);
 	  if (!valid_p)
 	    return 0;
 	}
