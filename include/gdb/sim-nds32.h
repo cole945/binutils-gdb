@@ -1,7 +1,6 @@
 /* This file defines the interface between the NDS32 simulator and GDB.
 
-   Copyright 2009-2013 Free Software Foundation, Inc.
-
+   Copyright (C) 2012-2016 Free Software Foundation, Inc.
    Contributed by Andes Technology Corporation.
 
    This file is part of GDB.

@@ -1,6 +1,6 @@
-/* Target-dependent code for NDS32 architecture, for GDB.
+/* Target-dependent code for the NDS32 architecture, for GDB.
 
-   Copyright (C) 2006-2013 Free Software Foundation, Inc.
+   Copyright (C) 2012-2016 Free Software Foundation, Inc.
    Contributed by Andes Technology Corporation.
 
    This file is part of GDB.
