@@ -92,14 +92,11 @@ static const char *nds32_fsr_regnames[] =
 };
 
 /* Mnemonic names for registers.  */
-struct nds32_register_alias
+static const struct
 {
   const char *name;
   const char *alias;
-};
-
-/* Register alias for user_reg_map_name_to_regnum ().  */
-static const struct nds32_register_alias nds32_register_aliases[] =
+} nds32_register_aliases[] =
 {
   {"r15", "ta"},
   {"r26", "p0"},
@@ -248,19 +245,13 @@ static const struct nds32_register_alias nds32_register_aliases[] =
   {"secur3", "p_isign"},
 };
 
-/* Value of a register alias.  BATON is register name of the alias,
-   because system registers do not have fixed register number.
-   We must look-up them when access.  */
+/* Value of a register alias.  BATON is the regnum of the corresponding
+   register.  */
 
 static struct value *
-nds32_value_of_reg (struct frame_info *frame, const void *baton)
+value_of_nds32_reg (struct frame_info *frame, const void *baton)
 {
-  struct gdbarch *gdbarch = get_frame_arch (frame);
-  int regnum;
-
-  regnum = user_reg_map_name_to_regnum (gdbarch, (const char *) baton, -1);
-
-  return value_of_register (regnum, frame);
+  return value_of_register ((int) baton, frame);
 }
 
 /* Implement the gdbarch_frame_align method.  */
@@ -2267,13 +2258,15 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
       tdep->fd0_regnum = user_reg_map_name_to_regnum (gdbarch, "fd0", -1);
     }
 
-  /* Add nds32 register aliases.  */
+  /* Add NDS32 register aliases.  To avoid search in user register name space,
+     user_reg_map_name_to_regnum is not used.  */
   maxregs = (gdbarch_num_regs (gdbarch) + gdbarch_num_pseudo_regs (gdbarch));
-  for (i = 0; i < (int) ARRAY_SIZE (nds32_register_aliases); i++)
+  for (i = 0; i < ARRAY_SIZE (nds32_register_aliases); i++)
     {
       int regnum, j;
 
       regnum = -1;
+      /* Search register name space.  */
       for (j = 0; j < maxregs; j++)
 	{
 	  const char *regname = gdbarch_register_name (gdbarch, j);
@@ -2286,11 +2279,13 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 	    }
 	}
 
+      /* Try next alias entry if the given name can not be found in register
+	 name space.  */
       if (regnum == -1)
 	continue;
 
       user_reg_add (gdbarch, nds32_register_aliases[i].alias,
-		    nds32_value_of_reg, nds32_register_aliases[i].name);
+		    value_of_nds32_reg, (const void *) regnum);
     }
 
   nds32_add_reggroups (gdbarch);
