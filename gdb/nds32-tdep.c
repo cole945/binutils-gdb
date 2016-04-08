@@ -943,11 +943,9 @@ nds32_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR addr)
   return r > 0;
 }
 
-/* Put here the code to store, into fi->saved_regs, the addresses of
-   the saved registers of frame described by FRAME_INFO.  This
-   includes special registers such as pc and fp saved in special ways
-   in the stack frame.  sp is even more special: the address we return
-   for it IS the sp for the next frame.  */
+/* Allocate and fill in *THIS_CACHE with information about the prologue of
+   *THIS_FRAME.  Do not do this if *THIS_CACHE was already allocated.  Return
+   a pointer to the current nds32_frame_cache in *THIS_CACHE.  */
 
 static struct nds32_frame_cache *
 nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
