@@ -32,7 +32,6 @@
 #include "osabi.h"
 #include "arch-utils.h"
 #include "regcache.h"
-#include "trad-frame.h"
 #include "dis-asm.h"
 #include "user-regs.h"
 #include "elf-bfd.h"
@@ -55,6 +54,9 @@ N32_TYPE4 (LSMW, 0, 0, 0, 1, (N32_LSMW_ADM << 2) | N32_LSMW_LSMW)
 
 
 extern void _initialize_nds32_tdep (void);
+
+/* Use an invalid address value as 'not available' marker.  */
+enum { REG_UNAVAIL = (CORE_ADDR) -1 };
 
 static const char *const nds32_register_names[] =
 {
@@ -540,6 +542,8 @@ nds32_abi_split (int abi)
   return abi == E_NDS_ABI_AABI;
 }
 
+#define NDS32_NUM_SAVED_REGS (NDS32_LP_REGNUM + 1)
+
 struct nds32_frame_cache
 {
   /* The previous frame's inner most stack address.  Used as this
@@ -559,22 +563,22 @@ struct nds32_frame_cache
   /* The address of the first instruction in this function.  */
   CORE_ADDR pc;
 
-  /* Table indicating the location of each and every register.  */
-  struct trad_frame_saved_reg *saved_regs;
+  /* Saved registers.  */
+  CORE_ADDR saved_regs[NDS32_NUM_SAVED_REGS];
 };
 
 static struct nds32_frame_cache *
-nds32_alloc_frame_cache (struct frame_info *this_frame)
+nds32_alloc_frame_cache (void)
 {
   struct nds32_frame_cache *cache;
+  int i;
 
   cache = FRAME_OBSTACK_ZALLOC (struct nds32_frame_cache);
-  cache->saved_regs = trad_frame_alloc_saved_regs (this_frame);
-  cache->sp_offset = 0;
-  cache->fp_offset = 0;
-  cache->use_frame = 0;
-  cache->base = 0;
-  cache->prev_sp = 0;
+
+  /* Saved registers.  We initialize these to -1 since zero is a valid
+     offset.  */
+  for (i = 0; i < NDS32_NUM_SAVED_REGS; i++)
+    cache->saved_regs[i] = REG_UNAVAIL;
 
   return cache;
 }
@@ -594,7 +598,7 @@ nds32_push_multiple_words (struct nds32_frame_cache *cache, int rb, int re,
       if ((enable4 >> i) & 0x1)
 	{
 	  sp_offset -= 4;
-	  cache->saved_regs[NDS32_SP_REGNUM - i].addr = sp_offset;
+	  cache->saved_regs[NDS32_SP_REGNUM - i] = sp_offset;
 	}
     }
 
@@ -604,7 +608,7 @@ nds32_push_multiple_words (struct nds32_frame_cache *cache, int rb, int re,
       for (i = re; i >= rb; i--)
 	{
 	  sp_offset -= 4;
-	  cache->saved_regs[i].addr = sp_offset;
+	  cache->saved_regs[i] = sp_offset;
 	}
     }
 
@@ -953,7 +957,7 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
   if (*this_cache)
     return (struct nds32_frame_cache *) *this_cache;
 
-  cache = nds32_alloc_frame_cache (this_frame);
+  cache = nds32_alloc_frame_cache ();
   *this_cache = cache;
 
   cache->pc = get_frame_func (this_frame);
@@ -978,19 +982,9 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
 
   /* Adjust all the saved registers such that they contain addresses
      instead of offsets.  */
-  for (i = 0; i < NDS32_NUM_REGS; i++)
-    if (trad_frame_addr_p (cache->saved_regs, i))
-      cache->saved_regs[i].addr += cache->prev_sp;
-
-  /* The call instruction moves the caller's PC in the callee's LP.
-     Since this is an unwind, do the reverse.  Copy the location of LP
-     into PC (the address / regnum) so that a request for PC will be
-     converted into a request for the LP.  */
-  cache->saved_regs[NDS32_PC_REGNUM] = cache->saved_regs[NDS32_LP_REGNUM];
-
-  /* The previous frame's SP needed to be computed.
-     Save the computed value.  */
-  trad_frame_set_value (cache->saved_regs, NDS32_SP_REGNUM, prev_sp);
+  for (i = 0; i < NDS32_NUM_SAVED_REGS; i++)
+    if (cache->saved_regs[i] != REG_UNAVAIL)
+      cache->saved_regs[i] += cache->prev_sp;
 
   return cache;
 }
@@ -1535,7 +1529,19 @@ nds32_frame_prev_register (struct frame_info *this_frame, void **this_cache,
 {
   struct nds32_frame_cache *cache = nds32_frame_cache (this_frame, this_cache);
 
-  return trad_frame_get_prev_register (this_frame, cache->saved_regs, regnum);
+  if (regnum == NDS32_SP_REGNUM)
+    return frame_unwind_got_constant (this_frame, regnum, cache->prev_sp);
+
+  /* The PC of the previous frame is stored in the LP register of
+     the current frame.  */
+  if (regnum == NDS32_PC_REGNUM)
+    regnum = NDS32_LP_REGNUM;
+
+  if (regnum < NDS32_NUM_SAVED_REGS && cache->saved_regs[regnum] != REG_UNAVAIL)
+    return frame_unwind_got_memory (this_frame, regnum,
+				    cache->saved_regs[regnum]);
+
+  return frame_unwind_got_register (this_frame, regnum, regnum);
 }
 
 static const struct frame_unwind nds32_frame_unwind =
@@ -1609,7 +1615,7 @@ nds32_epilogue_frame_cache (struct frame_info *this_frame, void **this_cache)
   if (*this_cache)
     return (struct nds32_frame_cache *) *this_cache;
 
-  cache = nds32_alloc_frame_cache (this_frame);
+  cache = nds32_alloc_frame_cache ();
   *this_cache = cache;
 
   TRY
