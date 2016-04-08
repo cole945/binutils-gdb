@@ -1544,28 +1544,22 @@ nds32_dummy_id (struct gdbarch *gdbarch, struct frame_info *this_frame)
   return frame_id_build (sp, pc);
 }
 
-/* Given a GDB frame, determine the address of the calling function's
-   frame.  This will be used to create a new GDB frame struct.  */
+/* Implement the "this_id" frame_unwind method.
+
+   Our frame ID for a normal frame is the current function's starting
+   PC and the caller's SP when we were called.  */
 
 static void
 nds32_frame_this_id (struct frame_info *this_frame, void **this_cache,
 		     struct frame_id *this_id)
 {
-  struct nds32_frame_cache *cache;
-  CORE_ADDR base;
-  struct frame_id id;
+  struct nds32_frame_cache *cache = nds32_frame_cache (this_frame, this_cache);
 
-  cache = nds32_frame_cache (this_frame, this_cache);
-
-  /* Hopefully the prologue analysis either correctly determined the
-     frame's base (which is the SP from the previous frame), or set
-     that base to "NULL".  */
-  base = cache->prev_sp;
-  if (base == 0)
+  /* This marks the outermost frame.  */
+  if (cache->prev_sp == 0)
     return;
 
-  id = frame_id_build (base, cache->pc);
-  (*this_id) = id;
+  *this_id = frame_id_build (cache->prev_sp, cache->pc);
 }
 
 /* Get the value of register REGNUM in previous frame.  */
