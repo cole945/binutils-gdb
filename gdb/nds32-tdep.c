@@ -563,6 +563,9 @@ struct nds32_frame_cache
   LONGEST fp_offset;
   int use_frame;
 
+  /* The address of the first instruction in this function.  */
+  CORE_ADDR pc;
+
   /* Table indicating the location of each and every register.  */
   struct trad_frame_saved_reg *saved_regs;
 };
@@ -951,7 +954,7 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
 {
   struct gdbarch *gdbarch = get_frame_arch (this_frame);
   struct nds32_frame_cache *cache;
-  CORE_ADDR pc, current_pc;
+  CORE_ADDR current_pc;
   ULONGEST prev_sp;
   ULONGEST sp_base;
   ULONGEST fp_base;
@@ -963,9 +966,9 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
   cache = nds32_alloc_frame_cache (this_frame);
   *this_cache = cache;
 
-  pc = get_frame_func (this_frame);
+  cache->pc = get_frame_func (this_frame);
   current_pc = get_frame_pc (this_frame);
-  nds32_analyze_prologue (gdbarch, pc, current_pc, cache);
+  nds32_analyze_prologue (gdbarch, cache->pc, current_pc, cache);
 
   /* Compute the previous frame's stack pointer (which is also the
      frame's ID's stack address), and this frame's base pointer.  */
@@ -1554,13 +1557,9 @@ nds32_frame_this_id (struct frame_info *this_frame, void **this_cache,
 {
   struct nds32_frame_cache *cache;
   CORE_ADDR base;
-  CORE_ADDR func;
   struct frame_id id;
 
   cache = nds32_frame_cache (this_frame, this_cache);
-
-  /* Get function entry address */
-  func = get_frame_func (this_frame);
 
   /* Hopefully the prologue analysis either correctly determined the
      frame's base (which is the SP from the previous frame), or set
@@ -1569,7 +1568,7 @@ nds32_frame_this_id (struct frame_info *this_frame, void **this_cache,
   if (base == 0)
     return;
 
-  id = frame_id_build (base, func);
+  id = frame_id_build (base, cache->pc);
   (*this_id) = id;
 }
 
