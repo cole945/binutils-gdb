@@ -542,8 +542,8 @@ nds32_abi_split (int abi)
 
 struct nds32_frame_cache
 {
-  /* The previous frame's inner most stack address.
-     Used as this frame ID's stack_addr.  */
+  /* The previous frame's inner most stack address.  Used as this
+     frame ID's stack_addr.  */
   CORE_ADDR prev_sp;
 
   /* The frame's base, optionally used by the high-level debug info.  */
@@ -574,7 +574,7 @@ nds32_alloc_frame_cache (struct frame_info *this_frame)
   cache->fp_offset = 0;
   cache->use_frame = 0;
   cache->base = 0;
-  cache->prev_sp = -1;
+  cache->prev_sp = 0;
 
   return cache;
 }
