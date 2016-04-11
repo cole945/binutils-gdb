@@ -2001,11 +2001,6 @@ nds32_preprocess_tdesc_p (const struct target_desc *tdesc,
 			  struct tdesc_arch_data *tdesc_data,
 			  struct gdbarch_tdep *tdep)
 {
-  static const char *const nds32_ta_names[] = { "r15", "ta", NULL };
-  static const char *const nds32_fp_names[] = { "r28", "fp", NULL };
-  static const char *const nds32_gp_names[] = { "r29", "gp", NULL };
-  static const char *const nds32_lp_names[] = { "r30", "lp", NULL };
-  static const char *const nds32_sp_names[] = { "r31", "sp", NULL };
   const struct tdesc_feature *feature;
   int i, freg = -1;
   int valid_p;
@@ -2020,34 +2015,20 @@ nds32_preprocess_tdesc_p (const struct target_desc *tdesc,
     valid_p &= tdesc_numbered_register (feature, tdesc_data, i,
 					nds32_regnames[i]);
 
-  /* Validate and fixed-number TA, FP, GP, LP, SP, PC.  */
-  valid_p &= tdesc_numbered_register_choices (feature, tdesc_data,
-					      NDS32_TA_REGNUM,
-					      nds32_ta_names);
-  valid_p &= tdesc_numbered_register_choices (feature, tdesc_data,
-					      NDS32_FP_REGNUM,
-					      nds32_fp_names);
-  valid_p &= tdesc_numbered_register_choices (feature, tdesc_data,
-					      NDS32_GP_REGNUM,
-					      nds32_gp_names);
-  valid_p &= tdesc_numbered_register_choices (feature, tdesc_data,
-					      NDS32_LP_REGNUM,
-					      nds32_lp_names);
-  valid_p &= tdesc_numbered_register_choices (feature, tdesc_data,
-					      NDS32_SP_REGNUM,
-					      nds32_sp_names);
-  valid_p &= tdesc_numbered_register (feature, tdesc_data,
-				      NDS32_PC_REGNUM, "pc");
+  /* Validate R15, and it will be fix-numbered later.  */
+  valid_p &= tdesc_unnumbered_register (feature,
+					nds32_regnames[NDS32_TA_REGNUM]);
+
+  /* Validate and fixed-number FP, GP, LP, SP, PC.  */
+  for (i = NDS32_FP_REGNUM; i <= NDS32_PC_REGNUM; i++)
+    valid_p &= tdesc_numbered_register (feature, tdesc_data, i,
+					nds32_regnames[i]);
 
   if (!valid_p)
     return 0;
 
-  /* Fixed-number R11-R14.  */
-  for (i = NDS32_R0_REGNUM + 11; i <= NDS32_R0_REGNUM + 14; i++)
-    tdesc_numbered_register (feature, tdesc_data, i, nds32_regnames[i]);
-
-  /* Fixed-number R16-R27.  */
-  for (i = NDS32_R0_REGNUM + 16; i <= NDS32_R0_REGNUM + 27; i++)
+  /* Fixed-number R11-R27.  */
+  for (i = NDS32_R0_REGNUM + 11; i <= NDS32_R0_REGNUM + 27; i++)
     tdesc_numbered_register (feature, tdesc_data, i, nds32_regnames[i]);
 
   /* Fixed-number D0 and D1.  */
