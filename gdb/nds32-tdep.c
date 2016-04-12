@@ -657,13 +657,18 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 	  else if (CHOP_BITS (insn, 15) == N32_TYPE2 (ADDI, REG_FP, REG_SP, 0))
 	    {
 	      /* addi $fp, $sp, imm15s */
-	      if (cache != NULL)
-		{
-		  cache->fp_offset = cache->sp_offset + N32_IMM15S (insn);
-		  cache->use_frame = 1;
-		}
+	      int imm15s = N32_IMM15S (insn);
 
-	      continue;
+	      if (imm15s > 0)
+		{
+		  if (cache != NULL)
+		    {
+		      cache->fp_offset = cache->sp_offset + imm15s;
+		      cache->use_frame = 1;
+		    }
+
+		  continue;
+		}
 	    }
 	  else if ((insn & ~(__MASK (19) << 6)) == N32_SMW_ADM
 		   && N32_RA5 (insn) == REG_SP)
@@ -797,17 +802,6 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 		  /* Operation 2 -- sp = sp - (imm5u << 3) */
 		  cache->sp_offset -= imm8u;
 		}
-	      continue;
-	    }
-	  else if (insn == N16_TYPE55 (MOV55, REG_FP, REG_SP))
-	    {
-	      /* mov55 $fp, $sp */
-	      if (cache != NULL)
-		{
-		  cache->fp_offset = cache->sp_offset;
-		  cache->use_frame = 1;
-		}
-
 	      continue;
 	    }
 	  else if (insn == N16_TYPE5 (ADD5PC, REG_GP))
