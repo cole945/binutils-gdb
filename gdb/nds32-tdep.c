@@ -556,8 +556,8 @@ struct nds32_frame_cache
   /* How far the SP and FP have been offset from the start of
      the stack frame (as defined by the previous frame's stack
      pointer).  */
-  LONGEST sp_offset;
-  LONGEST fp_offset;
+  CORE_ADDR sp_offset;
+  CORE_ADDR fp_offset;
   int use_frame;
 
   /* The address of the first instruction in this function.  */
@@ -589,7 +589,7 @@ static void
 nds32_push_multiple_words (struct nds32_frame_cache *cache, int rb, int re,
 			   int enable4)
 {
-  LONGEST sp_offset = cache->sp_offset;
+  CORE_ADDR sp_offset = cache->sp_offset;
   int i;
 
   /* Check LP, GP, FP in enable4.  */
@@ -597,7 +597,7 @@ nds32_push_multiple_words (struct nds32_frame_cache *cache, int rb, int re,
     {
       if ((enable4 >> i) & 0x1)
 	{
-	  sp_offset -= 4;
+	  sp_offset += 4;
 	  cache->saved_regs[NDS32_SP_REGNUM - i] = sp_offset;
 	}
     }
@@ -607,7 +607,7 @@ nds32_push_multiple_words (struct nds32_frame_cache *cache, int rb, int re,
     {
       for (i = re; i >= rb; i--)
 	{
-	  sp_offset -= 4;
+	  sp_offset += 4;
 	  cache->saved_regs[i] = sp_offset;
 	}
     }
@@ -649,7 +649,7 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 	      if (imm15s < 0)
 		{
 		  if (cache != NULL)
-		    cache->sp_offset += imm15s;
+		    cache->sp_offset += -imm15s;
 
 		  in_prologue_bb = 1;
 		  continue;
@@ -664,7 +664,7 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 		{
 		  if (cache != NULL)
 		    {
-		      cache->fp_offset = cache->sp_offset + imm15s;
+		      cache->fp_offset = cache->sp_offset - imm15s;
 		      cache->use_frame = 1;
 		    }
 
@@ -691,7 +691,7 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 	      if (val_ta < 0)
 		{
 		  if (cache != NULL)
-		    cache->sp_offset += val_ta;
+		    cache->sp_offset += -val_ta;
 
 		  in_prologue_bb = 1;
 		  continue;
@@ -807,7 +807,7 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 	      if (imm10s < 0)
 		{
 		  if (cache != NULL)
-		    cache->sp_offset += imm10s;
+		    cache->sp_offset += -imm10s;
 
 		  in_prologue_bb = 1;
 		  continue;
@@ -826,7 +826,7 @@ nds32_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 		  nds32_push_multiple_words (cache, 6, reg_map[re], 0xe);
 
 		  /* Operation 2 -- sp = sp - (imm5u << 3) */
-		  cache->sp_offset -= imm8u;
+		  cache->sp_offset += imm8u;
 		}
 
 	      in_prologue_bb = 1;
@@ -969,12 +969,12 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
   if (cache->use_frame)
     {
       this_base = get_frame_register_unsigned (this_frame, NDS32_FP_REGNUM);
-      prev_sp = this_base - cache->fp_offset;
+      prev_sp = this_base + cache->fp_offset;
     }
   else
     {
       this_base = get_frame_register_unsigned (this_frame, NDS32_SP_REGNUM);
-      prev_sp = this_base - cache->sp_offset;
+      prev_sp = this_base + cache->sp_offset;
     }
 
   cache->prev_sp = prev_sp;
@@ -984,7 +984,7 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
      instead of offsets.  */
   for (i = 0; i < NDS32_NUM_SAVED_REGS; i++)
     if (cache->saved_regs[i] != REG_UNAVAIL)
-      cache->saved_regs[i] += cache->prev_sp;
+      cache->saved_regs[i] = cache->prev_sp - cache->saved_regs[i];
 
   return cache;
 }
