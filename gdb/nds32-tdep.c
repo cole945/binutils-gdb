@@ -260,7 +260,7 @@ static const struct
 static struct value *
 value_of_nds32_reg (struct frame_info *frame, const void *baton)
 {
-  return value_of_register ((int) baton, frame);
+  return value_of_register ((int) (intptr_t) baton, frame);
 }
 
 /* Implement the "frame_align" gdbarch method.  */
@@ -2131,7 +2131,7 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 	continue;
 
       user_reg_add (gdbarch, nds32_register_aliases[i].alias,
-		    value_of_nds32_reg, (const void *) regnum);
+		    value_of_nds32_reg, (const void *) (intptr_t) regnum);
     }
 
   nds32_add_reggroups (gdbarch);
