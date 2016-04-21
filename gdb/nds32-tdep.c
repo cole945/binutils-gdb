@@ -916,30 +916,6 @@ nds32_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
   return nds32_analyze_prologue (gdbarch, pc, limit_pc, NULL);
 }
 
-/* Implement the "stack_frame_destroyed_p" gdbarch method.  */
-
-static int
-nds32_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR addr)
-{
-  uint32_t insn;
-  int r = 0;
-
-  insn = read_memory_unsigned_integer (addr, 4, BFD_ENDIAN_BIG);
-  if ((insn & 0x80000000) == 0)
-    {
-      /* ret */
-      if (insn == N32_JREG (JR, 0, REG_LP, 0, 1))
-	r = 1;
-      /* iret */
-      else if (insn == N32_TYPE0 (MISC, N32_MISC_IRET))
-	r = 2;
-    }
-  else if (insn == N16_TYPE5 (RET5, REG_LP))
-    r = 3;
-
-  return r > 0;
-}
-
 /* Allocate and fill in *THIS_CACHE with information about the prologue of
    *THIS_FRAME.  Do not do this if *THIS_CACHE was already allocated.  Return
    a pointer to the current nds32_frame_cache in *THIS_CACHE.  */
@@ -987,6 +963,208 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
       cache->saved_regs[i] = cache->prev_sp - cache->saved_regs[i];
 
   return cache;
+}
+
+/* Implement the "this_id" frame_unwind method.
+
+   Our frame ID for a normal frame is the current function's starting
+   PC and the caller's SP when we were called.  */
+
+static void
+nds32_frame_this_id (struct frame_info *this_frame,
+		     void **this_cache, struct frame_id *this_id)
+{
+  struct nds32_frame_cache *cache = nds32_frame_cache (this_frame, this_cache);
+
+  /* This marks the outermost frame.  */
+  if (cache->prev_sp == 0)
+    return;
+
+  *this_id = frame_id_build (cache->prev_sp, cache->pc);
+}
+
+/* Implement the "prev_register" frame_unwind method.  */
+
+static struct value *
+nds32_frame_prev_register (struct frame_info *this_frame, void **this_cache,
+			   int regnum)
+{
+  struct nds32_frame_cache *cache = nds32_frame_cache (this_frame, this_cache);
+
+  if (regnum == NDS32_SP_REGNUM)
+    return frame_unwind_got_constant (this_frame, regnum, cache->prev_sp);
+
+  /* The PC of the previous frame is stored in the LP register of
+     the current frame.  */
+  if (regnum == NDS32_PC_REGNUM)
+    regnum = NDS32_LP_REGNUM;
+
+  if (regnum < NDS32_NUM_SAVED_REGS && cache->saved_regs[regnum] != REG_UNAVAIL)
+    return frame_unwind_got_memory (this_frame, regnum,
+				    cache->saved_regs[regnum]);
+
+  return frame_unwind_got_register (this_frame, regnum, regnum);
+}
+
+static const struct frame_unwind nds32_frame_unwind =
+{
+  NORMAL_FRAME,
+  default_frame_unwind_stop_reason,
+  nds32_frame_this_id,
+  nds32_frame_prev_register,
+  NULL,
+  default_frame_sniffer,
+};
+
+/* Return the frame base address of *THIS_FRAME.  */
+
+static CORE_ADDR
+nds32_frame_base_address (struct frame_info *this_frame, void **this_cache)
+{
+  struct nds32_frame_cache *cache = nds32_frame_cache (this_frame, this_cache);
+
+  return cache->base;
+}
+
+static const struct frame_base nds32_frame_base =
+{
+  &nds32_frame_unwind,
+  nds32_frame_base_address,
+  nds32_frame_base_address,
+  nds32_frame_base_address
+};
+
+/* Implement the "stack_frame_destroyed_p" gdbarch method.  */
+
+static int
+nds32_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR addr)
+{
+  uint32_t insn;
+  int r = 0;
+
+  insn = read_memory_unsigned_integer (addr, 4, BFD_ENDIAN_BIG);
+  if ((insn & 0x80000000) == 0)
+    {
+      /* ret */
+      if (insn == N32_JREG (JR, 0, REG_LP, 0, 1))
+	r = 1;
+      /* iret */
+      else if (insn == N32_TYPE0 (MISC, N32_MISC_IRET))
+	r = 2;
+    }
+  else if (insn == N16_TYPE5 (RET5, REG_LP))
+    r = 3;
+
+  return r > 0;
+}
+
+/* Implement the "sniffer" frame_unwind method.  */
+
+static int
+nds32_epilogue_frame_sniffer (const struct frame_unwind *self,
+			      struct frame_info *this_frame, void **this_cache)
+{
+  if (frame_relative_level (this_frame) == 0)
+    return nds32_stack_frame_destroyed_p (get_frame_arch (this_frame),
+					  get_frame_pc (this_frame));
+  else
+    return 0;
+}
+
+static struct nds32_frame_cache *
+nds32_epilogue_frame_cache (struct frame_info *this_frame, void **this_cache)
+{
+  struct nds32_frame_cache *cache;
+  CORE_ADDR sp;
+
+  if (*this_cache)
+    return (struct nds32_frame_cache *) *this_cache;
+
+  cache = nds32_alloc_frame_cache ();
+  *this_cache = cache;
+
+  TRY
+    {
+      /* At this point the stack looks as if we just entered the
+	 function, with the return address at the top of the
+	 stack.  */
+      sp = get_frame_register_unsigned (this_frame, NDS32_SP_REGNUM);
+      cache->prev_sp = sp;
+    }
+  CATCH (ex, RETURN_MASK_ERROR)
+    {
+      if (ex.error != NOT_AVAILABLE_ERROR)
+	throw_exception (ex);
+    }
+  END_CATCH
+
+  return cache;
+}
+
+/* Implement the "stop_reason" frame_unwind method.  */
+
+static enum unwind_stop_reason
+nds32_epilogue_frame_unwind_stop_reason (struct frame_info *this_frame,
+					 void **this_cache)
+{
+  struct nds32_frame_cache *cache =
+    nds32_epilogue_frame_cache (this_frame, this_cache);
+
+  if (!cache->prev_sp)
+    return UNWIND_UNAVAILABLE;
+
+  return UNWIND_NO_REASON;
+}
+
+/* Implement the "this_id" frame_unwind method.  */
+
+static void
+nds32_epilogue_frame_this_id (struct frame_info *this_frame,
+			      void **this_cache, struct frame_id *this_id)
+{
+  CORE_ADDR func, base;
+  struct nds32_frame_cache *cache =
+    nds32_epilogue_frame_cache (this_frame, this_cache);
+
+  base = cache->prev_sp;
+  func = get_frame_func (this_frame);
+
+  if (base == -1)
+    (*this_id) = frame_id_build_unavailable_stack (func);
+  else
+    (*this_id) = frame_id_build (base + 8, func);
+}
+
+/* Implement the "prev_register" frame_unwind method.  */
+
+static struct value *
+nds32_epilogue_frame_prev_register (struct frame_info *this_frame,
+				    void **this_cache, int regnum)
+{
+  /* Make sure we've initialized the cache.  */
+  nds32_epilogue_frame_cache (this_frame, this_cache);
+
+  return nds32_frame_prev_register (this_frame, this_cache, regnum);
+}
+
+static const struct frame_unwind nds32_epilogue_frame_unwind =
+{
+  NORMAL_FRAME,
+  nds32_epilogue_frame_unwind_stop_reason,
+  nds32_epilogue_frame_this_id,
+  nds32_epilogue_frame_prev_register,
+  NULL,
+  nds32_epilogue_frame_sniffer
+};
+
+/* Implement the "dummy_id" gdbarch method.  */
+
+static struct frame_id
+nds32_dummy_id (struct gdbarch *gdbarch, struct frame_info *this_frame)
+{
+  CORE_ADDR sp = get_frame_register_unsigned (this_frame, NDS32_SP_REGNUM);
+
+  return frame_id_build (sp, get_frame_pc (this_frame));
 }
 
 /* Implement the "unwind_pc" gdbarch method.  */
@@ -1493,87 +1671,6 @@ nds32_return_value (struct gdbarch *gdbarch, struct value *func_type,
     }
 }
 
-/* Implement the "dummy_id" gdbarch method.  */
-
-static struct frame_id
-nds32_dummy_id (struct gdbarch *gdbarch, struct frame_info *this_frame)
-{
-  CORE_ADDR sp = get_frame_register_unsigned (this_frame, NDS32_SP_REGNUM);
-
-  return frame_id_build (sp, get_frame_pc (this_frame));
-}
-
-/* Implement the "this_id" frame_unwind method.
-
-   Our frame ID for a normal frame is the current function's starting
-   PC and the caller's SP when we were called.  */
-
-static void
-nds32_frame_this_id (struct frame_info *this_frame, void **this_cache,
-		     struct frame_id *this_id)
-{
-  struct nds32_frame_cache *cache = nds32_frame_cache (this_frame, this_cache);
-
-  /* This marks the outermost frame.  */
-  if (cache->prev_sp == 0)
-    return;
-
-  *this_id = frame_id_build (cache->prev_sp, cache->pc);
-}
-
-/* Implement the "prev_register" frame_unwind method.  */
-
-static struct value *
-nds32_frame_prev_register (struct frame_info *this_frame, void **this_cache,
-			   int regnum)
-{
-  struct nds32_frame_cache *cache = nds32_frame_cache (this_frame, this_cache);
-
-  if (regnum == NDS32_SP_REGNUM)
-    return frame_unwind_got_constant (this_frame, regnum, cache->prev_sp);
-
-  /* The PC of the previous frame is stored in the LP register of
-     the current frame.  */
-  if (regnum == NDS32_PC_REGNUM)
-    regnum = NDS32_LP_REGNUM;
-
-  if (regnum < NDS32_NUM_SAVED_REGS && cache->saved_regs[regnum] != REG_UNAVAIL)
-    return frame_unwind_got_memory (this_frame, regnum,
-				    cache->saved_regs[regnum]);
-
-  return frame_unwind_got_register (this_frame, regnum, regnum);
-}
-
-static const struct frame_unwind nds32_frame_unwind =
-{
-  NORMAL_FRAME,
-  default_frame_unwind_stop_reason,
-  nds32_frame_this_id,
-  nds32_frame_prev_register,
-  NULL /* unwind_data */,
-  default_frame_sniffer,
-  NULL /* dealloc_cache */,
-  NULL /* prev_arch */
-};
-
-/* Return the frame base address of *THIS_FRAME.  */
-
-static CORE_ADDR
-nds32_frame_base_address (struct frame_info *this_frame, void **this_cache)
-{
-  struct nds32_frame_cache *cache = nds32_frame_cache (this_frame, this_cache);
-
-  return cache->base;
-}
-
-static const struct frame_base nds32_frame_base =
-{
-  &nds32_frame_unwind,
-  nds32_frame_base_address,
-  nds32_frame_base_address,
-  nds32_frame_base_address
-};
-
 /* Implement the "get_longjmp_target" gdbarch method.  */
 
 static int
@@ -1592,104 +1689,6 @@ nds32_get_longjmp_target (struct frame_info *frame, CORE_ADDR *pc)
   *pc = extract_unsigned_integer (buf, 4, byte_order);
   return 1;
 }
-
-/* Implement the "sniffer" frame_unwind method.  */
-
-static int
-nds32_epilogue_frame_sniffer (const struct frame_unwind *self,
-			      struct frame_info *this_frame, void **this_cache)
-{
-  if (frame_relative_level (this_frame) == 0)
-    return nds32_stack_frame_destroyed_p (get_frame_arch (this_frame),
-					  get_frame_pc (this_frame));
-  else
-    return 0;
-}
-
-static struct nds32_frame_cache *
-nds32_epilogue_frame_cache (struct frame_info *this_frame, void **this_cache)
-{
-  struct nds32_frame_cache *cache;
-  CORE_ADDR sp;
-
-  if (*this_cache)
-    return (struct nds32_frame_cache *) *this_cache;
-
-  cache = nds32_alloc_frame_cache ();
-  *this_cache = cache;
-
-  TRY
-    {
-      /* At this point the stack looks as if we just entered the
-	 function, with the return address at the top of the
-	 stack.  */
-      sp = get_frame_register_unsigned (this_frame, NDS32_SP_REGNUM);
-      cache->prev_sp = sp;
-    }
-  CATCH (ex, RETURN_MASK_ERROR)
-    {
-      if (ex.error != NOT_AVAILABLE_ERROR)
-	throw_exception (ex);
-    }
-  END_CATCH
-
-  return cache;
-}
-
-/* Implement the "stop_reason" frame_unwind method.  */
-
-static enum unwind_stop_reason
-nds32_epilogue_frame_unwind_stop_reason (struct frame_info *this_frame,
-					 void **this_cache)
-{
-  struct nds32_frame_cache *cache =
-    nds32_epilogue_frame_cache (this_frame, this_cache);
-
-  if (!cache->prev_sp)
-    return UNWIND_UNAVAILABLE;
-
-  return UNWIND_NO_REASON;
-}
-
-/* Implement the "this_id" frame_unwind method.  */
-
-static void
-nds32_epilogue_frame_this_id (struct frame_info *this_frame, void **this_cache,
-			      struct frame_id *this_id)
-{
-  CORE_ADDR func, base;
-  struct nds32_frame_cache *cache =
-    nds32_epilogue_frame_cache (this_frame, this_cache);
-
-  base = cache->prev_sp;
-  func = get_frame_func (this_frame);
-
-  if (base == -1)
-    (*this_id) = frame_id_build_unavailable_stack (func);
-  else
-    (*this_id) = frame_id_build (base + 8, func);
-}
-
-/* Implement the "prev_register" frame_unwind method.  */
-
-static struct value *
-nds32_epilogue_frame_prev_register (struct frame_info *this_frame,
-				    void **this_cache, int regnum)
-{
-  /* Make sure we've initialized the cache.  */
-  nds32_epilogue_frame_cache (this_frame, this_cache);
-
-  return nds32_frame_prev_register (this_frame, this_cache, regnum);
-}
-
-static const struct frame_unwind nds32_epilogue_frame_unwind = {
-    NORMAL_FRAME,
-    nds32_epilogue_frame_unwind_stop_reason,
-    nds32_epilogue_frame_this_id,
-    nds32_epilogue_frame_prev_register,
-    NULL,
-    nds32_epilogue_frame_sniffer
-};
 
 /* Implement the "overlay_update" gdbarch method.  */
 
