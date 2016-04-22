@@ -803,8 +803,7 @@ nds32_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR addr)
    for it IS the sp for the next frame.  */
 
 static struct nds32_frame_cache *
-nds32_frame_unwind_cache (struct frame_info *this_frame,
-			  void **this_prologue_cache)
+nds32_frame_cache (struct frame_info *this_frame, void **this_prologue_cache)
 {
   CORE_ADDR pc, scan_limit;
   ULONGEST prev_sp;
@@ -1766,7 +1765,7 @@ nds32_frame_this_id (struct frame_info *this_frame,
   CORE_ADDR func;
   struct frame_id id;
 
-  info = nds32_frame_unwind_cache (this_frame, this_prologue_cache);
+  info = nds32_frame_cache (this_frame, this_prologue_cache);
 
   /* Get function entry address */
   func = get_frame_func (this_frame);
@@ -1789,7 +1788,7 @@ nds32_frame_prev_register (struct frame_info *this_frame,
 			   void **this_prologue_cache, int regnum)
 {
   struct nds32_frame_cache *cache;
-  cache = nds32_frame_unwind_cache (this_frame, this_prologue_cache);
+  cache = nds32_frame_cache (this_frame, this_prologue_cache);
 
   if (regnum == NDS32_PC_REGNUM)
     {
@@ -1817,8 +1816,7 @@ static const struct frame_unwind nds32_frame_unwind =
 static CORE_ADDR
 nds32_frame_base_address (struct frame_info *this_frame, void **this_cache)
 {
-  struct nds32_frame_cache *info
-    = nds32_frame_unwind_cache (this_frame, this_cache);
+  struct nds32_frame_cache *info = nds32_frame_cache (this_frame, this_cache);
 
   return info->base;
 }
