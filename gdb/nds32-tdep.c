@@ -2271,8 +2271,8 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_get_longjmp_target (gdbarch, nds32_get_longjmp_target);
 
   /* The order of appending is the order it check frame.  */
-  frame_unwind_append_unwinder (gdbarch, &nds32_epilogue_frame_unwind);
   dwarf2_append_unwinders (gdbarch);
+  frame_unwind_append_unwinder (gdbarch, &nds32_epilogue_frame_unwind);
   frame_unwind_append_unwinder (gdbarch, &nds32_frame_unwind);
 
   return gdbarch;
