@@ -1387,17 +1387,14 @@ static void
 nds32_epilogue_frame_this_id (struct frame_info *this_frame,
 			      void **this_cache, struct frame_id *this_id)
 {
-  CORE_ADDR func, base;
   struct nds32_frame_cache *cache
     = nds32_epilogue_frame_cache (this_frame, this_cache);
 
-  base = cache->prev_sp;
-  func = get_frame_func (this_frame);
+  /* This marks the outermost frame.  */
+  if (cache->prev_sp == 0)
+    return;
 
-  if (base == -1)
-    (*this_id) = frame_id_build_unavailable_stack (func);
-  else
-    (*this_id) = frame_id_build (base + 8, func);
+  *this_id = frame_id_build (cache->prev_sp, cache->pc);
 }
 
 /* Implement the "prev_register" frame_unwind method.  */
