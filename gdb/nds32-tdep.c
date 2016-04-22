@@ -1366,21 +1366,6 @@ nds32_epilogue_frame_cache (struct frame_info *this_frame, void **this_cache)
   return cache;
 }
 
-/* Implement the "stop_reason" frame_unwind method.  */
-
-static enum unwind_stop_reason
-nds32_epilogue_frame_unwind_stop_reason (struct frame_info *this_frame,
-					 void **this_cache)
-{
-  struct nds32_frame_cache *cache
-    = nds32_epilogue_frame_cache (this_frame, this_cache);
-
-  if (!cache->prev_sp)
-    return UNWIND_UNAVAILABLE;
-
-  return UNWIND_NO_REASON;
-}
-
 /* Implement the "this_id" frame_unwind method.  */
 
 static void
@@ -1424,7 +1409,7 @@ nds32_epilogue_frame_prev_register (struct frame_info *this_frame,
 static const struct frame_unwind nds32_epilogue_frame_unwind =
 {
   NORMAL_FRAME,
-  nds32_epilogue_frame_unwind_stop_reason,
+  default_frame_unwind_stop_reason,
   nds32_epilogue_frame_this_id,
   nds32_epilogue_frame_prev_register,
   NULL,
