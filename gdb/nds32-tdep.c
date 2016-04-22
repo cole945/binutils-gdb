@@ -1331,11 +1331,18 @@ nds32_epilogue_frame_sniffer (const struct frame_unwind *self,
     return 0;
 }
 
+/* Allocate and fill in *THIS_CACHE with information needed to unwind
+   *THIS_FRAME within epilogue.  Do not do this if *THIS_CACHE was already
+   allocated.  Return a pointer to the current nds32_frame_cache in
+   *THIS_CACHE.  */
+
 static struct nds32_frame_cache *
 nds32_epilogue_frame_cache (struct frame_info *this_frame, void **this_cache)
 {
+  struct gdbarch *gdbarch = get_frame_arch (this_frame);
   struct nds32_frame_cache *cache;
-  CORE_ADDR sp;
+  CORE_ADDR current_pc, current_sp;
+  int i;
 
   if (*this_cache)
     return (struct nds32_frame_cache *) *this_cache;
@@ -1343,20 +1350,18 @@ nds32_epilogue_frame_cache (struct frame_info *this_frame, void **this_cache)
   cache = nds32_alloc_frame_cache ();
   *this_cache = cache;
 
-  TRY
-    {
-      /* At this point the stack looks as if we just entered the
-	 function, with the return address at the top of the
-	 stack.  */
-      sp = get_frame_register_unsigned (this_frame, NDS32_SP_REGNUM);
-      cache->prev_sp = sp;
-    }
-  CATCH (ex, RETURN_MASK_ERROR)
-    {
-      if (ex.error != NOT_AVAILABLE_ERROR)
-	throw_exception (ex);
-    }
-  END_CATCH
+  cache->pc = get_frame_func (this_frame);
+  current_pc = get_frame_pc (this_frame);
+  nds32_analyze_epilogue (gdbarch, current_pc, cache);
+
+  current_sp = get_frame_register_unsigned (this_frame, NDS32_SP_REGNUM);
+  cache->prev_sp = current_sp + cache->sp_offset;
+
+  /* Adjust all the saved registers such that they contain addresses
+     instead of offsets.  */
+  for (i = 0; i < NDS32_NUM_SAVED_REGS; i++)
+    if (cache->saved_regs[i] != REG_UNAVAIL)
+      cache->saved_regs[i] = current_sp + cache->saved_regs[i];
 
   return cache;
 }
@@ -1367,8 +1372,8 @@ static enum unwind_stop_reason
 nds32_epilogue_frame_unwind_stop_reason (struct frame_info *this_frame,
 					 void **this_cache)
 {
-  struct nds32_frame_cache *cache =
-    nds32_epilogue_frame_cache (this_frame, this_cache);
+  struct nds32_frame_cache *cache
+    = nds32_epilogue_frame_cache (this_frame, this_cache);
 
   if (!cache->prev_sp)
     return UNWIND_UNAVAILABLE;
@@ -1383,8 +1388,8 @@ nds32_epilogue_frame_this_id (struct frame_info *this_frame,
 			      void **this_cache, struct frame_id *this_id)
 {
   CORE_ADDR func, base;
-  struct nds32_frame_cache *cache =
-    nds32_epilogue_frame_cache (this_frame, this_cache);
+  struct nds32_frame_cache *cache
+    = nds32_epilogue_frame_cache (this_frame, this_cache);
 
   base = cache->prev_sp;
   func = get_frame_func (this_frame);
