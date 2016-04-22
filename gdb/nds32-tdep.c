@@ -1403,10 +1403,22 @@ static struct value *
 nds32_epilogue_frame_prev_register (struct frame_info *this_frame,
 				    void **this_cache, int regnum)
 {
-  /* Make sure we've initialized the cache.  */
-  nds32_epilogue_frame_cache (this_frame, this_cache);
+  struct nds32_frame_cache *cache
+    = nds32_epilogue_frame_cache (this_frame, this_cache);
 
-  return nds32_frame_prev_register (this_frame, this_cache, regnum);
+  if (regnum == NDS32_SP_REGNUM)
+    return frame_unwind_got_constant (this_frame, regnum, cache->prev_sp);
+
+  /* The PC of the previous frame is stored in the LP register of
+     the current frame.  */
+  if (regnum == NDS32_PC_REGNUM)
+    regnum = NDS32_LP_REGNUM;
+
+  if (regnum < NDS32_NUM_SAVED_REGS && cache->saved_regs[regnum] != REG_UNAVAIL)
+    return frame_unwind_got_memory (this_frame, regnum,
+				    cache->saved_regs[regnum]);
+
+  return frame_unwind_got_register (this_frame, regnum, regnum);
 }
 
 static const struct frame_unwind nds32_epilogue_frame_unwind =
