@@ -803,7 +803,7 @@ nds32_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR addr)
    for it IS the sp for the next frame.  */
 
 static struct nds32_frame_cache *
-nds32_frame_cache (struct frame_info *this_frame, void **this_prologue_cache)
+nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
 {
   CORE_ADDR pc, scan_limit;
   ULONGEST prev_sp;
@@ -814,13 +814,13 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_prologue_cache)
   struct nds32_frame_cache *cache;
   struct gdbarch *gdbarch = get_frame_arch (this_frame);
 
-  if ((*this_prologue_cache))
-    return (struct nds32_frame_cache *) *this_prologue_cache;
+  if (*this_cache)
+    return (struct nds32_frame_cache *) *this_cache;
 
   cache = nds32_alloc_frame_cache (this_frame);
 
   cache->base = get_frame_register_unsigned (this_frame, NDS32_FP_REGNUM);
-  (*this_prologue_cache) = cache;
+  *this_cache = cache;
 
   if (cache->base == 0)
     return cache;
@@ -1757,15 +1757,15 @@ nds32_dummy_id (struct gdbarch *gdbarch, struct frame_info *this_frame)
    frame.  This will be used to create a new GDB frame struct.  */
 
 static void
-nds32_frame_this_id (struct frame_info *this_frame,
-		     void **this_prologue_cache, struct frame_id *this_id)
+nds32_frame_this_id (struct frame_info *this_frame, void **this_cache,
+		     struct frame_id *this_id)
 {
   struct nds32_frame_cache *cache;
   CORE_ADDR base;
   CORE_ADDR func;
   struct frame_id id;
 
-  cache = nds32_frame_cache (this_frame, this_prologue_cache);
+  cache = nds32_frame_cache (this_frame, this_cache);
 
   /* Get function entry address */
   func = get_frame_func (this_frame);
@@ -1784,11 +1784,11 @@ nds32_frame_this_id (struct frame_info *this_frame,
 /* Get the value of register REGNUM in previous frame.  */
 
 static struct value *
-nds32_frame_prev_register (struct frame_info *this_frame,
-			   void **this_prologue_cache, int regnum)
+nds32_frame_prev_register (struct frame_info *this_frame, void **this_cache,
+			   int regnum)
 {
   struct nds32_frame_cache *cache;
-  cache = nds32_frame_cache (this_frame, this_prologue_cache);
+  cache = nds32_frame_cache (this_frame, this_cache);
 
   if (regnum == NDS32_PC_REGNUM)
     {
@@ -1854,8 +1854,7 @@ nds32_get_longjmp_target (struct frame_info *frame, CORE_ADDR *pc)
 
 static int
 nds32_epilogue_frame_sniffer (const struct frame_unwind *self,
-			      struct frame_info *this_frame,
-			      void **this_prologue_cache)
+			      struct frame_info *this_frame, void **this_cache)
 {
   if (frame_relative_level (this_frame) == 0)
     return nds32_stack_frame_destroyed_p (get_frame_arch (this_frame),
@@ -1908,8 +1907,8 @@ nds32_epilogue_frame_unwind_stop_reason (struct frame_info *this_frame,
 }
 
 static void
-nds32_epilogue_frame_this_id (struct frame_info *this_frame,
-			      void **this_cache, struct frame_id *this_id)
+nds32_epilogue_frame_this_id (struct frame_info *this_frame, void **this_cache,
+			      struct frame_id *this_id)
 {
   CORE_ADDR func, base;
   struct nds32_frame_cache *cache =
