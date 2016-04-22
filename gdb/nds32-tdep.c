@@ -811,19 +811,19 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_prologue_cache)
   ULONGEST fp_base;
   int i;
   uint32_t insn;
-  struct nds32_frame_cache *info;
+  struct nds32_frame_cache *cache;
   struct gdbarch *gdbarch = get_frame_arch (this_frame);
 
   if ((*this_prologue_cache))
     return (struct nds32_frame_cache *) *this_prologue_cache;
 
-  info = nds32_alloc_frame_cache (this_frame);
+  cache = nds32_alloc_frame_cache (this_frame);
 
-  info->base = get_frame_register_unsigned (this_frame, NDS32_FP_REGNUM);
-  (*this_prologue_cache) = info;
+  cache->base = get_frame_register_unsigned (this_frame, NDS32_FP_REGNUM);
+  (*this_prologue_cache) = cache;
 
-  if (info->base == 0)
-    return info;
+  if (cache->base == 0)
+    return cache;
 
   pc = get_frame_func (this_frame);
   scan_limit = get_frame_pc (this_frame);
@@ -850,13 +850,13 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_prologue_cache)
 
 	      if (rt == ra && rt == NDS32_SP_REGNUM)
 		{
-		  info->sp_offset += imm15s;
+		  cache->sp_offset += imm15s;
 		  continue;
 		}
 	      else if (rt == NDS32_FP_REGNUM && ra == NDS32_SP_REGNUM)
 		{
-		  info->fp_offset = info->sp_offset + imm15s;
-		  info->use_frame = 1;
+		  cache->fp_offset = cache->sp_offset + imm15s;
+		  cache->use_frame = 1;
 		  continue;
 		}
 	      else if (rt == ra)
@@ -932,12 +932,12 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_prologue_cache)
 	      switch (ra)
 		{
 		case NDS32_FP_REGNUM:
-		  base = info->fp_offset;
-		  info->fp_offset += m * di;
+		  base = cache->fp_offset;
+		  cache->fp_offset += m * di;
 		  break;
 		case NDS32_SP_REGNUM:
-		  base = info->sp_offset;
-		  info->sp_offset += m * di;
+		  base = cache->sp_offset;
+		  cache->sp_offset += m * di;
 		  break;
 		default:
 		  /* Only RA is FP or SP is handled.  */
@@ -966,7 +966,7 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_prologue_cache)
 		{
 		  if (enable4 & (1 << enb4map[aligned][i]))
 		    {
-		      info->saved_regs[NDS32_SP_REGNUM -
+		      cache->saved_regs[NDS32_SP_REGNUM -
 				       (enb4map[aligned][i])].addr = base;
 		      base -= 4;
 		    }
@@ -975,7 +975,7 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_prologue_cache)
 	      /* Skip re == rb == sp > fp.  */
 	      for (i = re; i >= rb && rb < NDS32_FP_REGNUM; i--)
 		{
-		  info->saved_regs[i].addr = base;
+		  cache->saved_regs[i].addr = base;
 		  base -= 4;
 		}
 
@@ -990,7 +990,7 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_prologue_cache)
 
 	      /* swi $lp, [$sp + (imm15s<<2)] */
 	      imm15s = N32_IMM15S (insn);
-	      info->saved_regs[NDS32_LP_REGNUM].addr = info->sp_offset
+	      cache->saved_regs[NDS32_LP_REGNUM].addr = cache->sp_offset
 						       + (imm15s << 2);
 	      continue;
 	    }
@@ -1006,13 +1006,13 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_prologue_cache)
 
 	      if (ra5 == NDS32_SP_REGNUM)
 		{
-		  info->saved_regs[rt5].addr = info->sp_offset;
-		  info->sp_offset += (imm15s << 2);
+		  cache->saved_regs[rt5].addr = cache->sp_offset;
+		  cache->sp_offset += (imm15s << 2);
 		}
 	      else if (ra5 == NDS32_FP_REGNUM)
 		{
-		  info->saved_regs[rt5].addr = info->fp_offset;
-		  info->fp_offset += (imm15s << 2);
+		  cache->saved_regs[rt5].addr = cache->fp_offset;
+		  cache->fp_offset += (imm15s << 2);
 		}
 	      continue;
 	    }
@@ -1048,10 +1048,10 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_prologue_cache)
 	      switch (ra5)
 		{
 		case NDS32_FP_REGNUM:
-		  info->fp_offset += (imm12s << 2);
+		  cache->fp_offset += (imm12s << 2);
 		  break;
 		case NDS32_SP_REGNUM:
-		  info->sp_offset += (imm12s << 2);
+		  cache->sp_offset += (imm12s << 2);
 		  break;
 		}
 
@@ -1088,7 +1088,7 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_prologue_cache)
 	  if (CHOP_BITS (insn, 10) == N16_TYPE10 (ADDI10S, 0))
 	    {
 	      /* addi10s */
-	      info->sp_offset += N16_IMM10S (insn);
+	      cache->sp_offset += N16_IMM10S (insn);
 	      continue;
 	    }
 
@@ -1100,30 +1100,30 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_prologue_cache)
 	      int m[] = {4, 6, 8, 12};
 
 	      /* Operation 1 - smw.adm R6, [sp], Re, #0xe */
-	      info->saved_regs[NDS32_LP_REGNUM].addr = info->sp_offset - 0x4;
-	      info->saved_regs[NDS32_GP_REGNUM].addr = info->sp_offset - 0x8;
-	      info->saved_regs[NDS32_FP_REGNUM].addr = info->sp_offset - 0xC;
-	      info->sp_offset -= m[re] * 4;
+	      cache->saved_regs[NDS32_LP_REGNUM].addr = cache->sp_offset - 0x4;
+	      cache->saved_regs[NDS32_GP_REGNUM].addr = cache->sp_offset - 0x8;
+	      cache->saved_regs[NDS32_FP_REGNUM].addr = cache->sp_offset - 0xC;
+	      cache->sp_offset -= m[re] * 4;
 
 	      switch (re)
 		{
 		  case 3:
-		    info->saved_regs[14].addr = info->sp_offset + 0x20;
-		    info->saved_regs[13].addr = info->sp_offset + 0x1C;
-		    info->saved_regs[12].addr = info->sp_offset + 0x18;
-		    info->saved_regs[11].addr = info->sp_offset + 0x14;
+		    cache->saved_regs[14].addr = cache->sp_offset + 0x20;
+		    cache->saved_regs[13].addr = cache->sp_offset + 0x1C;
+		    cache->saved_regs[12].addr = cache->sp_offset + 0x18;
+		    cache->saved_regs[11].addr = cache->sp_offset + 0x14;
 		  case 2:
-		    info->saved_regs[10].addr = info->sp_offset + 0x10;
-		    info->saved_regs[9].addr = info->sp_offset + 0xC;
+		    cache->saved_regs[10].addr = cache->sp_offset + 0x10;
+		    cache->saved_regs[9].addr = cache->sp_offset + 0xC;
 		  case 1:
-		    info->saved_regs[8].addr = info->sp_offset + 0x8;
-		    info->saved_regs[7].addr = info->sp_offset + 0x4;
+		    cache->saved_regs[8].addr = cache->sp_offset + 0x8;
+		    cache->saved_regs[7].addr = cache->sp_offset + 0x4;
 		  case 0:
-		    info->saved_regs[6].addr = info->sp_offset;
+		    cache->saved_regs[6].addr = cache->sp_offset;
 		}
 
 	      /* Operation 2 - sp = sp - imm5u<<3 */
-	      info->sp_offset -= imm8u;
+	      cache->sp_offset -= imm8u;
 
 	      /* Operation 3 - if (Re >= 1) R8 = concat (PC(31,2), 2`b0) */
 	      continue;
@@ -1132,8 +1132,8 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_prologue_cache)
 	  /* mov55 fp, sp */
 	  if (insn == N16_TYPE55 (MOV55, REG_FP, REG_SP))
 	    {
-		info->fp_offset = info->sp_offset;
-		info->use_frame = 1;
+		cache->fp_offset = cache->sp_offset;
+		cache->use_frame = 1;
 		continue;
 	    }
 	  /* swi450 */
@@ -1157,40 +1157,40 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_prologue_cache)
 	  }
     }
 
-  info->size = -info->sp_offset;
+  cache->size = -cache->sp_offset;
   /* Compute the previous frame's stack pointer (which is also the
      frame's ID's stack address), and this frame's base pointer.
 
      Assume that the FP is this frame's SP but with that pushed
      stack space added back.  */
   next_base = get_frame_register_unsigned (this_frame, NDS32_SP_REGNUM);
-  prev_sp = next_base + info->size;
+  prev_sp = next_base + cache->size;
   fp_base = get_frame_register_unsigned (this_frame, NDS32_FP_REGNUM);
-  if (info->use_frame && fp_base > 0)
+  if (cache->use_frame && fp_base > 0)
     {
       /* Try to use FP if possible. */
-      prev_sp = fp_base - info->fp_offset;
+      prev_sp = fp_base - cache->fp_offset;
     }
 
   /* Convert that SP/BASE into real addresses.  */
-  info->prev_sp = prev_sp;
-  info->base = next_base;
+  cache->prev_sp = prev_sp;
+  cache->base = next_base;
 
   /* Adjust all the saved registers so that they contain addresses and
      not offsets.  */
   for (i = 0; i < gdbarch_num_regs (gdbarch) - 1; i++)
     {
-      if (trad_frame_addr_p (info->saved_regs, i))
+      if (trad_frame_addr_p (cache->saved_regs, i))
 	{
-	  info->saved_regs[i].addr = info->prev_sp + info->saved_regs[i].addr;
+	  cache->saved_regs[i].addr = cache->prev_sp + cache->saved_regs[i].addr;
 	}
     }
 
   /* The previous frame's SP needed to be computed.
      Save the computed value.  */
-  trad_frame_set_value (info->saved_regs, NDS32_SP_REGNUM, prev_sp);
+  trad_frame_set_value (cache->saved_regs, NDS32_SP_REGNUM, prev_sp);
 
-  return info;
+  return cache;
 }
 
 /* Implement the gdbarch_unwind_pc method.  */
@@ -1760,12 +1760,12 @@ static void
 nds32_frame_this_id (struct frame_info *this_frame,
 		     void **this_prologue_cache, struct frame_id *this_id)
 {
-  struct nds32_frame_cache *info;
+  struct nds32_frame_cache *cache;
   CORE_ADDR base;
   CORE_ADDR func;
   struct frame_id id;
 
-  info = nds32_frame_cache (this_frame, this_prologue_cache);
+  cache = nds32_frame_cache (this_frame, this_prologue_cache);
 
   /* Get function entry address */
   func = get_frame_func (this_frame);
@@ -1773,7 +1773,7 @@ nds32_frame_this_id (struct frame_info *this_frame,
   /* Hopefully the prologue analysis either correctly determined the
      frame's base (which is the SP from the previous frame), or set
      that base to "NULL".  */
-  base = info->prev_sp;
+  base = cache->prev_sp;
   if (base == 0)
     return;
 
@@ -1816,9 +1816,9 @@ static const struct frame_unwind nds32_frame_unwind =
 static CORE_ADDR
 nds32_frame_base_address (struct frame_info *this_frame, void **this_cache)
 {
-  struct nds32_frame_cache *info = nds32_frame_cache (this_frame, this_cache);
+  struct nds32_frame_cache *cache = nds32_frame_cache (this_frame, this_cache);
 
-  return info->base;
+  return cache->base;
 }
 
 static const struct frame_base nds32_frame_base =
