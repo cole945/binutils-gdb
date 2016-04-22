@@ -51,12 +51,30 @@
 #define N32_LSMW_ENABLE4(insn)	(((insn) >> 6) & 0xf)
 #define N32_SMW_ADM \
 N32_TYPE4 (LSMW, 0, 0, 0, 1, (N32_LSMW_ADM << 2) | N32_LSMW_LSMW)
-
+#define N32_LMW_BIM \
+N32_TYPE4 (LSMW, 0, 0, 0, 0, (N32_LSMW_BIM << 2) | N32_LSMW_LSMW)
+#define N32_FLDI_SP \
+N32_TYPE2 (LDC, 0, REG_SP, 0)
 
 extern void _initialize_nds32_tdep (void);
 
 /* Use an invalid address value as 'not available' marker.  */
 enum { REG_UNAVAIL = (CORE_ADDR) -1 };
+
+/* Instruction groups for NDS32 epilogue analysis.  */
+enum
+{
+  /* Instructions used everywhere, not only in epilogue.  */
+  INSN_NORMAL,
+  /* Instructions used to reset sp for local vars, arguments, etc.  */
+  INSN_RESET_SP,
+  /* Instructions used to recover saved regs and to recover padding.  */
+  INSN_RECOVER,
+  /* Instructions used to return to the caller.  */
+  INSN_RETURN,
+  /* Instructions used to recover saved regs and to return to the caller.  */
+  INSN_RECOVER_RETURN,
+};
 
 static const char *const nds32_register_names[] =
 {
@@ -1034,28 +1052,194 @@ static const struct frame_base nds32_frame_base =
   nds32_frame_base_address
 };
 
+/* The instruction sequences in NDS32 epilogue are
+
+   INSN_RESET_SP  (optional)
+		  (If exists, this must be the first instruction in epilogue
+		   and the stack has not been destroyed.).
+   INSN_RECOVER  (optional).
+   INSN_RETURN/INSN_RECOVER_RETURN  (required).  */
+
+/* Helper function for analyzing the given INSN.  */
+
+static inline int
+nds32_analyze_epilogue_insn32 (int abi_use_fpr, uint32_t insn)
+{
+  if (CHOP_BITS (insn, 15) == N32_TYPE2 (ADDI, REG_SP, REG_SP, 0)
+      && N32_IMM15S (insn) > 0)
+    /* addi $sp, $sp, imm15s */
+    return INSN_RESET_SP;
+  else if (CHOP_BITS (insn, 15) == N32_TYPE2 (ADDI, REG_SP, REG_FP, 0)
+	   && N32_IMM15S (insn) < 0)
+    /* addi $sp, $fp, imm15s */
+    return INSN_RESET_SP;
+  else if ((insn & ~(__MASK (19) << 6)) == N32_LMW_BIM
+	   && N32_RA5 (insn) == REG_SP)
+    /* lmw.bim Rb, [$sp], Re, enable4 */
+    return INSN_RECOVER;
+  else if (insn == N32_JREG (JR, 0, REG_LP, 0, 1))
+    /* ret $lp */
+    return INSN_RETURN;
+  else if (insn == N32_ALU1 (ADD, REG_SP, REG_SP, REG_TA)
+	   || insn == N32_ALU1 (ADD, REG_SP, REG_TA, REG_SP))
+    /* add $sp, $sp, $ta */
+    /* add $sp, $ta, $sp */
+    return INSN_RESET_SP;
+  else if (abi_use_fpr
+	   && (insn & ~(__MASK (5) << 20 | __MASK (13))) == N32_FLDI_SP)
+    {
+      if (__GF (insn, 12, 1) == 0)
+	/* fldi FDt, [$sp + (imm12s << 2)] */
+	return INSN_RECOVER;
+      else
+	{
+	  /* fldi.bi FDt, [$sp], (imm12s << 2) */
+	  int offset = N32_IMM12S (insn) << 2;
+
+	  if (offset == 8 || offset == 12)
+	    return INSN_RECOVER;
+	}
+    }
+
+  return INSN_NORMAL;
+}
+
+static inline int
+nds32_analyze_epilogue_insn16 (uint32_t insn)
+{
+  if (insn == N16_TYPE5 (RET5, REG_LP))
+    /* ret5 $lp */
+    return INSN_RETURN;
+  else if (CHOP_BITS (insn, 10) == N16_TYPE10 (ADDI10S, 0)
+	   && N16_IMM10S (insn) > 0)
+    /* addi10s.sp */
+    return INSN_RECOVER;
+  else if (__GF (insn, 7, 8) == N16_T25_POP25)
+    /* pop25 */
+    return INSN_RECOVER_RETURN;
+
+  return INSN_NORMAL;
+}
+
+/* Analyze a reasonable amount of instructions from the given PC to find
+   the instruction used to return to the caller.  Return 1 if the 'return'
+   instruction could be found, 0 otherwise.  */
+
+static int
+nds32_analyze_epilogue (struct gdbarch *gdbarch, CORE_ADDR pc)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  int abi_use_fpr = nds32_abi_use_fpr (tdep->abi);
+  CORE_ADDR limit_pc;
+  uint32_t insn, insn_len;
+  int insn_type = INSN_NORMAL;
+
+  if (abi_use_fpr)
+    limit_pc = pc + 48;
+  else
+    limit_pc = pc + 16;
+
+  for (; pc < limit_pc; pc += insn_len)
+    {
+      insn = read_memory_unsigned_integer (pc, 4, BFD_ENDIAN_BIG);
+
+      if ((insn & 0x80000000) == 0)
+	{
+	  /* 32-bit instruction */
+	  insn_len = 4;
+
+	  insn_type = nds32_analyze_epilogue_insn32 (abi_use_fpr, insn);
+	  if (insn_type == INSN_RETURN)
+	    return 1;
+	  else if (insn_type == INSN_RECOVER)
+	    continue;
+	}
+      else
+	{
+	  /* 16-bit instruction */
+	  insn_len = 2;
+
+	  insn >>= 16;
+	  insn_type = nds32_analyze_epilogue_insn16 (insn);
+	  if (insn_type == INSN_RETURN || insn_type == INSN_RECOVER_RETURN)
+	    return 1;
+	  else if (insn_type == INSN_RECOVER)
+	    continue;
+	}
+
+      /* Stop the scan if this is an unexpected instruction.  */
+      break;
+    }
+
+  return 0;
+}
+
 /* Implement the "stack_frame_destroyed_p" gdbarch method.  */
 
 static int
 nds32_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR addr)
 {
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  int abi_use_fpr = nds32_abi_use_fpr (tdep->abi);
+  int insn_type = INSN_NORMAL;
+  int ret_found = 0;
   uint32_t insn;
-  int r = 0;
 
   insn = read_memory_unsigned_integer (addr, 4, BFD_ENDIAN_BIG);
+
   if ((insn & 0x80000000) == 0)
     {
-      /* ret */
-      if (insn == N32_JREG (JR, 0, REG_LP, 0, 1))
-	r = 1;
-      /* iret */
-      else if (insn == N32_TYPE0 (MISC, N32_MISC_IRET))
-	r = 2;
-    }
-  else if (insn == N16_TYPE5 (RET5, REG_LP))
-    r = 3;
+      /* 32-bit instruction */
 
-  return r > 0;
+      insn_type = nds32_analyze_epilogue_insn32 (abi_use_fpr, insn);
+    }
+  else
+    {
+      /* 16-bit instruction */
+
+      insn >>= 16;
+      insn_type = nds32_analyze_epilogue_insn16 (insn);
+    }
+
+  if (insn_type == INSN_NORMAL || insn_type == INSN_RESET_SP)
+    return 0;
+
+  /* Search the required 'return' instruction within the following reasonable
+     instructions.  */
+  ret_found = nds32_analyze_epilogue (gdbarch, addr);
+  if (ret_found == 0)
+    return 0;
+
+  /* Scan backwards to make sure that the last instruction has adjusted
+     stack.  Both a 16-bit and a 32-bit instruction will be tried.  This is
+     just a heuristic, so the false positives will be acceptable.  */
+  insn = read_memory_unsigned_integer (addr - 2, 4, BFD_ENDIAN_BIG);
+
+  /* Only 16-bit instructions are possible at addr - 2.  */
+  if ((insn & 0x80000000) != 0)
+    {
+      /* This may be a 16-bit instruction or part of a 32-bit instruction.  */
+
+      insn_type = nds32_analyze_epilogue_insn16 (insn >> 16);
+      if (insn_type == INSN_RECOVER)
+	return 1;
+    }
+
+  insn = read_memory_unsigned_integer (addr - 4, 4, BFD_ENDIAN_BIG);
+
+  /* If this is a 16-bit instruction at addr - 4, then there must be another
+     16-bit instruction at addr - 2, so only 32-bit instructions need to
+     be analyzed here.  */
+  if ((insn & 0x80000000) == 0)
+    {
+      /* This may be a 32-bit instruction or part of a 32-bit instruction.  */
+
+      insn_type = nds32_analyze_epilogue_insn32 (abi_use_fpr, insn);
+      if (insn_type == INSN_RECOVER || insn_type == INSN_RESET_SP)
+	return 1;
+    }
+
+  return 0;
 }
 
 /* Implement the "sniffer" frame_unwind method.  */
