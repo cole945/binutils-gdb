@@ -571,9 +571,11 @@ struct nds32_frame_cache
   /* The frame's base, optionally used by the high-level debug info.  */
   CORE_ADDR base;
 
-  /* How far the SP and FP have been offset from the start of
-     the stack frame (as defined by the previous frame's stack
-     pointer).  */
+  /* During prologue analysis, keep how far the SP and FP have been offset
+     from the start of the stack frame (as defined by the previous frame's
+     stack pointer).
+     During epilogue analysis, keep how far the SP has been offset from the
+     current stack pointer.  */
   CORE_ADDR sp_offset;
   CORE_ADDR fp_offset;
   int use_frame;
@@ -1052,6 +1054,39 @@ static const struct frame_base nds32_frame_base =
   nds32_frame_base_address
 };
 
+/* Helper function for instructions used to pop multiple words.  */
+
+static void
+nds32_pop_multiple_words (struct nds32_frame_cache *cache, int rb, int re,
+			  int enable4)
+{
+  CORE_ADDR sp_offset = cache->sp_offset;
+  int i;
+
+  /* Skip case where re == rb == sp.  */
+  if ((rb < REG_FP) && (re < REG_FP))
+    {
+      for (i = rb; i <= re; i++)
+	{
+	  cache->saved_regs[i] = sp_offset;
+	  sp_offset += 4;
+	}
+    }
+
+  /* Check FP, GP, LP in enable4.  */
+  for (i = 3; i >= 1; i--)
+    {
+      if ((enable4 >> i) & 0x1)
+	{
+	  cache->saved_regs[NDS32_SP_REGNUM - i] = sp_offset;
+	  sp_offset += 4;
+	}
+    }
+
+  /* For sp, update the offset.  */
+  cache->sp_offset = sp_offset;
+}
+
 /* The instruction sequences in NDS32 epilogue are
 
    INSN_RESET_SP  (optional)
@@ -1060,10 +1095,12 @@ static const struct frame_base nds32_frame_base =
    INSN_RECOVER  (optional).
    INSN_RETURN/INSN_RECOVER_RETURN  (required).  */
 
-/* Helper function for analyzing the given INSN.  */
+/* Helper function for analyzing the given INSN.  If CACHE is non-NULL,
+   the necessary information will be recorded.  */
 
 static inline int
-nds32_analyze_epilogue_insn32 (int abi_use_fpr, uint32_t insn)
+nds32_analyze_epilogue_insn32 (int abi_use_fpr, uint32_t insn,
+			       struct nds32_frame_cache *cache)
 {
   if (CHOP_BITS (insn, 15) == N32_TYPE2 (ADDI, REG_SP, REG_SP, 0)
       && N32_IMM15S (insn) > 0)
@@ -1075,8 +1112,14 @@ nds32_analyze_epilogue_insn32 (int abi_use_fpr, uint32_t insn)
     return INSN_RESET_SP;
   else if ((insn & ~(__MASK (19) << 6)) == N32_LMW_BIM
 	   && N32_RA5 (insn) == REG_SP)
-    /* lmw.bim Rb, [$sp], Re, enable4 */
-    return INSN_RECOVER;
+    {
+      /* lmw.bim Rb, [$sp], Re, enable4 */
+      if (cache != NULL)
+	nds32_pop_multiple_words (cache, N32_RT5 (insn),
+				  N32_RB5 (insn), N32_LSMW_ENABLE4 (insn));
+
+      return INSN_RECOVER;
+    }
   else if (insn == N32_JREG (JR, 0, REG_LP, 0, 1))
     /* ret $lp */
     return INSN_RETURN;
@@ -1097,7 +1140,12 @@ nds32_analyze_epilogue_insn32 (int abi_use_fpr, uint32_t insn)
 	  int offset = N32_IMM12S (insn) << 2;
 
 	  if (offset == 8 || offset == 12)
-	    return INSN_RECOVER;
+	    {
+	      if (cache != NULL)
+		cache->sp_offset += offset;
+
+	      return INSN_RECOVER;
+	    }
 	}
     }
 
@@ -1105,28 +1153,56 @@ nds32_analyze_epilogue_insn32 (int abi_use_fpr, uint32_t insn)
 }
 
 static inline int
-nds32_analyze_epilogue_insn16 (uint32_t insn)
+nds32_analyze_epilogue_insn16 (uint32_t insn, struct nds32_frame_cache *cache)
 {
   if (insn == N16_TYPE5 (RET5, REG_LP))
     /* ret5 $lp */
     return INSN_RETURN;
-  else if (CHOP_BITS (insn, 10) == N16_TYPE10 (ADDI10S, 0)
-	   && N16_IMM10S (insn) > 0)
-    /* addi10s.sp */
-    return INSN_RECOVER;
+  else if (CHOP_BITS (insn, 10) == N16_TYPE10 (ADDI10S, 0))
+    {
+      /* addi10s.sp */
+      int imm10s = N16_IMM10S (insn);
+
+      if (imm10s > 0)
+	{
+	  if (cache != NULL)
+	    cache->sp_offset += imm10s;
+
+	  return INSN_RECOVER;
+	}
+    }
   else if (__GF (insn, 7, 8) == N16_T25_POP25)
-    /* pop25 */
-    return INSN_RECOVER_RETURN;
+    {
+      /* pop25 */
+      if (cache != NULL)
+	{
+	  int imm8u = (insn & 0x1f) << 3;
+	  int re = (insn >> 5) & 0x3;
+	  int reg_map[] = { 6, 8, 10, 14 };
+
+	  /* Operation 1 -- sp = sp + (imm5u << 3) */
+	  cache->sp_offset += imm8u;
+
+	  /* Operation 2 -- lmw.bim R6, [$sp], Re, #0xe */
+	  nds32_pop_multiple_words (cache, 6, reg_map[re], 0xe);
+	}
+
+      /* Operation 3 -- ret $lp */
+      return INSN_RECOVER_RETURN;
+    }
 
   return INSN_NORMAL;
 }
 
 /* Analyze a reasonable amount of instructions from the given PC to find
    the instruction used to return to the caller.  Return 1 if the 'return'
-   instruction could be found, 0 otherwise.  */
+   instruction could be found, 0 otherwise.
+
+   If CACHE is non-NULL, fill it in.  */
 
 static int
-nds32_analyze_epilogue (struct gdbarch *gdbarch, CORE_ADDR pc)
+nds32_analyze_epilogue (struct gdbarch *gdbarch, CORE_ADDR pc,
+			struct nds32_frame_cache *cache)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int abi_use_fpr = nds32_abi_use_fpr (tdep->abi);
@@ -1148,7 +1224,7 @@ nds32_analyze_epilogue (struct gdbarch *gdbarch, CORE_ADDR pc)
 	  /* 32-bit instruction */
 	  insn_len = 4;
 
-	  insn_type = nds32_analyze_epilogue_insn32 (abi_use_fpr, insn);
+	  insn_type = nds32_analyze_epilogue_insn32 (abi_use_fpr, insn, cache);
 	  if (insn_type == INSN_RETURN)
 	    return 1;
 	  else if (insn_type == INSN_RECOVER)
@@ -1160,7 +1236,7 @@ nds32_analyze_epilogue (struct gdbarch *gdbarch, CORE_ADDR pc)
 	  insn_len = 2;
 
 	  insn >>= 16;
-	  insn_type = nds32_analyze_epilogue_insn16 (insn);
+	  insn_type = nds32_analyze_epilogue_insn16 (insn, cache);
 	  if (insn_type == INSN_RETURN || insn_type == INSN_RECOVER_RETURN)
 	    return 1;
 	  else if (insn_type == INSN_RECOVER)
@@ -1191,14 +1267,14 @@ nds32_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR addr)
     {
       /* 32-bit instruction */
 
-      insn_type = nds32_analyze_epilogue_insn32 (abi_use_fpr, insn);
+      insn_type = nds32_analyze_epilogue_insn32 (abi_use_fpr, insn, NULL);
     }
   else
     {
       /* 16-bit instruction */
 
       insn >>= 16;
-      insn_type = nds32_analyze_epilogue_insn16 (insn);
+      insn_type = nds32_analyze_epilogue_insn16 (insn, NULL);
     }
 
   if (insn_type == INSN_NORMAL || insn_type == INSN_RESET_SP)
@@ -1206,7 +1282,7 @@ nds32_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR addr)
 
   /* Search the required 'return' instruction within the following reasonable
      instructions.  */
-  ret_found = nds32_analyze_epilogue (gdbarch, addr);
+  ret_found = nds32_analyze_epilogue (gdbarch, addr, NULL);
   if (ret_found == 0)
     return 0;
 
@@ -1220,7 +1296,7 @@ nds32_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR addr)
     {
       /* This may be a 16-bit instruction or part of a 32-bit instruction.  */
 
-      insn_type = nds32_analyze_epilogue_insn16 (insn >> 16);
+      insn_type = nds32_analyze_epilogue_insn16 (insn >> 16, NULL);
       if (insn_type == INSN_RECOVER)
 	return 1;
     }
@@ -1234,7 +1310,7 @@ nds32_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR addr)
     {
       /* This may be a 32-bit instruction or part of a 32-bit instruction.  */
 
-      insn_type = nds32_analyze_epilogue_insn32 (abi_use_fpr, insn);
+      insn_type = nds32_analyze_epilogue_insn32 (abi_use_fpr, insn, NULL);
       if (insn_type == INSN_RECOVER || insn_type == INSN_RESET_SP)
 	return 1;
     }
