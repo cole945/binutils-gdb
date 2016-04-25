@@ -397,7 +397,6 @@ mt-*-*)
 nds32*)
 	# Target: AndesTech nds32 core
 	gdb_target_obs="nds32-tdep.o"
-	gdb_sim=../sim/nds32/libsim.a
 	;;
 
 nios2*-*-linux*)
