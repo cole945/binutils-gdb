@@ -1569,30 +1569,31 @@ nds32_extract_return_value (struct gdbarch *gdbarch, struct type *type,
     }
   else
     {
-      /* When returning result,
+      /*
+	 When returning result,
 
-	* A composite type not larger than 4 bytes is returned
-	  in $r0. The format is as if the result is loaded with
-	  load instruction of corresponding size. (i.g., LB, LH, LW)
+	 * A composite type not larger than 4 bytes is returned in $r0.
+	   The format is as if the result is loaded with load instruction
+	   of corresponding size (e.g., LB, LH, LW).
 
-	  For example,
+	   For example,
 
-		  r0
-		  31      0
-	  little: [x x b a]
-	     BIG: [x x a b]
+		   r0
+		   31      0
+	   LITTLE: [x x b a]
+	      BIG: [x x a b]
 
-	* Otherwise, a composite type not larger than 8 bytes
-	  is returned in $r0 and $r1. In little-endian, the first
-	  word is loaded in $r0. In big-endian, the last word
-	  is loaded in $r1.
+	 * Otherwise, a composite type not larger than 8 bytes is returned
+	   in $r0 and $r1.
+	   In little-endian, the first word is loaded in $r0.
+	   In big-endian, the last word is loaded in $r1.
 
-	  For example,
+	   For example,
 
-		  r0	    r1
-		  31      0 31      0
-	  little: [d c b a] [x x x e]
-	     BIG: [x x x a] [b c d e]
+		   r0	     r1
+		   31      0 31      0
+	   LITTLE: [d c b a] [x x x e]
+	      BIG: [x x x a] [b c d e]
        */
 
       ULONGEST tmp;
