@@ -28,6 +28,7 @@
 #include "value.h"
 #include "reggroups.h"
 #include "inferior.h"
+#include "objfiles.h"
 #include "osabi.h"
 #include "arch-utils.h"
 #include "regcache.h"
@@ -1914,6 +1915,46 @@ nds32_get_longjmp_target (struct frame_info *frame, CORE_ADDR *pc)
   return 1;
 }
 
+/* Implement the "print_insn" gdbarch method.  */
+
+static int
+gdb_print_insn_nds32 (bfd_vma memaddr, disassemble_info *info)
+{
+  struct obj_section *s = find_pc_section (memaddr);
+
+  /* When disassembling ex9 instructions, annotating them with
+     the original instructions at the end of line.  For example,
+
+	0x00500122 <+82>:    ex9.it #4		! movi $r13, 10
+
+     Disassembler needs the symbol table to extract the original instruction
+     in _ITB_BASE_ table.  If the object file is changed, reload symbol
+     table.  */
+
+  if (s == NULL || info->section != s->the_bfd_section)
+    {
+      xfree (info->symtab);
+      info->symtab = NULL;
+      info->symtab_size = 0;
+    }
+
+  if (info->symtab == NULL && s && s->the_bfd_section)
+    {
+      long storage = bfd_get_symtab_upper_bound (s->objfile->obfd);
+
+      if (storage <= 0)
+	goto done;
+
+      info->section = s->the_bfd_section;
+      info->symtab = (asymbol **) xmalloc (storage);
+      info->symtab_size =
+	bfd_canonicalize_symtab (s->the_bfd_section->owner, info->symtab);
+    }
+
+done:
+  return print_insn_nds32 (memaddr, info);
+}
+
 /* Validate and fixed-number registers in target-description.  */
 
 static int
@@ -2161,7 +2202,7 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_frame_align (gdbarch, nds32_frame_align);
   frame_base_set_default (gdbarch, &nds32_frame_base);
 
-  set_gdbarch_print_insn (gdbarch, print_insn_nds32);
+  set_gdbarch_print_insn (gdbarch, gdb_print_insn_nds32);
 
   /* Handle longjmp.  */
   set_gdbarch_get_longjmp_target (gdbarch, nds32_get_longjmp_target);
