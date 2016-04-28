@@ -803,14 +803,13 @@ nds32_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR addr)
 static struct nds32_frame_cache *
 nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
 {
-  CORE_ADDR pc, limit_pc;
+  struct gdbarch *gdbarch = get_frame_arch (this_frame);
+  struct nds32_frame_cache *cache;
+  CORE_ADDR pc, current_pc;
   ULONGEST prev_sp;
   ULONGEST next_base;
   ULONGEST fp_base;
   int i;
-  uint32_t insn, insn_len;
-  struct nds32_frame_cache *cache;
-  struct gdbarch *gdbarch = get_frame_arch (this_frame);
 
   if (*this_cache)
     return (struct nds32_frame_cache *) *this_cache;
@@ -824,139 +823,8 @@ nds32_frame_cache (struct frame_info *this_frame, void **this_cache)
     return cache;
 
   pc = get_frame_func (this_frame);
-  limit_pc = get_frame_pc (this_frame);
-
-  for (; pc > 0 && pc < limit_pc; pc += insn_len)
-    {
-      insn = read_memory_unsigned_integer (pc, 4, BFD_ENDIAN_BIG);
-
-      if ((insn & 0x80000000) == 0)
-	{
-	  /* 32-bit instruction */
-
-	  insn_len = 4;
-	  if (insn == N32_ALU1 (ADD, REG_GP, REG_TA, REG_GP))
-	    {
-	      /* add $gp, $ta, $gp */
-	      continue;
-	    }
-	  if (N32_OP6 (insn) == N32_OP6_ADDI)
-	    {
-	      int rt = N32_RT5 (insn);
-	      int ra = N32_RA5 (insn);
-	      int imm15s = N32_IMM15S (insn);
-
-	      if (rt == ra && rt == NDS32_SP_REGNUM)
-		{
-		  cache->sp_offset += imm15s;
-		  continue;
-		}
-	      else if (rt == NDS32_FP_REGNUM && ra == NDS32_SP_REGNUM)
-		{
-		  cache->fp_offset = cache->sp_offset + imm15s;
-		  cache->use_frame = 1;
-		  continue;
-		}
-	      else if (rt == ra)
-		/* Prevent stop analyzing form iframe.  */
-		continue;
-	    }
-	  if (CHOP_BITS (insn, 20) == N32_TYPE1 (MOVI, REG_TA, 0))
-	    {
-	      /* movi $ta, imm20s */
-	      continue;
-	    }
-	  if (CHOP_BITS (insn, 20) == N32_TYPE1 (SETHI, REG_GP, 0))
-	    {
-	      /* sethi $gp, imm20 */
-	      continue;
-	    }
-	  if (CHOP_BITS (insn, 15) == N32_TYPE2 (ORI, REG_GP, REG_GP, 0))
-	    {
-	      /* ori $gp, $gp, imm15 */
-	      continue;
-	    }
-	  if ((insn & ~(__MASK (19) << 6)) == N32_SMW_ADM
-	      && N32_RA5 (insn) == REG_SP)
-	    {
-	      /* smw.adm Rb, [$sp], Re, enable4 */
-	      nds32_push_multiple_words (cache, N32_RT5 (insn),
-					 N32_RB5 (insn),
-					 N32_LSMW_ENABLE4 (insn));
-		  continue;
-	    }
-
-	  if (N32_OP6 (insn) == N32_OP6_SDC && __GF (insn, 12, 3) == 0)
-	    {
-	      /* For FPU insns, CP (bit [13:14]) should be CP0,  and only
-		 normal form (bit [12] == 0) is used.  */
-
-	      /* fsdi FDt, [$sp + (imm12s << 2)] */
-	      if (N32_RA5 (insn) == REG_SP)
-		continue;
-
-	    }
-
-	  break;
-	}
-      else
-	{
-	  /* 16-bit instruction */
-	  insn_len = 2;
-	  insn >>= 16;
-
-	  /* 1. If the instruction is j/b, then we stop
-		i.e., OP starts with 10, and beqzs8, bnezs8.
-	     2. If the operations will change sp/fp or based on sp/fp,
-		then we are in the prologue.
-	     3. If we don't know what's it, then stop.  */
-
-	  if (__GF (insn, 13, 2) == 2)
-	    {
-	      /* These are all branch instructions.  */
-	      break;
-	    }
-	  else if (__GF (insn, 9, 6) == 0x34)
-	    {
-	      /* beqzs8, bnezs8 */
-	      break;
-	    }
-
-	  if (CHOP_BITS (insn, 10) == N16_TYPE10 (ADDI10S, 0))
-	    {
-	      /* addi10s */
-	      cache->sp_offset += N16_IMM10S (insn);
-	      continue;
-	    }
-
-	  if (__GF (insn, 7, 8) == N16_T25_PUSH25)
-	    {
-	      /* push25 */
-	      int imm8u = (insn & 0x1f) << 3;
-	      int re = (insn >> 5) & 0x3;
-	      int reg_map[] = { 6, 8, 10, 14 };
-
-	      /* Operation 1 -- smw.adm R6, [$sp], Re, #0xe */
-	      nds32_push_multiple_words (cache, 6, reg_map[re], 0xe);
-
-	      /* Operation 2 -- sp = sp - (imm5u << 3) */
-	      cache->sp_offset -= imm8u;
-
-	      /* Operation 3 -- if (Re >= 1) R8 = concat (PC(31,2), 2`b0) */
-	      continue;
-	    }
-
-	  /* mov55 fp, sp */
-	  if (insn == N16_TYPE55 (MOV55, REG_FP, REG_SP))
-	    {
-		cache->fp_offset = cache->sp_offset;
-		cache->use_frame = 1;
-		continue;
-	    }
-
-	  break;
-	}
-    }
+  current_pc = get_frame_pc (this_frame);
+  nds32_analyze_prologue (gdbarch, pc, current_pc, cache);
 
   cache->size = -cache->sp_offset;
   /* Compute the previous frame's stack pointer (which is also the
