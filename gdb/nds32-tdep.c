@@ -1546,13 +1546,13 @@ nds32_extract_return_value (struct gdbarch *gdbarch, struct type *type,
 {
   int len = TYPE_LENGTH (type);
   int typecode = TYPE_CODE (type);
+  enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int abi_use_fpr = nds32_abi_use_fpr (tdep->abi);
 
   /* Although struct are returned in r0/r1 registers, but struct have
      only one single/double floating-point member are returned in FS/FD
      registers.  */
-  gdb_assert (TYPE_LENGTH (type) <= 8);
   if (nds32_float_in_struct (type))
     typecode = TYPE_CODE_FLT;
 
@@ -1565,8 +1565,7 @@ nds32_extract_return_value (struct gdbarch *gdbarch, struct type *type,
       else
 	internal_error (__FILE__, __LINE__,
 			_("Cannot extract return value of %d bytes "
-			  "long floating point."),
-			len);
+			  "long floating-point."), len);
     }
   else
     {
@@ -1596,38 +1595,28 @@ nds32_extract_return_value (struct gdbarch *gdbarch, struct type *type,
 	     BIG: [x x x a] [b c d e]
        */
 
+      ULONGEST tmp;
+
       if (len <= 4)
 	{
-	  if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
-	    regcache_raw_read_part (regcache, NDS32_R0_REGNUM, 4 - len, len,
-				    valbuf);
-	  else
-	    regcache_raw_read_part (regcache, NDS32_R0_REGNUM, 0, len,
-				    valbuf);
-	}
-      else if (len <= 8)
-	{
-	  int partial = len - 4;
-
-	  if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
-	    {
-	      regcache_raw_read_part (regcache, NDS32_R0_REGNUM, 4 - partial,
-				      partial, valbuf);
-	      regcache_raw_read (regcache, NDS32_R0_REGNUM + 1,
-				 valbuf + partial);
-
-	    }
-	  else
-	    {
-	      regcache_raw_read (regcache, NDS32_R0_REGNUM, valbuf);
-	      regcache_raw_read_part (regcache, NDS32_R0_REGNUM + 1, 0,
-				      partial, valbuf + 4);
-	    }
+	  /* By using store_unsigned_integer we avoid having to do
+	     anything special for small big-endian values.  */
+	  regcache_cooked_read_unsigned (regcache, NDS32_R0_REGNUM, &tmp);
+	  store_unsigned_integer (valbuf, len, byte_order, tmp);
 	}
       else
-	internal_error (__FILE__, __LINE__,
-			_("Cannot extract return value of %d bytes long."),
-			len);
+	{
+	  int len1, len2;
+
+	  len1 = byte_order == BFD_ENDIAN_BIG ? len - 4 : 4;
+	  len2 = len - len1;
+
+	  regcache_cooked_read_unsigned (regcache, NDS32_R0_REGNUM, &tmp);
+	  store_unsigned_integer (valbuf, len1, byte_order, tmp);
+
+	  regcache_cooked_read_unsigned (regcache, NDS32_R0_REGNUM + 1, &tmp);
+	  store_unsigned_integer (valbuf + len1, len2, byte_order, tmp);
+	}
     }
 }
 
@@ -1640,13 +1629,13 @@ nds32_store_return_value (struct gdbarch *gdbarch, struct type *type,
 {
   int len = TYPE_LENGTH (type);
   int typecode = TYPE_CODE (type);
+  enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int abi_use_fpr = nds32_abi_use_fpr (tdep->abi);
 
   /* Although struct are returned in r0/r1 registers, but struct have
      only one single/double floating-point member are returned in FS/FD
      registers.  */
-  gdb_assert (TYPE_LENGTH (type) <= 8);
   if (nds32_float_in_struct (type))
     typecode = TYPE_CODE_FLT;
 
@@ -1658,44 +1647,31 @@ nds32_store_return_value (struct gdbarch *gdbarch, struct type *type,
 	regcache_cooked_write (regcache, tdep->fd0_regnum, valbuf);
       else
 	internal_error (__FILE__, __LINE__,
-			_("Cannot store return value of %d bytes long "
-			  "floating point."),
-			len);
+			_("Cannot store return value of %d bytes "
+			  "long floating-point."), len);
     }
   else
     {
+      ULONGEST regval;
+
       if (len <= 4)
 	{
-	  if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
-	    regcache_raw_write_part (regcache, NDS32_R0_REGNUM, 4 - len, len,
-				     valbuf);
-	  else
-	    regcache_raw_write_part (regcache, NDS32_R0_REGNUM, 0, len,
-				     valbuf);
-	}
-      else if (len <= 8)
-	{
-	  int partial = len - 4;
-
-	  if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
-	    {
-	      regcache_raw_write_part (regcache, NDS32_R0_REGNUM, 4 - partial,
-				       partial, valbuf);
-	      regcache_raw_write (regcache, NDS32_R0_REGNUM + 1,
-				  valbuf + partial);
-
-	    }
-	  else
-	    {
-	      regcache_raw_write (regcache, NDS32_R0_REGNUM, valbuf);
-	      regcache_raw_write_part (regcache, NDS32_R0_REGNUM + 1, 0,
-				       partial, valbuf + 4);
-	    }
+	  regval = extract_unsigned_integer (valbuf, len, byte_order);
+	  regcache_cooked_write_unsigned (regcache, NDS32_R0_REGNUM, regval);
 	}
       else
-	internal_error (__FILE__, __LINE__,
-			_("Cannot store return value of %d bytes long."),
-			len);
+	{
+	  int len1, len2;
+
+	  len1 = byte_order == BFD_ENDIAN_BIG ? len - 4 : 4;
+	  len2 = len - len1;
+
+	  regval = extract_unsigned_integer (valbuf, len1, byte_order);
+	  regcache_cooked_write_unsigned (regcache, NDS32_R0_REGNUM, regval);
+
+	  regval = extract_unsigned_integer (valbuf + len1, len2, byte_order);
+	  regcache_cooked_write_unsigned (regcache, NDS32_R0_REGNUM + 1, regval);
+	}
     }
 }
 
