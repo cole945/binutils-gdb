@@ -1915,6 +1915,28 @@ nds32_get_longjmp_target (struct frame_info *frame, CORE_ADDR *pc)
   return 1;
 }
 
+/* Implement the "overlay_update" gdbarch method.  */
+
+static void
+nds32_simple_overlay_update (struct obj_section *osect)
+{
+  struct bound_minimal_symbol minsym;
+
+  minsym = lookup_minimal_symbol (".nds32.fixed.size", NULL, NULL);
+  if (minsym.minsym != NULL && osect != NULL)
+    {
+      bfd *obfd = osect->objfile->obfd;
+      asection *bsect = osect->the_bfd_section;
+      if (bfd_section_vma (obfd, bsect) < BMSYMBOL_VALUE_ADDRESS (minsym))
+	{
+	  osect->ovly_mapped = 1;
+	  return;
+	}
+    }
+
+  simple_overlay_update (osect);
+}
+
 /* Implement the "print_insn" gdbarch method.  */
 
 static int
@@ -2203,6 +2225,8 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   frame_base_set_default (gdbarch, &nds32_frame_base);
 
   set_gdbarch_print_insn (gdbarch, gdb_print_insn_nds32);
+  /* Support simple overlay manager.  */
+  set_gdbarch_overlay_update (gdbarch, nds32_simple_overlay_update);
 
   /* Handle longjmp.  */
   set_gdbarch_get_longjmp_target (gdbarch, nds32_get_longjmp_target);
