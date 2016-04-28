@@ -3769,7 +3769,7 @@ subdirs="$subdirs aarch64"
 
 
        ;;
-   nds32*)
+   nds32*-*-*)
 
   sim_arch=nds32
   subdirs="$subdirs nds32"
